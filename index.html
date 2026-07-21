@@ -170,6 +170,7 @@ function postRemoteChange(change){
       '&sku='+encodeURIComponent(change.sku||'')+
       '&fl='+encodeURIComponent(JSON.stringify(change.fl||[]))+
       '&tl='+encodeURIComponent(JSON.stringify(change.tl||[]))+
+      '&user='+encodeURIComponent(change.user||'')+
       '&t='+Date.now();
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
@@ -204,6 +205,7 @@ function applyC(c,rec){
   else if(c.type==='move'){c.fl.forEach(function(l){delete LOC[l];});c.tl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.tl;}
   else if(c.type==='add'){c.tl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});}
   if(rec){
+    if(currentUser&&!c.user)c.user=currentUser;
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
@@ -213,20 +215,26 @@ function applyC(c,rec){
 
 function fmtLog(c){
   var d=DATA.d[c.sku];var desc=d?d[4].slice(0,28):'?';
-  if(c.type==='delete')return 'DELETED '+c.sku+' ('+desc+') from '+c.fl.map(fl).join(', ');
-  if(c.type==='move')return 'MOVED '+c.sku+' from '+c.fl.map(fl).join(', ')+' to '+c.tl.map(fl).join(', ');
-  if(c.type==='add')return 'ADDED '+c.sku+' ('+desc+') -- '+c.tl.length+' pallet space'+(c.tl.length>1?'s':'')+' at '+c.tl.map(fl).join(', ');
+  var who=c.user?('['+c.user+'] '):'';
+  if(c.type==='delete')return who+'DELETED '+c.sku+' ('+desc+') from '+c.fl.map(fl).join(', ');
+  if(c.type==='move')return who+'MOVED '+c.sku+' from '+c.fl.map(fl).join(', ')+' to '+c.tl.map(fl).join(', ');
+  if(c.type==='add')return who+'ADDED '+c.sku+' ('+desc+') -- '+c.tl.length+' pallet space'+(c.tl.length>1?'s':'')+' at '+c.tl.map(fl).join(', ');
   return '';
 }
 
-var CHANGE_PIN='1234';
-var pinUnlockedThisSession=false;
+// Add each manager here as "code": "Name" -- easy to extend later.
+var USERS={
+  '1409':'Gil'
+};
+var currentUser=null;
 function requirePin(cb){
-  if(pinUnlockedThisSession){cb();return;}
-  var entered=prompt('Enter the 4-digit code to make changes:');
+  if(currentUser){cb();return;}
+  var entered=prompt('Enter your 4-digit code to make changes:');
   if(entered===null)return;
-  if(entered.trim()===CHANGE_PIN){
-    pinUnlockedThisSession=true;
+  var name=USERS[entered.trim()];
+  if(name){
+    currentUser=name;
+    si2('Logged in as '+name);
     cb();
   } else {
     alert('Incorrect code.');
@@ -238,9 +246,9 @@ function undoLast(){
   if(!CHANGES.length){alert('Nothing to undo.');return;}
   var c=CHANGES.pop();
   var inverse=null;
-  if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'add',sku:c.sku,tl:c.fl};}
-  else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl};}
-  else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl};}
+  if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
+  else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
+  else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl,user:currentUser};}
   LOG.shift();updLog();rebuildMap();si2('Undone');
   lastSyncJSON=JSON.stringify(CHANGES);
   try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
