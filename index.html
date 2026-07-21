@@ -299,7 +299,7 @@ function mkCell(loc){
     cell.className='be';cell.setAttribute('data-loc',loc);
     cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
-    cell.addEventListener('click',function(){onEmp(loc);});
+    cell.addEventListener('click',function(e){onEmp(loc,e);});
   }
   return cell;
 }
@@ -382,7 +382,13 @@ function showTT(e,loc,sku,v){
   tt.style.display='block';posTT(e);
 }
 function posTT(e){var x=e.clientX+14,y=e.clientY-10;tt.style.left=(x+250>window.innerWidth?x-260:x)+'px';tt.style.top=(y+110>window.innerHeight?y-110:y)+'px';}
-function hideTT(){ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
+function hideTT(){if(ttSticky)return;ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
+var ttSticky=false;
+document.addEventListener('click',function(e){
+  if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('#tt')){
+    ttSticky=false;tt.style.display='none';
+  }
+});
 tt.addEventListener('mouseenter',function(){clearTimeout(ttHideTimer);});
 tt.addEventListener('mouseleave',function(){hideTT();});
 
@@ -423,7 +429,7 @@ function onOcc(loc,sku){
   showR(sku);hlSKU(sku);
 }
 
-function onEmp(loc){
+function onEmp(loc,e){
   if(mode==='add'&&addTgt){
     if(LOC[loc])return;
     var v=DATA.d[addTgt];var spaces=addSpaces||(v?v[8]:1);var tl;
@@ -437,18 +443,17 @@ function onEmp(loc){
     var sku=moveSku;
     applyC({type:'move',sku:sku,fl:fromLocs,tl:tl2},true);rebuildMap();hlSKU(sku);si2('Moved to '+fl(loc));
     setNorm();
-  } else {
-    showEmptyInfo(loc);
+  } else if(e){
+    showEmptyInfo(loc,e);
   }
 }
 
-function showEmptyInfo(loc){
+function showEmptyInfo(loc,e){
   var h=getBayHeight(loc);
-  var el=document.getElementById('rc');el.className='';
-  el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
-    '<div><div class="rl" style="color:#888">'+fl(loc)+'</div>'+
-    '<div class="rd">Empty'+(h?' -- Height '+h:' -- Height not set yet')+'</div></div>';
-  el.style.display='block';
+  clearTimeout(ttHideTimer);
+  tt.textContent=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet');
+  tt.style.display='block';posTT(e);
+  ttSticky=true;
 }
 
 function hlSKU(sku){
