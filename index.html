@@ -297,7 +297,7 @@ function mkCell(loc){
     cell.addEventListener('click',function(){onOcc(loc,sku);});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');tt.textContent=fl(loc)+' -- Empty';tt.style.display='block';posTT(e);});
+    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onEmp(loc);});
   }
@@ -353,12 +353,22 @@ function bestPhotoUrl(sku,desc,grp){
         encodeURIComponent(sku+' '+desc+' australia');
   return 'https://www.google.com/search?q='+q+'&tbm=isch';
 }
+// Fill in real clearance heights per row+level here once measured, e.g. {A:[2.4,2.4,2.4], ...}
+var BAY_HEIGHTS={};
+var HEIGHT_UNIT='m';
+function getBayHeight(loc){
+  var p=loc.split('-');var row=p[0];var lvl=parseInt(p[2],10);
+  var arr=BAY_HEIGHTS[row];
+  if(arr&&arr[lvl-1]!=null)return arr[lvl-1]+HEIGHT_UNIT;
+  return null;
+}
 function showTT(e,loc,sku,v){
   if(!v){hideTT();return;}
   clearTimeout(ttHideTimer);
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
   var photoUrl=bestPhotoUrl(sku,v[4],v[5]);
-  tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+'<br>'+
+  var h=getBayHeight(loc);
+  tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>';
   tt.style.display='block';posTT(e);
@@ -657,7 +667,8 @@ function showR(sku){
   var uniqLocCodes=placed?locs.map(fl).filter(function(c,i,a){return a.indexOf(c)===i;}):[];
   var locStr=placed?uniqLocCodes.join(' + '):'NOT YET PLACED';
   var mNote=placed&&locs.length>1?' <span style="background:#FFE066;padding:1px 6px;border-radius:4px;font-size:11px">'+locs.length+' pallet space'+(locs.length>1?'s':'')+'</span>':'';
-  var rowInfo=placed?('Row '+locs[0][0]+' | Bay '+parseInt(locs[0].split('-')[1],10)+' | Level '+locs[0].split('-')[2]):'Waiting to be placed on the racking';
+  var cardH=placed?getBayHeight(locs[0]):null;
+  var rowInfo=placed?('Row '+locs[0][0]+' | Bay '+parseInt(locs[0].split('-')[1],10)+' | Level '+locs[0].split('-')[2]+(cardH?' | Height '+cardH:'')):'Waiting to be placed on the racking';
   var photoUrl=bestPhotoUrl(key,v[4],v[5]);
   var suggHtml='';
   if(!placed){
