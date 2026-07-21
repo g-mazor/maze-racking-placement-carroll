@@ -297,7 +297,7 @@ function mkCell(loc){
     cell.addEventListener('click',function(){onOcc(loc,sku);});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
+    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
   }
@@ -376,6 +376,7 @@ function showTT(e,loc,sku,v){
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
   var photoUrl=bestPhotoUrl(sku,v[4],v[5]);
   var h=getBayHeight(loc);
+  tt.style.pointerEvents='auto';
   tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>';
@@ -451,6 +452,7 @@ function onEmp(loc,e){
 function showEmptyInfo(loc,e){
   var h=getBayHeight(loc);
   clearTimeout(ttHideTimer);
+  tt.style.pointerEvents='none';
   tt.textContent=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet');
   tt.style.display='block';posTT(e);
   ttSticky=true;
