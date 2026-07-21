@@ -219,7 +219,22 @@ function fmtLog(c){
   return '';
 }
 
+var CHANGE_PIN='1234';
+var pinUnlockedThisSession=false;
+function requirePin(cb){
+  if(pinUnlockedThisSession){cb();return;}
+  var entered=prompt('Enter the 4-digit code to make changes:');
+  if(entered===null)return;
+  if(entered.trim()===CHANGE_PIN){
+    pinUnlockedThisSession=true;
+    cb();
+  } else {
+    alert('Incorrect code.');
+  }
+}
+
 function undoLast(){
+  requirePin(function(){
   if(!CHANGES.length){alert('Nothing to undo.');return;}
   var c=CHANGES.pop();
   var inverse=null;
@@ -230,6 +245,7 @@ function undoLast(){
   lastSyncJSON=JSON.stringify(CHANGES);
   try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
   if(inverse)postRemoteChange(inverse).catch(function(){});
+  });
 }
 
 function resetAll(){
@@ -423,15 +439,18 @@ var mb=document.getElementById('mb');
 function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';}
 
 function enterMoveModeCard(sku){
+  requirePin(function(){
   mode='move';moveSku=sku;var v=DATA.d[sku];
   mb.style.display='block';mb.className='mv';
   mb.textContent='MOVE MODE: Tap an empty (grey) cell to move '+sku+' ('+(v?v[4]:'')+') there | Tap this banner to cancel';
   mb.onclick=function(){setNorm();};
   cRC();
+  });
 }
 
 function enterAddMode(){
   if(mode==='add'||mode==='addpick'||mode==='addspace'){setNorm();return;}
+  requirePin(function(){
   mode='addpick';
   mb.style.display='block';mb.className='am';mb.onclick=null;
   mb.innerHTML='<div style="max-width:420px;margin:0 auto;text-align:left">'+
@@ -462,6 +481,7 @@ function enterAddMode(){
     confirmAddTarget(d.getAttribute('data-sku'));
   });
   setTimeout(function(){inp.focus();},50);
+  });
 }
 
 function confirmAddTarget(sku){
@@ -514,7 +534,7 @@ function clrSugg(){
   document.querySelectorAll('.be.sugg').forEach(function(c){c.classList.remove('sugg');});
 }
 
-function enterAddModeCard(sku){cRC();confirmAddTarget(sku);}
+function enterAddModeCard(sku){requirePin(function(){cRC();confirmAddTarget(sku);});}
 
 // ---- Location suggestion engine ----
 function groupRows(group){
@@ -594,23 +614,27 @@ function highlightSuggested(loc){
 
 function enterDelMode(){
   if(mode==='delete'){setNorm();return;}
+  requirePin(function(){
   mode='delete';mb.style.display='block';mb.className='dm';
   mb.textContent='DELETE MODE: Click any coloured pallet cell to remove it | Right-click also works anywhere | Click "Delete mode" again to exit';
   document.getElementById('btn-dm').style.cssText='background:#C0392B;color:#FFF';
+  });
 }
 
 function delFromCard(sku){
+  requirePin(function(){
   var locs=SLOC[sku]||[];
   oM('Delete all pallets of '+sku+'?','This will free '+locs.length+' location'+(locs.length!==1?'s':'')+' in the warehouse.',function(){
     applyC({type:'delete',sku:sku,fl:locs.slice()},true);
     document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted all pallets of '+sku);
+  });
   });
 }
 
 document.addEventListener('contextmenu',function(e){
   var cell=e.target.closest('.bc');
   if(cell){e.preventDefault();var loc=cell.getAttribute('data-loc');var sku=cell.getAttribute('data-sku');
-  if(loc&&sku){var locs=SLOC[sku]||[loc];oM('Delete pallet?','Remove '+sku+' from '+fl(loc)+'? ('+locs.length+' location'+(locs.length>1?'s':'')+' freed)',function(){applyC({type:'delete',sku:sku,fl:locs},true);rebuildMap();si2('Deleted');});}}
+  if(loc&&sku){requirePin(function(){var locs=SLOC[sku]||[loc];oM('Delete pallet?','Remove '+sku+' from '+fl(loc)+'? ('+locs.length+' location'+(locs.length>1?'s':'')+' freed)',function(){applyC({type:'delete',sku:sku,fl:locs},true);rebuildMap();si2('Deleted');});});}}
 });
 
 function showR(sku){
