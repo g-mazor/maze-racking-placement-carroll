@@ -437,7 +437,18 @@ function onEmp(loc){
     var sku=moveSku;
     applyC({type:'move',sku:sku,fl:fromLocs,tl:tl2},true);rebuildMap();hlSKU(sku);si2('Moved to '+fl(loc));
     setNorm();
+  } else {
+    showEmptyInfo(loc);
   }
+}
+
+function showEmptyInfo(loc){
+  var h=getBayHeight(loc);
+  var el=document.getElementById('rc');el.className='';
+  el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
+    '<div><div class="rl" style="color:#888">'+fl(loc)+'</div>'+
+    '<div class="rd">Empty'+(h?' -- Height '+h:' -- Height not set yet')+'</div></div>';
+  el.style.display='block';
 }
 
 function hlSKU(sku){
