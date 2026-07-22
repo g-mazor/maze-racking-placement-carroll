@@ -202,7 +202,13 @@ async function buildIdx(){
 }
 
 function applyC(c,rec){
-  if(c.type==='delete'){c.fl.forEach(function(l){delete LOC[l];});delete SLOC[c.sku];}
+  if(c.type==='delete'){
+    c.fl.forEach(function(l){delete LOC[l];});
+    if(SLOC[c.sku]){
+      SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.fl.indexOf(l)<0;});
+      if(SLOC[c.sku].length===0)delete SLOC[c.sku];
+    }
+  }
   else if(c.type==='move'){c.fl.forEach(function(l){delete LOC[l];});c.tl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.tl;}
   else if(c.type==='add'){c.tl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});}
   if(rec){
@@ -248,7 +254,7 @@ function undoLast(){
   if(!CHANGES.length){alert('Nothing to undo.');return;}
   var c=CHANGES.pop();
   var inverse=null;
-  if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
+  if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.fl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
   else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
   else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl,user:currentUser};}
   LOG.shift();updLog();rebuildMap();si2('Undone');
@@ -449,8 +455,8 @@ function findSeq(startLoc,n){
 
 function onOcc(loc,sku){
   if(mode==='delete'){
-    var locs=SLOC[sku]||[loc];
-    oM('Delete pallet?','Remove '+sku+' from '+fl(loc)+'? ('+locs.length+' location'+(locs.length>1?'s':'')+' freed)',function(){applyC({type:'delete',sku:sku,fl:locs},true);rebuildMap();si2('Deleted');});
+    var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';
+    oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});
     return;
   }
   if(mode==='move'){
@@ -710,7 +716,7 @@ function delFromCard(sku){
 document.addEventListener('contextmenu',function(e){
   var cell=e.target.closest('.bc');
   if(cell){e.preventDefault();var loc=cell.getAttribute('data-loc');var sku=cell.getAttribute('data-sku');
-  if(loc&&sku){requirePin(function(){var locs=SLOC[sku]||[loc];oM('Delete pallet?','Remove '+sku+' from '+fl(loc)+'? ('+locs.length+' location'+(locs.length>1?'s':'')+' freed)',function(){applyC({type:'delete',sku:sku,fl:locs},true);rebuildMap();si2('Deleted');});});}}
+  if(loc&&sku){requirePin(function(){var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});});}}
 });
 
 function showR(sku){
