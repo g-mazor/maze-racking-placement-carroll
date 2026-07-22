@@ -112,6 +112,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" onclick="toggleLog()">Log</button>
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
+<button class="btn" id="btn-cm" onclick="enterCountMode()">\ud83d\udd22 Count mode</button>
 <button class="btn" onclick="undoLast()">Undo</button>
 </div>
 <div id="mb"></div>
@@ -137,7 +138,7 @@ var RCOL={A:'#DEEAF1',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D8',F:'#E2EFDA
 var RFCOL={A:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var LOC={},SLOC={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null;
+var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null;
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
@@ -172,6 +173,8 @@ function postRemoteChange(change){
       '&fl='+encodeURIComponent(JSON.stringify(change.fl||[]))+
       '&tl='+encodeURIComponent(JSON.stringify(change.tl||[]))+
       '&user='+encodeURIComponent(change.user||'')+
+      '&loc='+encodeURIComponent(change.loc||'')+
+      '&qty='+encodeURIComponent(change.qty!=null?String(change.qty):'')+
       '&t='+Date.now();
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
@@ -203,14 +206,15 @@ async function buildIdx(){
 
 function applyC(c,rec){
   if(c.type==='delete'){
-    c.fl.forEach(function(l){delete LOC[l];});
+    c.fl.forEach(function(l){delete LOC[l];delete QTY[l];});
     if(SLOC[c.sku]){
       SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.fl.indexOf(l)<0;});
       if(SLOC[c.sku].length===0)delete SLOC[c.sku];
     }
   }
-  else if(c.type==='move'){c.fl.forEach(function(l){delete LOC[l];});c.tl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.tl;}
+  else if(c.type==='move'){c.fl.forEach(function(l){delete LOC[l];delete QTY[l];});c.tl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.tl;}
   else if(c.type==='add'){c.tl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});}
+  else if(c.type==='count'){QTY[c.loc]=c.qty;}
   if(rec){
     if(currentUser&&!c.user)c.user=currentUser;
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
@@ -226,6 +230,7 @@ function fmtLog(c){
   if(c.type==='delete')return who+'DELETED '+c.sku+' ('+desc+') from '+c.fl.map(fl).join(', ');
   if(c.type==='move')return who+'MOVED '+c.sku+' from '+c.fl.map(fl).join(', ')+' to '+c.tl.map(fl).join(', ');
   if(c.type==='add')return who+'ADDED '+c.sku+' ('+desc+') -- '+c.tl.length+' pallet space'+(c.tl.length>1?'s':'')+' at '+c.tl.map(fl).join(', ');
+  if(c.type==='count')return who+'COUNTED '+c.sku+' at '+fl(c.loc)+': '+c.qty+' units';
   return '';
 }
 
@@ -409,8 +414,9 @@ function showTT(e,loc,sku,v){
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
   var photoUrl=bestPhotoUrl(sku,v[4],v[5]);
   var h=getBayHeight(loc);
+  var q=QTY[loc];
   tt.style.pointerEvents='auto';
-  tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+'<br>'+
+  tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>';
   tt.style.display='block';posTT(e);
@@ -457,6 +463,17 @@ function onOcc(loc,sku){
   if(mode==='delete'){
     var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';
     oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});
+    return;
+  }
+  if(mode==='count'){
+    var cur=QTY[loc];
+    var entered=prompt('Stock count for '+sku+' at '+fl(loc)+':',cur!=null?String(cur):'');
+    if(entered===null)return;
+    var qty=parseInt(entered.trim(),10);
+    if(isNaN(qty)||qty<0){alert('Enter a whole number of 0 or more.');return;}
+    applyC({type:'count',sku:sku,loc:loc,qty:qty},true);
+    si2('Recorded '+qty+' at '+fl(loc));
+    if(document.getElementById('rc').style.display==='block')showR(sku);
     return;
   }
   if(mode==='move'){
@@ -517,7 +534,7 @@ function clrHL(){
 }
 
 var mb=document.getElementById('mb');
-function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';}
+function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';}
 
 function enterMoveModeCard(sku){
   requirePin(function(){
@@ -703,6 +720,15 @@ function enterDelMode(){
   });
 }
 
+function enterCountMode(){
+  if(mode==='count'){setNorm();return;}
+  requirePin(function(){
+  mode='count';mb.style.display='block';mb.className='dm';
+  mb.textContent='COUNT MODE: Tap any pallet to enter its stock count | Click "Count mode" again to exit';
+  document.getElementById('btn-cm').style.cssText='background:#8E44AD;color:#FFF';
+  });
+}
+
 function delFromCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
@@ -710,6 +736,30 @@ function delFromCard(sku){
     applyC({type:'delete',sku:sku,fl:locs.slice()},true);
     document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted all pallets of '+sku);
   });
+  });
+}
+
+function countFromCard(sku){
+  requirePin(function(){
+  var locs=SLOC[sku]||[];
+  if(!locs.length){alert('This SKU is not placed anywhere yet.');return;}
+  var target=locs[0];
+  if(locs.length>1){
+    var codes=locs.map(fl);
+    var pick=prompt('This SKU is in '+locs.length+' spots. Which one? Type one of:\\n'+codes.join(', '),codes[0]);
+    if(pick===null)return;
+    var idx=codes.indexOf(pick.trim());
+    if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
+    target=locs[idx];
+  }
+  var cur=QTY[target];
+  var entered=prompt('Stock count for '+sku+' at '+fl(target)+':',cur!=null?String(cur):'');
+  if(entered===null)return;
+  var qty=parseInt(entered.trim(),10);
+  if(isNaN(qty)||qty<0){alert('Enter a whole number of 0 or more.');return;}
+  applyC({type:'count',sku:sku,loc:target,qty:qty},true);
+  si2('Recorded '+qty+' at '+fl(target));
+  showR(sku);
   });
 }
 
@@ -733,6 +783,13 @@ function showR(sku){
   var mNote=placed&&locs.length>1?' <span style="background:#FFE066;padding:1px 6px;border-radius:4px;font-size:11px">'+locs.length+' pallet space'+(locs.length>1?'s':'')+'</span>':'';
   var cardH=placed?getBayHeight(locs[0]):null;
   var rowInfo=placed?('Row '+locs[0][0]+' | Bay '+parseInt(locs[0].split('-')[1],10)+' | Level '+locs[0].split('-')[2]+(cardH?' | Height '+cardH:'')):'Waiting to be placed on the racking';
+  var countHtml='';
+  if(placed){
+    var withCounts=locs.filter(function(l){return QTY[l]!=null;});
+    if(withCounts.length){
+      countHtml='<div style="font-size:11px;color:#555;margin-top:3px">Stock count: '+withCounts.map(function(l){return fl(l)+'='+QTY[l];}).join(', ')+'</div>';
+    }
+  }
   var photoUrl=bestPhotoUrl(key,v[4],v[5]);
   var suggHtml='';
   if(!placed){
@@ -746,7 +803,7 @@ function showR(sku){
   var el=document.getElementById('rc');el.className=placed?'':'nf';
   el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">'+
-    '<div><div class="rl" style="'+(placed?'':'color:#A32D2D;font-size:14px;letter-spacing:1px')+'">'+locStr+'</div>'+mNote+'<div class="rd">'+rowInfo+'</div></div>'+
+    '<div><div class="rl" style="'+(placed?'':'color:#A32D2D;font-size:14px;letter-spacing:1px')+'">'+locStr+'</div>'+mNote+'<div class="rd">'+rowInfo+'</div>'+countHtml+'</div>'+
     '<div style="flex:1;min-width:160px">'+
     '<div style="font-size:14px;font-weight:700">'+key+' &nbsp; <a href="'+photoUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#2980B9">\ud83d\udcf7 View photo</a></div>'+
     '<div style="font-size:12px;color:#555;margin:2px 0 7px">'+v[4]+'</div>'+
@@ -756,7 +813,7 @@ function showR(sku){
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
     '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>'+v[11].toLocaleString()+'</strong> on hand</div><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
     (placed?
-      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
+      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
       :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button></div>')+
     '</div></div>';
   el.style.display='block';hlSKU(key);
