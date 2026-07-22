@@ -68,6 +68,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bc.hi{opacity:1!important;outline:3px solid #E24B4A;z-index:20;transform:scale(1.3)!important;box-shadow:0 0 6px rgba(231,76,60,.5)}
 .bc.hi2{opacity:1!important;outline:2px dashed #E24B4A;z-index:15;transform:scale(1.12)!important}
 .be{height:21px;border-radius:2px;flex:1;min-width:3px;background:#E8E8E8;opacity:.38;cursor:pointer}
+.noshelf{height:21px;border-radius:2px;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
 .be:hover{opacity:.65;background:#C8E6FF}
 .be.dt{background:#A8D8FF!important;opacity:1!important;outline:2px dashed #2980B9}
 .bc.dragging{opacity:.25!important}
@@ -275,7 +276,7 @@ function saveDL(){
 
 function buildStats(){
   var grid=document.getElementById('sg');
-  var rStats={A:{cap:252,fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},B:{cap:336,fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{cap:336,fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{cap:336,fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{cap:252,fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{cap:48,fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{cap:156,fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'}};
+  var rStats={A:{cap:252,fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},B:{cap:314,fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{cap:314,fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{cap:314,fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{cap:252,fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{cap:48,fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{cap:156,fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'}};
   var totalCap=0,totalOcc=0;
   Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;rStats[r].occ=0;rStats[r].skus=0;});
   Object.keys(LOC).forEach(function(loc){var r=loc[0];if(rStats[r])rStats[r].occ++;totalOcc++;});
@@ -305,6 +306,17 @@ function mkCell(loc){
   return cell;
 }
 
+// Bay-specific level overrides -- e.g. bays 32-42 in B/C/D only have 3 levels, not 4.
+var BAY_LEVEL_OVERRIDE={
+  B:{from:32,to:42,levels:3},
+  C:{from:32,to:42,levels:3},
+  D:{from:32,to:42,levels:3}
+};
+function getLevelsForBay(row,bay){
+  var ov=BAY_LEVEL_OVERRIDE[row];
+  if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
+  return RS[row].l;
+}
 function buildRow(r,container){
   var sp=RS[r];var wrap=document.createElement('div');wrap.className='rr';
   var tag=document.createElement('div');tag.className='rt';
@@ -315,6 +327,10 @@ function buildRow(r,container){
     var lr=document.createElement('div');lr.className='lrow';
     var ll=document.createElement('div');ll.className='ll';ll.textContent=lv;lr.appendChild(ll);
     for(var bay=1;bay<=sp.b;bay++){
+      if(lv>getLevelsForBay(r,bay)){
+        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';lr.appendChild(ph);}
+        continue;
+      }
       for(var sl=0;sl<sp.s;sl++){
         var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');
         lr.appendChild(mkCell(r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid));
@@ -364,9 +380,19 @@ var BAY_HEIGHTS={
   F:[1.6,1.6,1.6,1.6],
   G:[1.6,1.6,1.6,1.6]
 };
+// Bay-specific height overrides (same ranges as BAY_LEVEL_OVERRIDE above)
+var BAY_HEIGHT_OVERRIDE={
+  B:{from:32,to:42,heights:[2.5,2.5,2.5]},
+  C:{from:32,to:42,heights:[2.5,2.5,2.5]},
+  D:{from:32,to:42,heights:[2.5,2.5,2.5]}
+};
 var HEIGHT_UNIT='m';
 function getBayHeight(loc){
-  var p=loc.split('-');var row=p[0];var lvl=parseInt(p[2],10);
+  var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
+  var ov=BAY_HEIGHT_OVERRIDE[row];
+  if(ov&&bay>=ov.from&&bay<=ov.to){
+    return (ov.heights[lvl-1]!=null?ov.heights[lvl-1]+HEIGHT_UNIT:null);
+  }
   var arr=BAY_HEIGHTS[row];
   if(arr&&arr[lvl-1]!=null)return arr[lvl-1]+HEIGHT_UNIT;
   return null;
@@ -409,8 +435,12 @@ function onDrop(e,toLoc){
 
 function findSeq(startLoc,n){
   var p=startLoc.split('-');var r=p[0],bay=parseInt(p[1]),lv=parseInt(p[2]);var sp=RS[r];if(!sp)return null;
+  if(lv>getLevelsForBay(r,bay))return null;
   var all=[];
-  for(var b=bay;b<=Math.min(sp.b,bay+n);b++){for(var sl=0;sl<sp.s;sl++){var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}}
+  for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
+    if(lv>getLevelsForBay(r,b))break;
+    for(var sl=0;sl<sp.s;sl++){var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
+  }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
   for(var i=0;i<cands.length;i++){if(LOC[cands[i]])return null;}
@@ -625,6 +655,7 @@ function findNearestEmpty(row,targetBay,spaces){
       if(delta===0)cands=[targetBay];
       for(var ci=0;ci<cands.length;ci++){
         var bay=cands[ci];
+        if(lvl>getLevelsForBay(row,bay))continue;
         for(var si=0;si<sides.length;si++){
           var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lvl+'-'+sides[si];
           if(!LOC[loc]){
