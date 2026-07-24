@@ -456,15 +456,16 @@ function quickCount(loc,sku){
     if(isNaN(qty)||qty<0){alert('Enter a whole number of 0 or more.');return;}
     applyC({type:'count',sku:sku,loc:loc,qty:qty},true);
     si2('Recorded '+qty+' at '+fl(loc));
-    hideTT();ttSticky=false;tt.style.display='none';
+    hideTT();ttSticky=false;pinnedTT=null;tt.style.display='none';
   });
 }
 
 function hideTT(){if(ttSticky)return;ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
 var ttSticky=false;
+var pinnedTT=null;
 document.addEventListener('click',function(e){
-  if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('#tt')){
-    ttSticky=false;tt.style.display='none';
+  if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('.bc')&&!e.target.closest('#tt')){
+    ttSticky=false;pinnedTT=null;tt.style.display='none';
   }
 });
 tt.addEventListener('mouseenter',function(){clearTimeout(ttHideTimer);});
@@ -519,6 +520,11 @@ function onOcc(loc,sku){
     return;
   }
   var v=DATA.d[sku];
+  if(ttSticky&&pinnedTT===loc){
+    ttSticky=false;pinnedTT=null;tt.style.display='none';
+  } else {
+    showTT(null,loc,sku,v);ttSticky=true;pinnedTT=loc;
+  }
   showR(sku);hlSKU(sku);
 }
 
@@ -557,7 +563,7 @@ function showEmptyInfo(loc,e){
   tt.style.pointerEvents='none';
   tt.textContent=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet');
   tt.style.display='block';posTT(e);
-  ttSticky=true;
+  ttSticky=true;pinnedTT=null;
 }
 
 function hlSKU(sku){
