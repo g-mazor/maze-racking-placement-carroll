@@ -329,7 +329,7 @@ function mkCell(loc){
       if(!dragSku)return;
       var sku2=dragSku;var fromLocs=dragFrom;dragSku=null;dragFrom=null;
       if(LOC[loc])return;
-      var v2=DATA.d[sku2];var spaces=v2?v2[8]:1;var tl;
+      var spaces=fromLocs.length||1;var tl;
       if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}
       else{tl=[loc];}
       requirePin(function(){
@@ -525,7 +525,7 @@ function onEmp(loc,e){
       setNorm();
     }
   } else if(mode==='move'&&moveSku){
-    var v2=DATA.d[moveSku];var spaces2=v2?v2[8]:1;var tl2;var fromLocs=SLOC[moveSku]||[];
+    var fromLocs=SLOC[moveSku]||[];var spaces2=fromLocs.length||1;var tl2;
     if(spaces2>1){tl2=findSeq(loc,spaces2);if(!tl2){alert('Need '+spaces2+' consecutive empty spaces here. Try another spot.');return;}}
     else{tl2=[loc];}
     var sku=moveSku;
