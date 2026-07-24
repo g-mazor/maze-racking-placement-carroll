@@ -80,7 +80,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .leg{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:#555}
 .li{display:flex;align-items:center;gap:4px}
 .ld{width:12px;height:12px;border-radius:2px;flex-shrink:0}
-.tt{position:fixed;background:rgba(10,10,10,.94);color:#FFF;padding:8px 12px;border-radius:6px;font-size:11px;pointer-events:auto;z-index:2000;display:none;max-width:250px;line-height:1.6}
+.tt{position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(10,10,10,.94);color:#FFF;padding:8px 12px;border-radius:6px;font-size:12px;pointer-events:auto;z-index:2000;display:none;max-width:320px;line-height:1.6;box-shadow:0 4px 16px rgba(0,0,0,.3)}
 .tt a{color:#7EC8FF;text-decoration:underline;display:block;margin-top:5px;font-weight:600}
 .tt a:hover{color:#B8E0FF}
 #sind{position:fixed;bottom:14px;right:14px;background:#27AE60;color:#FFF;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;display:none;z-index:3000;box-shadow:0 2px 8px rgba(0,0,0,.2)}
@@ -441,10 +441,25 @@ function showTT(e,loc,sku,v){
   tt.style.pointerEvents='auto';
   tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
-    '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>';
+    '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
+    '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>';
   tt.style.display='block';posTT(e);
 }
-function posTT(e){var x=e.clientX+14,y=e.clientY-10;tt.style.left=(x+250>window.innerWidth?x-260:x)+'px';tt.style.top=(y+110>window.innerHeight?y-110:y)+'px';}
+function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
+
+function quickCount(loc,sku){
+  requirePin(function(){
+    var cur=QTY[loc];
+    var entered=prompt('Stock count for '+sku+' at '+fl(loc)+':',cur!=null?String(cur):'');
+    if(entered===null)return;
+    var qty=parseInt(entered.trim(),10);
+    if(isNaN(qty)||qty<0){alert('Enter a whole number of 0 or more.');return;}
+    applyC({type:'count',sku:sku,loc:loc,qty:qty},true);
+    si2('Recorded '+qty+' at '+fl(loc));
+    hideTT();ttSticky=false;tt.style.display='none';
+  });
+}
+
 function hideTT(){if(ttSticky)return;ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
 var ttSticky=false;
 document.addEventListener('click',function(e){
