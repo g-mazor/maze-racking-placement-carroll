@@ -308,7 +308,7 @@ function mkCell(loc){
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
     cell.setAttribute('draggable','true');
-    cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
+    cell.addEventListener('mouseenter',function(e){if(ttSticky)return;showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onOcc(loc,sku);});
     cell.addEventListener('dragstart',function(ev){
@@ -319,7 +319,7 @@ function mkCell(loc){
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
+    cell.addEventListener('mouseenter',function(e){if(ttSticky)return;var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
     cell.addEventListener('dragover',function(ev){if(dragSku){ev.preventDefault();cell.classList.add('dt');}});
