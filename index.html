@@ -764,6 +764,38 @@ function countFromCard(sku){
   });
 }
 
+function duplicatePallet(sku){
+  requirePin(function(){
+  var v=DATA.d[sku];if(!v)return;
+  var howMany=prompt('How many additional pallets of '+sku+' ('+v[4]+') do you want to add?','1');
+  if(howMany===null)return;
+  var n=parseInt(howMany.trim(),10);
+  if(isNaN(n)||n<1){alert('Enter a whole number of 1 or more.');return;}
+  var spacesEach=prompt('How many pallet spaces does each one take?',String(v[8]||1));
+  if(spacesEach===null)return;
+  var spaces=parseInt(spacesEach.trim(),10);
+  if(isNaN(spaces)||spaces<1){alert('Enter a whole number of 1 or more.');return;}
+  var countAns=prompt('Apply a stock count to each new pallet? Leave blank to skip.','');
+  var qty2=null;
+  if(countAns!==null&&countAns.trim()!==''){
+    var q=parseInt(countAns.trim(),10);
+    if(!isNaN(q)&&q>=0)qty2=q;
+  }
+  var placed=[];
+  for(var i=0;i<n;i++){
+    var sugg=suggestLocationFor(sku,spaces);
+    if(!sugg){alert('Placed '+placed.length+' of '+n+' -- ran out of suggested space. Use "+ Add extra pallet" to place the rest manually.');break;}
+    var tl=findSeq(sugg.loc,spaces)||[sugg.loc];
+    applyC({type:'add',sku:sku,tl:tl},true);
+    if(qty2!=null)applyC({type:'count',sku:sku,loc:tl[0],qty:qty2},true);
+    placed.push(sugg.code);
+  }
+  rebuildMap();hlSKU(sku);showR(sku);
+  si2('Duplicated '+placed.length+' pallet'+(placed.length!==1?'s':'')+' at '+placed.join(', '));
+  });
+}
+
+
 document.addEventListener('contextmenu',function(e){
   var cell=e.target.closest('.bc');
   if(cell){e.preventDefault();var loc=cell.getAttribute('data-loc');var sku=cell.getAttribute('data-sku');
@@ -814,7 +846,7 @@ function showR(sku){
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
     '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>'+v[11].toLocaleString()+'</strong> on hand</div><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
     (placed?
-      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
+      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
       :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button></div>')+
     '</div></div>';
   el.style.display='block';hlSKU(key);
