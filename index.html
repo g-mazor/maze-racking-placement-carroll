@@ -798,7 +798,8 @@ function countFromCard(sku){
 function duplicatePallet(sku){
   requirePin(function(){
   var v=DATA.d[sku];if(!v)return;
-  var howMany=prompt('How many additional pallets of '+sku+' ('+v[4]+') do you want to add?','1');
+  var already=SLOC[sku]&&SLOC[sku].length>0;
+  var howMany=prompt('How many '+(already?'additional ':'')+'pallets of '+sku+' ('+v[4]+') do you want to place?','1');
   if(howMany===null)return;
   var n=parseInt(howMany.trim(),10);
   if(isNaN(n)||n<1){alert('Enter a whole number of 1 or more.');return;}
@@ -873,7 +874,7 @@ function showR(sku){
     '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>'+v[11].toLocaleString()+'</strong> on hand</div><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
     (placed?
       '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
-      :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button></div>')+
+      :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Place multiple</button></div>')+
     '</div></div>';
   el.style.display='block';hlSKU(key);
 }
