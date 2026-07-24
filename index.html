@@ -71,6 +71,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .noshelf{height:21px;border-radius:2px;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
 .be:hover{opacity:.65;background:#C8E6FF}
 .be.dt{background:#A8D8FF!important;opacity:1!important;outline:2px dashed #2980B9}
+.bc.dragging{opacity:.4}
 .bc.dragging{opacity:.25!important}
 .mdot{position:absolute;top:1px;right:1px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85);pointer-events:none}
 .pb2{background:#EAF3DE;border:1.5px solid #27AE60;border-radius:6px;padding:6px 11px;margin-top:6px;font-size:11px;font-weight:600;color:#173404}
@@ -138,7 +139,7 @@ var RCOL={A:'#DEEAF1',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D8',F:'#E2EFDA
 var RFCOL={A:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null;
+var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null;
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
@@ -306,14 +307,35 @@ function mkCell(loc){
     cell.className='bc occ';cell.style.background=gc(v?v[5]:'');
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
+    cell.setAttribute('draggable','true');
     cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onOcc(loc,sku);});
+    cell.addEventListener('dragstart',function(ev){
+      dragSku=sku;dragFrom=(SLOC[sku]||[loc]).slice();
+      cell.classList.add('dragging');
+      try{ev.dataTransfer.setData('text/plain',sku);}catch(e2){}
+    });
+    cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
     cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
+    cell.addEventListener('dragover',function(ev){if(dragSku){ev.preventDefault();cell.classList.add('dt');}});
+    cell.addEventListener('dragleave',function(){cell.classList.remove('dt');});
+    cell.addEventListener('drop',function(ev){
+      ev.preventDefault();cell.classList.remove('dt');
+      if(!dragSku)return;
+      var sku2=dragSku;var fromLocs=dragFrom;dragSku=null;dragFrom=null;
+      if(LOC[loc])return;
+      var v2=DATA.d[sku2];var spaces=v2?v2[8]:1;var tl;
+      if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}
+      else{tl=[loc];}
+      requirePin(function(){
+        applyC({type:'move',sku:sku2,fl:fromLocs,tl:tl},true);rebuildMap();hlSKU(sku2);si2('Moved to '+fl(loc));
+      });
+    });
   }
   return cell;
 }
@@ -491,7 +513,16 @@ function onEmp(loc,e){
     var v=DATA.d[addTgt];var spaces=addSpaces||(v?v[8]:1);var tl;
     if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}else{tl=[loc];}
     applyC({type:'add',sku:addTgt,tl:tl},true);rebuildMap();hlSKU(addTgt);si2('Added at '+fl(loc));
-    setNorm();
+    if(dupQueueQty!=null)applyC({type:'count',sku:addTgt,loc:tl[0],qty:dupQueueQty},true);
+    if(dupQueueRemaining>0){
+      dupQueueRemaining--;
+      var sku3=addTgt;
+      chooseAddSpaces(spaces);
+      si2('Placed -- '+dupQueueRemaining+' more to go. Confirm the next spot.');
+    } else {
+      dupQueueQty=null;
+      setNorm();
+    }
   } else if(mode==='move'&&moveSku){
     var v2=DATA.d[moveSku];var spaces2=v2?v2[8]:1;var tl2;var fromLocs=SLOC[moveSku]||[];
     if(spaces2>1){tl2=findSeq(loc,spaces2);if(!tl2){alert('Need '+spaces2+' consecutive empty spaces here. Try another spot.');return;}}
@@ -535,7 +566,7 @@ function clrHL(){
 }
 
 var mb=document.getElementById('mb');
-function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';}
+function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;dupQueueRemaining=0;dupQueueQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';}
 
 function enterMoveModeCard(sku){
   requirePin(function(){
@@ -781,17 +812,12 @@ function duplicatePallet(sku){
     var q=parseInt(countAns.trim(),10);
     if(!isNaN(q)&&q>=0)qty2=q;
   }
-  var placed=[];
-  for(var i=0;i<n;i++){
-    var sugg=suggestLocationFor(sku,spaces);
-    if(!sugg){alert('Placed '+placed.length+' of '+n+' -- ran out of suggested space. Use "+ Add extra pallet" to place the rest manually.');break;}
-    var tl=findSeq(sugg.loc,spaces)||[sugg.loc];
-    applyC({type:'add',sku:sku,tl:tl},true);
-    if(qty2!=null)applyC({type:'count',sku:sku,loc:tl[0],qty:qty2},true);
-    placed.push(sugg.code);
-  }
-  rebuildMap();hlSKU(sku);showR(sku);
-  si2('Duplicated '+placed.length+' pallet'+(placed.length!==1?'s':'')+' at '+placed.join(', '));
+  cRC();
+  addTgt=sku;
+  dupQueueRemaining=n-1;
+  dupQueueQty=qty2;
+  chooseAddSpaces(spaces);
+  si2('Confirm each spot -- '+n+' to place');
   });
 }
 
