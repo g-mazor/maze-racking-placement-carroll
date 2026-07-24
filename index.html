@@ -139,7 +139,7 @@ var RCOL={A:'#DEEAF1',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D8',F:'#E2EFDA
 var RFCOL={A:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null;
+var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null;
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
@@ -514,10 +514,11 @@ function onEmp(loc,e){
     if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}else{tl=[loc];}
     applyC({type:'add',sku:addTgt,tl:tl},true);rebuildMap();hlSKU(addTgt);si2('Added at '+fl(loc));
     if(dupQueueQty!=null)applyC({type:'count',sku:addTgt,loc:tl[0],qty:dupQueueQty},true);
+    else if(singleAddQty!=null){applyC({type:'count',sku:addTgt,loc:tl[0],qty:singleAddQty},true);singleAddQty=null;}
     if(dupQueueRemaining>0){
       dupQueueRemaining--;
       var sku3=addTgt;
-      chooseAddSpaces(spaces);
+      chooseAddSpaces(spaces,true);
       si2('Placed -- '+dupQueueRemaining+' more to go. Confirm the next spot.');
     } else {
       dupQueueQty=null;
@@ -566,7 +567,7 @@ function clrHL(){
 }
 
 var mb=document.getElementById('mb');
-function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;dupQueueRemaining=0;dupQueueQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';}
+function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';}
 
 function enterMoveModeCard(sku){
   requirePin(function(){
@@ -626,9 +627,17 @@ function confirmAddTarget(sku){
   hlSKU(sku);
 }
 
-function chooseAddSpaces(n){
+function chooseAddSpaces(n, skipCountPrompt){
   addSpaces=n;var sku=addTgt;var v=DATA.d[sku];
   mode='add';
+  if(!skipCountPrompt){
+    var countAns=prompt('Stock count for this pallet? Leave blank to skip.','');
+    singleAddQty=null;
+    if(countAns!==null&&countAns.trim()!==''){
+      var q=parseInt(countAns.trim(),10);
+      if(!isNaN(q)&&q>=0)singleAddQty=q;
+    }
+  }
   var sugg=suggestLocationFor(sku,n);
   currentSuggestion=sugg;
   showAddBanner(sku,n,sugg,false);
@@ -817,7 +826,7 @@ function duplicatePallet(sku){
   addTgt=sku;
   dupQueueRemaining=n-1;
   dupQueueQty=qty2;
-  chooseAddSpaces(spaces);
+  chooseAddSpaces(spaces,true);
   si2('Confirm each spot -- '+n+' to place');
   });
 }
