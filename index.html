@@ -172,6 +172,8 @@ async function fetchRemoteChanges(){
 function postRemoteChange(change){
   return new Promise(function(resolve){
     var img=new Image();
+    var v=DATA.d[change.sku];
+    var desc=v?v[4]:'';
     var params='beacon=1'+
       '&type='+encodeURIComponent(change.type||'')+
       '&sku='+encodeURIComponent(change.sku||'')+
@@ -180,6 +182,7 @@ function postRemoteChange(change){
       '&user='+encodeURIComponent(change.user||'')+
       '&loc='+encodeURIComponent(change.loc||'')+
       '&qty='+encodeURIComponent(change.qty!=null?String(change.qty):'')+
+      '&desc='+encodeURIComponent(desc)+
       '&t='+Date.now();
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
