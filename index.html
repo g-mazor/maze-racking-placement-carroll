@@ -59,6 +59,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .rr{display:flex;align-items:flex-start;gap:5px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #E0E0E0}
 .rr:last-child{border-bottom:none}
 .row-pair{border:2px solid #1F3864;border-radius:8px;padding:6px;margin-bottom:8px;background:rgba(31,56,100,0.03)}
+.aisle-marker{text-align:center;font-size:10px;font-weight:700;color:#888;letter-spacing:2px;padding:4px 0;margin-bottom:8px;background:repeating-linear-gradient(90deg,#E8E8E8,#E8E8E8 8px,#F4F4F4 8px,#F4F4F4 16px);border-radius:4px}
 .row-pair-label{font-size:10px;font-weight:700;color:#1F3864;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;padding-left:2px}
 .row-pair .rr{border-bottom:1px dashed #B8C4D9;margin-bottom:4px;padding-bottom:4px}
 .row-pair .rr:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
@@ -444,19 +445,23 @@ function bFG(){
 
 function bMain(){
   var m=document.getElementById('mr');
-  var singleLabels={E:'Row E',D:'Row D',C:'Row C',B:'Row B'};
-  ['E','D','C','B'].forEach(function(r){
+  function makeGroup(label,rows){
     var wrap=document.createElement('div');wrap.className='row-pair';
-    var label=document.createElement('div');label.className='row-pair-label';label.textContent=singleLabels[r];
-    wrap.appendChild(label);
-    buildRow(r,wrap);
-    m.appendChild(wrap);
-  });
-  var pairWrap=document.createElement('div');pairWrap.className='row-pair';
-  var pairLabel=document.createElement('div');pairLabel.className='row-pair-label';pairLabel.textContent='Row A + AA (double-deep pair)';
-  pairWrap.appendChild(pairLabel);
-  buildRow('A',pairWrap);buildRow('AA',pairWrap);
-  m.appendChild(pairWrap);
+    var lbl=document.createElement('div');lbl.className='row-pair-label';lbl.textContent=label;
+    wrap.appendChild(lbl);
+    rows.forEach(function(r){buildRow(r,wrap);});
+    return wrap;
+  }
+  function aisleMarker(){
+    var a=document.createElement('div');a.className='aisle-marker';a.textContent='AISLE';
+    return a;
+  }
+  m.appendChild(aisleMarker());
+  m.appendChild(makeGroup('Row E + D (back-to-back)',['E','D']));
+  m.appendChild(aisleMarker());
+  m.appendChild(makeGroup('Row C + B (back-to-back)',['C','B']));
+  m.appendChild(aisleMarker());
+  m.appendChild(makeGroup('Row A + AA (double-deep pair)',['A','AA']));
 }
 
 var tt=document.getElementById('tt');
