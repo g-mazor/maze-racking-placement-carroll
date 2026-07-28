@@ -118,6 +118,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
 <button class="btn" id="btn-cm" onclick="enterCountMode()">\ud83d\udd22 Count mode</button>
+<button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
 <button class="btn" onclick="undoLast()">Undo</button>
 </div>
 <div id="mb"></div>
@@ -188,6 +189,36 @@ function postRemoteChange(change){
     img.onload=function(){clearTimeout(timer);resolve(true);};
     img.onerror=function(){clearTimeout(timer);resolve(false);};
     img.src=SHEET_API+'?'+params;
+  });
+}
+
+function sendDescOnly(loc,desc){
+  return new Promise(function(resolve){
+    var img=new Image();
+    var params='beacon=1&type=setdesc&loc='+encodeURIComponent(loc)+'&desc='+encodeURIComponent(desc)+'&t='+Date.now();
+    var timer=setTimeout(function(){resolve(false);},8000);
+    img.onload=function(){clearTimeout(timer);resolve(true);};
+    img.onerror=function(){clearTimeout(timer);resolve(false);};
+    img.src=SHEET_API+'?'+params;
+  });
+}
+
+async function backfillDescriptions(){
+  requirePin(async function(){
+    var skus=Object.keys(SLOC);
+    if(!skus.length){alert('Nothing placed yet to backfill.');return;}
+    if(!confirm('Send descriptions to the sheet for all '+skus.length+' currently placed SKUs? This may take a minute.'))return;
+    var done=0;
+    for(var i=0;i<skus.length;i++){
+      var sku=skus[i];var v=DATA.d[sku];if(!v)continue;
+      var locs=SLOC[sku];
+      for(var j=0;j<locs.length;j++){
+        await sendDescOnly(locs[j],v[4]);
+      }
+      done++;
+      if(done%20===0)si2('Backfilling descriptions... '+done+'/'+skus.length);
+    }
+    si2('Done -- sent descriptions for '+done+' SKUs.');
   });
 }
 
