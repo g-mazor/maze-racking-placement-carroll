@@ -444,7 +444,14 @@ function bFG(){
 
 function bMain(){
   var m=document.getElementById('mr');
-  ['E','D','C','B'].forEach(function(r){buildRow(r,m);});
+  var singleLabels={E:'Row E',D:'Row D',C:'Row C',B:'Row B'};
+  ['E','D','C','B'].forEach(function(r){
+    var wrap=document.createElement('div');wrap.className='row-pair';
+    var label=document.createElement('div');label.className='row-pair-label';label.textContent=singleLabels[r];
+    wrap.appendChild(label);
+    buildRow(r,wrap);
+    m.appendChild(wrap);
+  });
   var pairWrap=document.createElement('div');pairWrap.className='row-pair';
   var pairLabel=document.createElement('div');pairLabel.className='row-pair-label';pairLabel.textContent='Row A + AA (double-deep pair)';
   pairWrap.appendChild(pairLabel);
