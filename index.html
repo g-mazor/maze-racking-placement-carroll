@@ -83,6 +83,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bc.hi2{opacity:1!important;outline:2px dashed #E24B4A;z-index:15;transform:scale(1.12)!important}
 .be{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:#E8E8E8;opacity:.38;cursor:pointer}
 .noshelf{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
+.noshelf-blank{height:21px;flex:1;min-width:3px;background:transparent;cursor:default;visibility:hidden}
 .bc.merge-r{margin-right:0!important;border-top-right-radius:0;border-bottom-right-radius:0}
 .bc.merge-l{border-top-left-radius:0;border-bottom-left-radius:0}
 .be:hover{opacity:.65;background:#C8E6FF}
@@ -401,9 +402,9 @@ function mkCell(loc){
 
 // Bay-specific level overrides -- e.g. bays 32-42 in B/C/D only have 3 levels, not 4.
 var BAY_LEVEL_OVERRIDE={
-  B:{from:32,to:42,levels:3},
-  C:{from:32,to:42,levels:3},
-  D:{from:32,to:42,levels:3}
+  B:{from:34,to:42,levels:3},
+  C:{from:34,to:42,levels:3},
+  D:{from:34,to:42,levels:3}
 };
 function getLevelsForBay(row,bay){
   var ov=BAY_LEVEL_OVERRIDE[row];
@@ -421,14 +422,20 @@ function buildRow(r,container){
     var ll=document.createElement('div');ll.className='ll';ll.textContent=lv;lr.appendChild(ll);
     var cellInfos=[];
     for(var bay=1;bay<=sp.b;bay++){
-      if(lv>getLevelsForBay(r,bay)){
-        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
+      var bayLevels=getLevelsForBay(r,bay);
+      if(lv>bayLevels){
+        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf-blank';cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
       }
       for(var sl=0;sl<sp.s;sl++){
         var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
-        cellInfos.push({el:mkCell(loc2),sku:LOC[loc2]||null,bay:bay});
+        var cellEl=mkCell(loc2);
+        if(lv===bayLevels&&bayLevels<sp.l){
+          var extraLevels=sp.l-bayLevels;
+          cellEl.style.height=(21+extraLevels*23)+'px';
+        }
+        cellInfos.push({el:cellEl,sku:LOC[loc2]||null,bay:bay});
       }
     }
     for(var ci=0;ci<cellInfos.length;ci++){
@@ -511,9 +518,9 @@ var BAY_HEIGHTS={
 };
 // Bay-specific height overrides (same ranges as BAY_LEVEL_OVERRIDE above)
 var BAY_HEIGHT_OVERRIDE={
-  B:{from:32,to:42,heights:[2.5,2.5,2.5]},
-  C:{from:32,to:42,heights:[2.5,2.5,2.5]},
-  D:{from:32,to:42,heights:[2.5,2.5,2.5]}
+  B:{from:34,to:42,heights:[2.5,2.5,2.5]},
+  C:{from:34,to:42,heights:[2.5,2.5,2.5]},
+  D:{from:34,to:42,heights:[2.5,2.5,2.5]}
 };
 var HEIGHT_UNIT='m';
 function getBayHeight(loc){
