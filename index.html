@@ -167,7 +167,7 @@ function jsonpFetch(url){
     var cbName='jsonpCb'+Date.now()+Math.floor(Math.random()*100000);
     var script=document.createElement('script');
     var done=false;
-    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},12000);
+    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},25000);
     function cleanup(){delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);clearTimeout(timer);}
     window[cbName]=function(data){if(done)return;done=true;cleanup();resolve(data);};
     script.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cbName+'&t='+Date.now();
@@ -176,7 +176,16 @@ function jsonpFetch(url){
   });
 }
 async function fetchRemoteChanges(){
-  return await jsonpFetch(SHEET_API);
+  var lastErr=null;
+  for(var attempt=0;attempt<3;attempt++){
+    try{
+      return await jsonpFetch(SHEET_API);
+    }catch(e){
+      lastErr=e;
+      if(attempt<2)await new Promise(function(r){setTimeout(r,1000);});
+    }
+  }
+  throw lastErr;
 }
 function postRemoteChange(change){
   return new Promise(function(resolve){
@@ -235,17 +244,23 @@ async function buildIdx(){
   // Racking starts empty for the move-in -- DATA.d stays as the full SKU catalog
   // (description, group, pallet count, etc.) used by the Add-pallet search below.
   var saved=null;
+  var usedStaleCache=false;
   try{
     saved=await fetchRemoteChanges();
   }catch(e){
+    usedStaleCache=true;
     try{var raw=localStorage.getItem(LS);if(raw)saved=JSON.parse(raw);}catch(e2){}
   }
   if(saved&&saved.length){
     saved.forEach(function(c){applyC(c,false);});
     CHANGES=saved.slice();
     lastSyncJSON=JSON.stringify(CHANGES);
-    try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
-    si2('Loaded '+saved.length+' shared change'+(saved.length>1?'s':''));
+    if(usedStaleCache){
+      si2('Could not reach the live sheet -- showing an OLDER cached copy on this device. Please check your connection and refresh.');
+    } else {
+      try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
+      si2('Loaded '+saved.length+' shared change'+(saved.length>1?'s':''));
+    }
   } else {
     lastSyncJSON=JSON.stringify(CHANGES);
   }
