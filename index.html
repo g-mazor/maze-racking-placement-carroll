@@ -352,11 +352,17 @@ function saveDL(){
 
 function buildStats(){
   var grid=document.getElementById('sg');
-  var rStats={A:{cap:252,fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},AA:{cap:252,fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{cap:314,fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{cap:314,fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{cap:314,fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{cap:252,fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{cap:48,fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{cap:156,fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'}};
+  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'}};
+  Object.keys(rStats).forEach(function(r){
+    var sp=RS[r];var cap=0;
+    for(var bay=1;bay<=sp.b;bay++){cap+=getLevelsForBay(r,bay)*getSidesForBay(r,bay);}
+    rStats[r].cap=cap;rStats[r].occ=0;rStats[r].skus=0;
+  });
+  function rowOf(loc){return loc.split('-')[0];}
   var totalCap=0,totalOcc=0;
-  Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;rStats[r].occ=0;rStats[r].skus=0;});
-  Object.keys(LOC).forEach(function(loc){var r=loc[0];if(rStats[r])rStats[r].occ++;totalOcc++;});
-  Object.keys(SLOC).forEach(function(sku){var locs=SLOC[sku];if(locs&&locs.length){var r=locs[0][0];if(rStats[r])rStats[r].skus++;}});
+  Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;});
+  Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;totalOcc++;});
+  Object.keys(SLOC).forEach(function(sku){var locs=SLOC[sku];if(locs&&locs.length){var r=rowOf(locs[0]);if(rStats[r])rStats[r].skus++;}});
   var empty=totalCap-totalOcc;
   var totalSkusPlaced=Object.keys(SLOC).length;
   var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
