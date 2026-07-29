@@ -516,6 +516,7 @@ function showTT(e,loc,sku,v){
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>';
   tt.style.display='block';posTT(e);
+  ttSticky=true;
 }
 function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
 
