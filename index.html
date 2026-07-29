@@ -602,10 +602,18 @@ function showTT(e,loc,sku,v){
   tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
-    '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>';
+    '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
+    '<a href="javascript:void(0)" onclick="quickMove(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move to new location</a>';
   tt.style.display='block';posTT(e);
 }
 function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
+
+function quickMove(sku){
+  requirePin(function(){
+    ttSticky=false;tt.style.display='none';
+    enterMoveModeCard(sku);
+  });
+}
 
 function quickCount(loc,sku){
   requirePin(function(){
