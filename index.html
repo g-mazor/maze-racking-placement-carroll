@@ -431,10 +431,6 @@ function buildRow(r,container){
         var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
         var cellEl=mkCell(loc2);
-        if(lv===bayLevels&&bayLevels<sp.l){
-          var extraLevels=sp.l-bayLevels;
-          cellEl.style.height=(21+extraLevels*23)+'px';
-        }
         cellInfos.push({el:cellEl,sku:LOC[loc2]||null,bay:bay});
       }
     }
