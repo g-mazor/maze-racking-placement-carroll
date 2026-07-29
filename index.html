@@ -84,10 +84,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .be{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:#E8E8E8;opacity:.38;cursor:pointer}
 .be.bridge-bay{outline:2px solid #FFD700;outline-offset:-2px}
 .bc.bridge-bay{outline:2px solid #FFD700;outline-offset:-2px}
-.bridge-path{position:absolute;border:3px solid #FFD700;border-radius:4px;pointer-events:none;background:rgba(255,215,0,0.08);z-index:5}
-.bridge-path-label{position:absolute;top:-14px;left:0;font-size:8px;font-weight:700;color:#8A6D00;white-space:nowrap;background:#FFF3CD;padding:0 3px;border-radius:2px}
+.noshelf-bridge{height:21px;flex:1;min-width:3px;cursor:default;background:repeating-linear-gradient(45deg,#FFD700,#FFD700 4px,#FFF3CD 4px,#FFF3CD 8px);border-top:2px solid #E0A800;border-bottom:2px solid #E0A800;font-size:6px;color:#7A5A00;display:flex;align-items:center;justify-content:center;font-weight:700;writing-mode:vertical-rl;overflow:hidden}
 .noshelf{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
-.noshelf-blank{height:21px;flex:1;min-width:3px;background:transparent;cursor:default;visibility:hidden}
 .bc.merge-r{margin-right:0!important;border-top-right-radius:0;border-bottom-right-radius:0}
 .bc.merge-l{border-top-left-radius:0;border-bottom-left-radius:0}
 .be:hover{opacity:.65;background:#C8E6FF}
@@ -434,12 +432,8 @@ function buildRow(r,container){
   tag.style.cssText='background:'+RCOL[r]+';color:'+RFCOL[r]+';height:'+(sp.l*21+(sp.l-1)*2+6)+'px';
   tag.textContent=r;tag.title=RI[r];wrap.appendChild(tag);
   var body=document.createElement('div');body.className='rb';
-  var bridgeBayEdgeCells={};
-  var firstLrow=null,lastLrow=null;
   for(var lv=1;lv<=sp.l;lv++){
     var lr=document.createElement('div');lr.className='lrow';
-    if(!firstLrow)firstLrow=lr;
-    lastLrow=lr;
     var ll=document.createElement('div');ll.className='ll';ll.textContent=lv;lr.appendChild(ll);
     var cellInfos=[];
     for(var bay=1;bay<=sp.b;bay++){
@@ -447,13 +441,9 @@ function buildRow(r,container){
       var isBridge=isBridgeBay(r,bay);
       if(isBridge&&isBridgeEmptyLevel(r,bay,lv)){
         for(var nb=0;nb<baySides;nb++){
-          var blank=document.createElement('div');blank.className='noshelf-blank';
+          var blank=document.createElement('div');blank.className='noshelf-bridge';
+          if(lv===1)blank.textContent='WALKWAY';
           cellInfos.push({el:blank,sku:null,bay:bay});
-          if(lv===1){
-            if(!bridgeBayEdgeCells[bay])bridgeBayEdgeCells[bay]={};
-            if(nb===0)bridgeBayEdgeCells[bay].first=blank;
-            if(nb===baySides-1)bridgeBayEdgeCells[bay].last=blank;
-          }
         }
         continue;
       }
@@ -488,26 +478,6 @@ function buildRow(r,container){
   var sc=document.createElement('div');sc.className='bs';
   sc.innerHTML='<span>01</span><span style="flex:1;text-align:center">'+RI[r]+'</span><span>'+sp.b+'</span>';
   body.appendChild(sc);wrap.appendChild(body);container.appendChild(wrap);
-  if(Object.keys(bridgeBayEdgeCells).length){
-    requestAnimationFrame(function(){
-      var bodyRect=body.getBoundingClientRect();
-      var topRect=firstLrow.getBoundingClientRect();
-      var botRect=lastLrow.getBoundingClientRect();
-      Object.keys(bridgeBayEdgeCells).forEach(function(bayNum){
-        var edge=bridgeBayEdgeCells[bayNum];
-        if(!edge.first||!edge.last)return;
-        var fr=edge.first.getBoundingClientRect(),lrct=edge.last.getBoundingClientRect();
-        var overlay=document.createElement('div');overlay.className='bridge-path';
-        overlay.style.left=(fr.left-bodyRect.left)+'px';
-        overlay.style.width=(lrct.right-fr.left)+'px';
-        overlay.style.top=(topRect.top-bodyRect.top)+'px';
-        overlay.style.height=(botRect.bottom-topRect.top)+'px';
-        var lbl=document.createElement('div');lbl.className='bridge-path-label';lbl.textContent='WALKWAY';
-        overlay.appendChild(lbl);
-        body.appendChild(overlay);
-      });
-    });
-  }
 }
 
 function rebuildMap(){
