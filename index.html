@@ -353,7 +353,8 @@ function mkCell(loc){
     cell.className='bc occ';cell.style.background=gc(v?v[5]:'');
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
-    if(!IS_TOUCH_DEVICE)cell.setAttribute('draggable','true');
+    // draggable removed entirely -- it caused unreliable taps on some tablets/phones
+    // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
     cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onOcc(loc,sku);});
