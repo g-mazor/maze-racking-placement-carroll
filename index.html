@@ -521,7 +521,20 @@ function showTT(e,loc,sku,v){
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
 }
-function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
+function posTT(e){repositionTTForViewport();}
+function repositionTTForViewport(){
+  if(window.visualViewport){
+    var vv=window.visualViewport;
+    tt.style.position='fixed';
+    tt.style.top=(vv.offsetTop+8)+'px';
+    tt.style.left=(vv.offsetLeft+vv.width/2)+'px';
+    tt.style.transform='translateX(-50%)';
+  }
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',function(){if(tt.style.display==='block')repositionTTForViewport();});
+  window.visualViewport.addEventListener('scroll',function(){if(tt.style.display==='block')repositionTTForViewport();});
+}
 
 function quickCount(loc,sku){
   requirePin(function(){
