@@ -82,6 +82,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bc.hi{opacity:1!important;outline:3px solid #E24B4A;z-index:20;transform:scale(1.3)!important;box-shadow:0 0 6px rgba(231,76,60,.5)}
 .bc.hi2{opacity:1!important;outline:2px dashed #E24B4A;z-index:15;transform:scale(1.12)!important}
 .be{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:#E8E8E8;opacity:.38;cursor:pointer}
+.be.bridge-bay{background:repeating-linear-gradient(45deg,#FFD700,#FFD700 4px,#1A1A1A 4px,#1A1A1A 8px);opacity:.55}
+.bc.bridge-bay{box-shadow:inset 0 0 0 2px #FFD700;outline:2px solid #FFD700;outline-offset:-2px}
 .noshelf{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
 .bc.merge-r{margin-right:0!important;border-top-right-radius:0;border-bottom-right-radius:0}
 .bc.merge-l{border-top-left-radius:0;border-bottom-left-radius:0}
@@ -406,9 +408,18 @@ var BAY_LEVEL_OVERRIDE={
   D:{from:32,to:42,levels:3}
 };
 function getLevelsForBay(row,bay){
+  if(isBridgeBay(row,bay))return 2;
   var ov=BAY_LEVEL_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
+}
+var BRIDGE_BAYS={B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+function isBridgeBay(row,bay){
+  return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
+}
+function getSidesForBay(row,bay){
+  if(isBridgeBay(row,bay))return 3;
+  return RS[row].s;
 }
 function buildRow(r,container){
   var sp=RS[r];var wrap=document.createElement('div');wrap.className='rr';
@@ -421,14 +432,18 @@ function buildRow(r,container){
     var ll=document.createElement('div');ll.className='ll';ll.textContent=lv;lr.appendChild(ll);
     var cellInfos=[];
     for(var bay=1;bay<=sp.b;bay++){
+      var baySides=getSidesForBay(r,bay);
+      var isBridge=isBridgeBay(r,bay);
       if(lv>getLevelsForBay(r,bay)){
-        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
+        for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
       }
-      for(var sl=0;sl<sp.s;sl++){
-        var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');
+      for(var sl=0;sl<baySides;sl++){
+        var sid=baySides===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
-        cellInfos.push({el:mkCell(loc2),sku:LOC[loc2]||null,bay:bay});
+        var cEl=mkCell(loc2);
+        if(isBridge)cEl.classList.add('bridge-bay');
+        cellInfos.push({el:cEl,sku:LOC[loc2]||null,bay:bay});
       }
     }
     for(var ci=0;ci<cellInfos.length;ci++){
@@ -518,6 +533,7 @@ var BAY_HEIGHT_OVERRIDE={
 var HEIGHT_UNIT='m';
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
+  if(isBridgeBay(row,bay))return 1.8+HEIGHT_UNIT;
   var ov=BAY_HEIGHT_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to){
     return (ov.heights[lvl-1]!=null?ov.heights[lvl-1]+HEIGHT_UNIT:null);
