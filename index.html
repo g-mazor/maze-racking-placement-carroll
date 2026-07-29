@@ -69,6 +69,10 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .lrow>*{margin-right:1px}
 .lrow>*:last-child{margin-right:0}
 .ll{font-size:8px;color:#999;width:13px;flex-shrink:0;text-align:center}
+.bay-num-row{margin-top:2px}
+.bay-num{font-size:7px;color:#999;text-align:center;min-width:3px}
+.bc.bay-end,.be.bay-end,.noshelf.bay-end{margin-right:4px!important;border-right:2px solid #999}
+.bay-num.bay-end{margin-right:4px}
 .bs{display:flex;justify-content:space-between;font-size:8px;color:#BBB;padding:1px 16px 0;margin-top:1px}
 .row-pair .rr:not(:last-child) .bs{border-top:2px dashed #4A6FA5;padding-top:5px;margin-top:5px;margin-left:-27px;padding-left:27px}
 .bc{height:21px;border-radius:2px;flex:1;min-width:3px;cursor:pointer;transition:transform .1s,opacity .1s;position:relative}
@@ -417,22 +421,30 @@ function buildRow(r,container){
     var cellInfos=[];
     for(var bay=1;bay<=sp.b;bay++){
       if(lv>getLevelsForBay(r,bay)){
-        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null});}
+        for(var ns=0;ns<sp.s;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
       }
       for(var sl=0;sl<sp.s;sl++){
         var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
-        cellInfos.push({el:mkCell(loc2),sku:LOC[loc2]||null});
+        cellInfos.push({el:mkCell(loc2),sku:LOC[loc2]||null,bay:bay});
       }
     }
     for(var ci=0;ci<cellInfos.length;ci++){
       var cur=cellInfos[ci],next=cellInfos[ci+1];
       if(cur.sku&&next&&next.sku===cur.sku){cur.el.classList.add('merge-r');next.el.classList.add('merge-l');}
+      if(!next||next.bay!==cur.bay)cur.el.classList.add('bay-end');
       lr.appendChild(cur.el);
     }
     body.appendChild(lr);
   }
+  var bayNumRow=document.createElement('div');bayNumRow.className='lrow bay-num-row';
+  var spacer=document.createElement('div');spacer.className='ll';spacer.textContent='';bayNumRow.appendChild(spacer);
+  for(var bn=1;bn<=sp.b;bn++){
+    var bnEl=document.createElement('div');bnEl.className='bay-num'+(bn===sp.b?' bay-end':'');bnEl.style.flex=sp.s;bnEl.textContent=bn;
+    bayNumRow.appendChild(bnEl);
+  }
+  body.appendChild(bayNumRow);
   var sc=document.createElement('div');sc.className='bs';
   sc.innerHTML='<span>01</span><span style="flex:1;text-align:center">'+RI[r]+'</span><span>'+sp.b+'</span>';
   body.appendChild(sc);wrap.appendChild(body);container.appendChild(wrap);
