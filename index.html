@@ -406,9 +406,9 @@ function mkCell(loc){
 
 // Bay-specific level overrides -- e.g. bays 32-42 in B/C/D only have 3 levels, not 4.
 var BAY_LEVEL_OVERRIDE={
-  B:{from:32,to:42,levels:3},
-  C:{from:32,to:42,levels:3},
-  D:{from:32,to:42,levels:3}
+  B:{from:34,to:42,levels:3},
+  C:{from:34,to:42,levels:3},
+  D:{from:34,to:42,levels:3}
 };
 function getLevelsForBay(row,bay){
   if(isBridgeBay(row,bay))return RS[row].l;
@@ -569,9 +569,9 @@ var BAY_HEIGHTS={
 };
 // Bay-specific height overrides (same ranges as BAY_LEVEL_OVERRIDE above)
 var BAY_HEIGHT_OVERRIDE={
-  B:{from:32,to:42,heights:[2.5,2.5,2.5]},
-  C:{from:32,to:42,heights:[2.5,2.5,2.5]},
-  D:{from:32,to:42,heights:[2.5,2.5,2.5]}
+  B:{from:34,to:42,heights:[2.5,2.5,2.5]},
+  C:{from:34,to:42,heights:[2.5,2.5,2.5]},
+  D:{from:34,to:42,heights:[2.5,2.5,2.5]}
 };
 var HEIGHT_UNIT='m';
 function getBayHeight(loc){
