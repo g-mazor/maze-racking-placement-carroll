@@ -73,7 +73,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bay-num{font-size:7px;color:#999;text-align:center;min-width:3px}
 .bc.bay-end,.be.bay-end,.noshelf.bay-end{margin-right:4px!important;border-right:2px solid #999;border-top-right-radius:3px;border-bottom-right-radius:3px}
 .bc.bay-start,.be.bay-start,.noshelf.bay-start{border-left:2px solid #999;border-top-left-radius:3px;border-bottom-left-radius:3px}
-.bay-num.bay-end{margin-right:4px}
+.bay-num.bay-end{margin-right:6px}
 .bs{display:flex;justify-content:space-between;font-size:8px;color:#BBB;padding:1px 16px 0;margin-top:1px}
 .row-pair .rr:not(:last-child) .bs{border-top:2px dashed #4A6FA5;padding-top:5px;margin-top:5px;margin-left:-27px;padding-left:27px}
 .bc{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;cursor:pointer;transition:transform .1s,opacity .1s;position:relative}
@@ -446,7 +446,7 @@ function buildRow(r,container){
   var bayNumRow=document.createElement('div');bayNumRow.className='lrow bay-num-row';
   var spacer=document.createElement('div');spacer.className='ll';spacer.textContent='';bayNumRow.appendChild(spacer);
   for(var bn=1;bn<=sp.b;bn++){
-    var bnEl=document.createElement('div');bnEl.className='bay-num'+(bn===sp.b?' bay-end':'');bnEl.style.flex=sp.s;bnEl.textContent=bn;
+    var bnEl=document.createElement('div');bnEl.className='bay-num bay-end';bnEl.style.flex=sp.s;bnEl.textContent=bn;
     bayNumRow.appendChild(bnEl);
   }
   body.appendChild(bayNumRow);
