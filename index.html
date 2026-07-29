@@ -410,14 +410,20 @@ var BAY_LEVEL_OVERRIDE={
   D:{from:32,to:42,levels:3}
 };
 function getLevelsForBay(row,bay){
-  if(isBridgeBay(row,bay))return 2;
+  if(isBridgeBay(row,bay))return RS[row].l;
   var ov=BAY_LEVEL_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
 }
 var BRIDGE_BAYS={B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+var BRIDGE_REAL_LEVELS=2;
 function isBridgeBay(row,bay){
   return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
+}
+function isBridgeClearLevel(row,bay,lv){
+  if(!isBridgeBay(row,bay))return false;
+  var clearCount=RS[row].l-BRIDGE_REAL_LEVELS;
+  return lv<=clearCount;
 }
 function getSidesForBay(row,bay){
   if(isBridgeBay(row,bay))return 3;
@@ -440,6 +446,23 @@ function buildRow(r,container){
     for(var bay=1;bay<=sp.b;bay++){
       var baySides=getSidesForBay(r,bay);
       var isBridge=isBridgeBay(r,bay);
+      if(isBridge&&isBridgeClearLevel(r,bay,lv)){
+        for(var nc=0;nc<baySides;nc++){
+          var blank=document.createElement('div');blank.className='noshelf-blank';
+          cellInfos.push({el:blank,sku:null,bay:bay});
+          if(nc===0){
+            if(!bridgeBayEdgeCells[bay])bridgeBayEdgeCells[bay]={};
+            if(!bridgeBayEdgeCells[bay].topFirst)bridgeBayEdgeCells[bay].topFirst=blank;
+            bridgeBayEdgeCells[bay].bottomFirst=blank;
+          }
+          if(nc===baySides-1){
+            if(!bridgeBayEdgeCells[bay])bridgeBayEdgeCells[bay]={};
+            if(!bridgeBayEdgeCells[bay].topLast)bridgeBayEdgeCells[bay].topLast=blank;
+            bridgeBayEdgeCells[bay].bottomLast=blank;
+          }
+        }
+        continue;
+      }
       if(lv>getLevelsForBay(r,bay)){
         for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
@@ -448,14 +471,7 @@ function buildRow(r,container){
         var sid=baySides===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
         var cEl=mkCell(loc2);
-        if(isBridge){
-          cEl.classList.add('bridge-bay');
-          if(lv===1){
-            if(!bridgeBayEdgeCells[bay])bridgeBayEdgeCells[bay]={};
-            if(sl===0)bridgeBayEdgeCells[bay].first=cEl;
-            if(sl===baySides-1)bridgeBayEdgeCells[bay].last=cEl;
-          }
-        }
+        if(isBridge)cEl.classList.add('bridge-bay');
         cellInfos.push({el:cEl,sku:LOC[loc2]||null,bay:bay});
       }
     }
@@ -481,17 +497,17 @@ function buildRow(r,container){
   if(Object.keys(bridgeBayEdgeCells).length){
     requestAnimationFrame(function(){
       var bodyRect=body.getBoundingClientRect();
-      var topRect=firstLrow.getBoundingClientRect();
-      var botRect=lastLrow.getBoundingClientRect();
       Object.keys(bridgeBayEdgeCells).forEach(function(bayNum){
         var edge=bridgeBayEdgeCells[bayNum];
-        if(!edge.first||!edge.last)return;
-        var fr=edge.first.getBoundingClientRect(),lrct=edge.last.getBoundingClientRect();
+        if(!edge.topFirst||!edge.topLast||!edge.bottomFirst)return;
+        var fr=edge.topFirst.getBoundingClientRect(),lrct=edge.topLast.getBoundingClientRect();
+        var topRect2=edge.topFirst.getBoundingClientRect();
+        var botRect2=edge.bottomFirst.getBoundingClientRect();
         var overlay=document.createElement('div');overlay.className='bridge-path';
         overlay.style.left=(fr.left-bodyRect.left)+'px';
         overlay.style.width=(lrct.right-fr.left)+'px';
-        overlay.style.top=(topRect.top-bodyRect.top)+'px';
-        overlay.style.height=(botRect.bottom-topRect.top)+'px';
+        overlay.style.top=(topRect2.top-bodyRect.top)+'px';
+        overlay.style.height=(botRect2.bottom-topRect2.top)+'px';
         var lbl=document.createElement('div');lbl.className='bridge-path-label';lbl.textContent='WALKWAY';
         overlay.appendChild(lbl);
         body.appendChild(overlay);
@@ -566,7 +582,7 @@ var BAY_HEIGHT_OVERRIDE={
 var HEIGHT_UNIT='m';
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
-  if(isBridgeBay(row,bay))return 1.8+HEIGHT_UNIT;
+  if(isBridgeBay(row,bay)&&!isBridgeClearLevel(row,bay,lvl))return 1.8+HEIGHT_UNIT;
   var ov=BAY_HEIGHT_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to){
     return (ov.heights[lvl-1]!=null?ov.heights[lvl-1]+HEIGHT_UNIT:null);
