@@ -116,7 +116,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </style>
 </head>
 <body>
-<img src="maze-logo.jpg" alt="Maze" width="187" height="48" style="height:48px;width:187px;display:block;margin-bottom:2px">
+<img src="maze-logo.jpg" alt="Maze" style="height:48px;display:block;margin-bottom:2px">
 <div style="font-size:14px;font-weight:700;color:#1F3864;letter-spacing:.5px;margin-bottom:6px">SKU Location Map</div>
 <div class="stats" id="sg"></div>
 <div class="topbar">
@@ -151,7 +151,6 @@ var RCOL={A:'#DEEAF1',AA:'#C9DCE8',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D
 var RFCOL={A:'#1F3864',AA:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var IS_TOUCH_DEVICE=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
 var LOC={},SLOC={},QTY={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null;
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
@@ -167,7 +166,7 @@ function jsonpFetch(url){
     var cbName='jsonpCb'+Date.now()+Math.floor(Math.random()*100000);
     var script=document.createElement('script');
     var done=false;
-    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},25000);
+    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},12000);
     function cleanup(){delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);clearTimeout(timer);}
     window[cbName]=function(data){if(done)return;done=true;cleanup();resolve(data);};
     script.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cbName+'&t='+Date.now();
@@ -176,16 +175,7 @@ function jsonpFetch(url){
   });
 }
 async function fetchRemoteChanges(){
-  var lastErr=null;
-  for(var attempt=0;attempt<3;attempt++){
-    try{
-      return await jsonpFetch(SHEET_API);
-    }catch(e){
-      lastErr=e;
-      if(attempt<2)await new Promise(function(r){setTimeout(r,1000);});
-    }
-  }
-  throw lastErr;
+  return await jsonpFetch(SHEET_API);
 }
 function postRemoteChange(change){
   return new Promise(function(resolve){
@@ -244,23 +234,17 @@ async function buildIdx(){
   // Racking starts empty for the move-in -- DATA.d stays as the full SKU catalog
   // (description, group, pallet count, etc.) used by the Add-pallet search below.
   var saved=null;
-  var usedStaleCache=false;
   try{
     saved=await fetchRemoteChanges();
   }catch(e){
-    usedStaleCache=true;
     try{var raw=localStorage.getItem(LS);if(raw)saved=JSON.parse(raw);}catch(e2){}
   }
   if(saved&&saved.length){
     saved.forEach(function(c){applyC(c,false);});
     CHANGES=saved.slice();
     lastSyncJSON=JSON.stringify(CHANGES);
-    if(usedStaleCache){
-      si2('Could not reach the live sheet -- showing an OLDER cached copy on this device. Please check your connection and refresh.');
-    } else {
-      try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
-      si2('Loaded '+saved.length+' shared change'+(saved.length>1?'s':''));
-    }
+    try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
+    si2('Loaded '+saved.length+' shared change'+(saved.length>1?'s':''));
   } else {
     lastSyncJSON=JSON.stringify(CHANGES);
   }
@@ -368,8 +352,7 @@ function mkCell(loc){
     cell.className='bc occ';cell.style.background=gc(v?v[5]:'');
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
-    // draggable removed entirely -- it caused unreliable taps on some tablets/phones
-    // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
+    cell.setAttribute('draggable','true');
     cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onOcc(loc,sku);});
@@ -381,7 +364,7 @@ function mkCell(loc){
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){if(ttSticky&&loc!==ttPinnedLoc)return;var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
+    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
     cell.addEventListener('dragover',function(ev){if(dragSku){ev.preventDefault();cell.classList.add('dt');}});
@@ -521,7 +504,6 @@ function getBayHeight(loc){
   return null;
 }
 function showTT(e,loc,sku,v){
-  if(ttSticky&&loc!==ttPinnedLoc)return;
   if(!v){hideTT();return;}
   clearTimeout(ttHideTimer);
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
@@ -534,22 +516,8 @@ function showTT(e,loc,sku,v){
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>';
   tt.style.display='block';posTT(e);
-  ttSticky=true;ttPinnedLoc=loc;
 }
-function posTT(e){repositionTTForViewport();}
-function repositionTTForViewport(){
-  if(window.visualViewport){
-    var vv=window.visualViewport;
-    tt.style.position='fixed';
-    tt.style.top=(vv.offsetTop+8)+'px';
-    tt.style.left=(vv.offsetLeft+vv.width/2)+'px';
-    tt.style.transform='translateX(-50%)';
-  }
-}
-if(window.visualViewport){
-  window.visualViewport.addEventListener('resize',function(){if(tt.style.display==='block')repositionTTForViewport();});
-  window.visualViewport.addEventListener('scroll',function(){if(tt.style.display==='block')repositionTTForViewport();});
-}
+function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
 
 function quickCount(loc,sku){
   requirePin(function(){
@@ -560,16 +528,15 @@ function quickCount(loc,sku){
     if(isNaN(qty)||qty<0){alert('Enter a whole number of 0 or more.');return;}
     applyC({type:'count',sku:sku,loc:loc,qty:qty},true);
     si2('Recorded '+qty+' at '+fl(loc));
-    hideTT();ttSticky=false;ttPinnedLoc=null;tt.style.display='none';
+    hideTT();ttSticky=false;tt.style.display='none';
   });
 }
 
 function hideTT(){if(ttSticky)return;ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
 var ttSticky=false;
-var ttPinnedLoc=null;
 document.addEventListener('click',function(e){
   if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('#tt')){
-    ttSticky=false;ttPinnedLoc=null;tt.style.display='none';
+    ttSticky=false;tt.style.display='none';
   }
 });
 tt.addEventListener('mouseenter',function(){clearTimeout(ttHideTimer);});
@@ -662,7 +629,7 @@ function showEmptyInfo(loc,e){
   tt.style.pointerEvents='none';
   tt.textContent=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet');
   tt.style.display='block';posTT(e);
-  ttSticky=true;ttPinnedLoc=loc;
+  ttSticky=true;
 }
 
 function hlSKU(sku){
