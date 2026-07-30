@@ -163,7 +163,9 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
-<div id="recvp"><h3>Received -- not yet placed</h3><div id="rl"></div></div>
+<div id="recvp"><h3>Received -- not yet placed</h3>
+<input id="pendingSearch" type="text" placeholder="Search pending by SKU or description..." autocomplete="off" style="width:100%;padding:7px 10px;border-radius:6px;border:1.5px solid #8CD98C;font-size:13px;box-sizing:border-box;margin-bottom:6px"/>
+<div id="rl"></div></div>
 <div id="rc"></div>
 <div class="ww"><div class="wh">
 <div class="pb2">Bay 01 -- Packing / Dispatch | Customer pick-up | Walkway | Spare parts</div>
@@ -1384,6 +1386,8 @@ function removeFromMixed(loc,idx){
 
 function cRC(){document.getElementById('rc').style.display='none';clrHL();}
 
+document.getElementById('pendingSearch').addEventListener('input',function(){renderReceivedList();});
+
 var si=document.getElementById('si'),al=document.getElementById('acl');
 si.addEventListener('input',function(){
   var q=si.value.trim().toUpperCase();if(q.length<2){al.style.display='none';return;}
@@ -1417,7 +1421,10 @@ function renderReceivedList(){
   document.getElementById('recvCount').textContent=String(RECEIVED.length);
   var wrap=document.getElementById('rl');
   if(!RECEIVED.length){wrap.innerHTML='<div style="font-size:11px;color:#777">Nothing received and waiting to be placed.</div>';return;}
-  var rows=RECEIVED.slice().sort(function(a,b){return b.ts-a.ts;});
+  var q=(document.getElementById('pendingSearch').value||'').trim().toUpperCase();
+  var all=RECEIVED.slice().sort(function(a,b){return b.ts-a.ts;});
+  var rows=q?all.filter(function(r){var v=DATA.d[r.sku];return r.sku.toUpperCase().includes(q)||(v&&v[4].toUpperCase().includes(q));}):all;
+  if(!rows.length){wrap.innerHTML='<div style="font-size:11px;color:#777">No pending items match that search.</div>';return;}
   wrap.innerHTML=rows.map(function(r){
     var v=DATA.d[r.sku];var desc=v?v[4]:'';
     var when=new Date(r.ts).toLocaleString();
