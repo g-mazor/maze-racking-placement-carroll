@@ -669,6 +669,40 @@ function findSeq(startLoc,n){
   return cands;
 }
 
+// Like findSeq, but a cell already occupied by the SKU being resized counts as free --
+// used when growing/shrinking a pallet's footprint in place rather than moving it elsewhere.
+function findSeqResize(startLoc,n,sku){
+  var p=startLoc.split('-');var r=p[0],bay=parseInt(p[1]),lv=parseInt(p[2]);var sp=RS[r];if(!sp)return null;
+  if(lv>getLevelsForBay(r,bay))return null;
+  var all=[];
+  for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
+    if(lv>getLevelsForBay(r,b))break;
+    for(var sl=0;sl<sp.s;sl++){var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
+  }
+  var si3=all.indexOf(startLoc);if(si3<0)return null;
+  var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
+  for(var i=0;i<cands.length;i++){if(LOC[cands[i]]&&LOC[cands[i]]!==sku)return null;}
+  return cands;
+}
+
+function changePalletSpace(loc,sku){
+  requirePin(function(){
+    var locs=SLOC[sku]||[loc];
+    var current=locs.length;
+    var answer=prompt('How many pallet spaces should '+sku+' take up? (currently '+current+')',String(current));
+    if(answer===null)return;
+    var n=parseInt(answer.trim(),10);
+    if(isNaN(n)||n<1){alert('Enter a whole number of 1 or more.');return;}
+    if(n===current){return;}
+    var startLoc=locs[0];
+    var tl=findSeqResize(startLoc,n,sku);
+    if(!tl){alert('Not enough consecutive space starting at '+fl(startLoc)+' for '+n+' pallet space'+(n>1?'s':'')+'. Try moving it first, or free up the neighbouring cell.');return;}
+    applyC({type:'move',sku:sku,fl:locs,tl:tl},true);
+    rebuildMap();hlSKU(sku);
+    si2('Pallet spaces for '+sku+' set to '+n);
+  });
+}
+
 function onOcc(loc,sku,e){
   if(mode==='movetarget'){
     var fromLocs=SLOC[sku]||[loc];
@@ -724,6 +758,7 @@ function showOccInfo(loc,sku,e){
     '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
+    '<a href="javascript:void(0)" onclick="changePalletSpace(\''+loc+'\',\''+sku+'\')" style="color:#BA7517">\ud83d\udce6 Change pallet space</a>'+
     '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
