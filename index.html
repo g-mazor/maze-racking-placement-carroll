@@ -451,7 +451,13 @@ function buildStats(){
   var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'}};
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
-    for(var bay=1;bay<=sp.b;bay++){cap+=getLevelsForBay(r,bay)*getSidesForBay(r,bay);}
+    for(var bay=1;bay<=sp.b;bay++){
+      var levels=getLevelsForBay(r,bay);var sides=getSidesForBay(r,bay);
+      for(var lvl=1;lvl<=levels;lvl++){
+        if(isBridgeBay(r,bay)&&isBridgeEmptyLevel(r,bay,lvl))continue;
+        cap+=sides;
+      }
+    }
     rStats[r].cap=cap;rStats[r].occ=0;rStats[r].skus=0;
   });
   function rowOf(loc){return loc.split('-')[0];}
@@ -765,10 +771,13 @@ function onDrop(e,toLoc){
 function findSeq(startLoc,n){
   var p=startLoc.split('-');var r=p[0],bay=parseInt(p[1]),lv=parseInt(p[2]);var sp=RS[r];if(!sp)return null;
   if(lv>getLevelsForBay(r,bay))return null;
+  if(isBridgeBay(r,bay)&&isBridgeEmptyLevel(r,bay,lv))return null;
   var all=[];
   for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
     if(lv>getLevelsForBay(r,b))break;
-    for(var sl=0;sl<sp.s;sl++){var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
+    if(isBridgeBay(r,b)&&isBridgeEmptyLevel(r,b,lv))break;
+    var sides=getSidesForBay(r,b);
+    for(var sl=0;sl<sides;sl++){var sid=sides===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
@@ -781,10 +790,13 @@ function findSeq(startLoc,n){
 function findSeqResize(startLoc,n,sku){
   var p=startLoc.split('-');var r=p[0],bay=parseInt(p[1]),lv=parseInt(p[2]);var sp=RS[r];if(!sp)return null;
   if(lv>getLevelsForBay(r,bay))return null;
+  if(isBridgeBay(r,bay)&&isBridgeEmptyLevel(r,bay,lv))return null;
   var all=[];
   for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
     if(lv>getLevelsForBay(r,b))break;
-    for(var sl=0;sl<sp.s;sl++){var sid=sp.s===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
+    if(isBridgeBay(r,b)&&isBridgeEmptyLevel(r,b,lv))break;
+    var sides=getSidesForBay(r,b);
+    for(var sl=0;sl<sides;sl++){var sid=sides===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
@@ -1123,7 +1135,7 @@ function suggestBay(row,pct){
   return fastFromLow?(1+pos):(maxBay-pos);
 }
 function findNearestEmpty(row,targetBay,spaces){
-  var spec=RS[row];var sides=spec.s===3?['1','2','3']:['L','R'];
+  var spec=RS[row];
   for(var lvl=1;lvl<=spec.l;lvl++){
     for(var delta=0;delta<spec.b;delta++){
       var cands=[targetBay-delta,targetBay+delta].filter(function(b){return b>=1&&b<=spec.b;});
@@ -1131,6 +1143,8 @@ function findNearestEmpty(row,targetBay,spaces){
       for(var ci=0;ci<cands.length;ci++){
         var bay=cands[ci];
         if(lvl>getLevelsForBay(row,bay))continue;
+        if(isBridgeBay(row,bay)&&isBridgeEmptyLevel(row,bay,lvl))continue;
+        var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
         for(var si=0;si<sides.length;si++){
           var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lvl+'-'+sides[si];
           if(!LOC[loc]){
