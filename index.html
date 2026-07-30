@@ -422,7 +422,8 @@ function getLevelsForBay(row,bay){
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
 }
-var BRIDGE_BAYS={B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+var BRIDGE_STORAGE_HEIGHT={B:1.8,C:1.8,D:1.8,E:1.8};
 function isBridgeBay(row,bay){
   return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
 }
@@ -580,13 +581,16 @@ var BAY_HEIGHT_OVERRIDE={
   D:{from:34,to:42,heights:[2.5,2.5,2.5]}
 };
 var HEIGHT_UNIT='m';
-var BRIDGE_CLEARANCE_HEIGHT=3.9;
+var BRIDGE_CLEARANCE_HEIGHT_BY_ROW={B:3.9,C:3.9,D:3.9,E:3.9};
 var TOP_CLEARANCE={A:7.4,AA:7.4,B:7.8,C:7.8,D:7.8,E:7.8,F:7.4,G:7.4};
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
   if(isBridgeBay(row,bay)){
-    if(isBridgeEmptyLevel(row,bay,lvl))return BRIDGE_CLEARANCE_HEIGHT+HEIGHT_UNIT;
-    return 1.8+HEIGHT_UNIT;
+    if(isBridgeEmptyLevel(row,bay,lvl)){
+      return BRIDGE_CLEARANCE_HEIGHT_BY_ROW[row]!=null?(BRIDGE_CLEARANCE_HEIGHT_BY_ROW[row]+HEIGHT_UNIT):null;
+    }
+    if(BRIDGE_STORAGE_HEIGHT[row]!=null)return BRIDGE_STORAGE_HEIGHT[row]+HEIGHT_UNIT;
+    // otherwise fall through below to the row's normal height table (e.g. A/AA keep their usual height)
   }
   var ov=BAY_HEIGHT_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to){
