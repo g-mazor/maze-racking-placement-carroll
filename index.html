@@ -391,7 +391,7 @@ function mkCell(loc){
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
+    cell.addEventListener('mouseenter',function(e){if(ttSticky&&loc!==ttPinnedLoc)return;var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
     cell.addEventListener('dragover',function(ev){if(dragSku){ev.preventDefault();cell.classList.add('dt');}});
@@ -605,6 +605,7 @@ function getBayHeight(loc){
   return null;
 }
 function showTT(e,loc,sku,v){
+  if(ttSticky&&loc!==ttPinnedLoc)return;
   if(!v){hideTT();return;}
   clearTimeout(ttHideTimer);
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
@@ -618,6 +619,7 @@ function showTT(e,loc,sku,v){
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
     '<a href="javascript:void(0)" onclick="quickMove(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move to new location</a>';
   tt.style.display='block';posTT(e);
+  ttSticky=true;ttPinnedLoc=loc;
 }
 function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
 
