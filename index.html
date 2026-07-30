@@ -159,7 +159,7 @@ var GRPC={'COMPOST':'#1D9E75','KETER GROUP':'#2980B9','KETER SHEDS':'#C0561A','G
 var RS={A:{b:42,s:2,l:3},AA:{b:42,s:2,l:3},B:{b:42,s:2,l:4},C:{b:42,s:2,l:4},D:{b:42,s:2,l:4},E:{b:42,s:2,l:3},F:{b:4,s:3,l:4},G:{b:13,s:3,l:4}};
 var RCOL={A:'#DEEAF1',AA:'#C9DCE8',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D8',F:'#E2EFDA',G:'#DDEBDA'};
 var RFCOL={A:'#1F3864',AA:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
-var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
+var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels, 7.4m top clearance)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels, 7.4m top clearance)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels, 7.8m top clearance)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels, 7.8m top clearance)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels, 7.8m top clearance)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels, 7.8m top clearance)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels, 7.4m top clearance)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels, 7.4m top clearance)'};
 
 var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var SKUS=Object.keys(DATA.d).sort();
@@ -581,6 +581,7 @@ var BAY_HEIGHT_OVERRIDE={
 };
 var HEIGHT_UNIT='m';
 var BRIDGE_CLEARANCE_HEIGHT=3.9;
+var TOP_CLEARANCE={A:7.4,AA:7.4,B:7.8,C:7.8,D:7.8,E:7.8,F:7.4,G:7.4};
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
   if(isBridgeBay(row,bay)){
