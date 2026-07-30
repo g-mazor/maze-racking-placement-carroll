@@ -635,7 +635,7 @@ function quickCount(loc,sku){
 function hideTT(){if(ttSticky)return;ttHideTimer=setTimeout(function(){tt.style.display='none';},250);}
 var ttSticky=false;
 document.addEventListener('click',function(e){
-  if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('#tt')){
+  if(ttSticky&&!e.target.closest('.be')&&!e.target.closest('.bc')&&!e.target.closest('#tt')){
     ttSticky=false;tt.style.display='none';
   }
 });
