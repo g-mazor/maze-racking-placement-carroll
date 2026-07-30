@@ -894,7 +894,16 @@ function onEmp(loc,e){
     applyC({type:'add',sku:addTgt,tl:tl},true);rebuildMap();hlSKU(addTgt);si2('Added at '+fl(loc));
     if(dupQueueQty!=null)applyC({type:'count',sku:addTgt,loc:tl[0],qty:dupQueueQty},true);
     else if(singleAddQty!=null){applyC({type:'count',sku:addTgt,loc:tl[0],qty:singleAddQty},true);singleAddQty=null;}
-    if(pendingReceiveId!=null){applyC({type:'receiveresolve',id:pendingReceiveId},true);pendingReceiveId=null;renderReceivedList();}
+    if(pendingReceiveId!=null){
+      applyC({type:'receiveresolve',id:pendingReceiveId},true);pendingReceiveId=null;renderReceivedList();
+    } else {
+      var pendMatches=RECEIVED.filter(function(r){return r.sku===addTgt;}).sort(function(a,b){return a.ts-b.ts;});
+      if(pendMatches.length){
+        applyC({type:'receiveresolve',id:pendMatches[0].id},true);
+        renderReceivedList();
+        si2('Added at '+fl(loc)+' -- also cleared from Pending goods-in'+(pendMatches.length>1?' (1 of '+pendMatches.length+' pending entries for this SKU)':''));
+      }
+    }
     if(dupQueueRemaining>0){
       dupQueueRemaining--;
       var sku3=addTgt;
@@ -1381,7 +1390,18 @@ si.addEventListener('input',function(){
   var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
   var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
   var all=sm.concat(dm).slice(0,10);if(!all.length){al.style.display='none';return;}
-  al.innerHTML=all.map(function(s){var v=DATA.d[s];return '<div data-sku="'+s+'">'+s+'<span>'+(v?v[4].slice(0,42):'')+'</span></div>';}).join('');
+  al.innerHTML=all.map(function(s){
+    var v=DATA.d[s];
+    var placed=(SLOC[s]||[]).length;
+    var pend=RECEIVED.filter(function(r){return r.sku===s;});
+    var status='';
+    if(placed>0)status+='<span style="color:#1E8449;font-weight:600">\u2713 Placed ('+placed+' space'+(placed>1?'s':'')+')</span>';
+    if(pend.length){
+      var pendQty=pend.reduce(function(a,r){return a+(r.qty||0);},0);
+      status+=(status?' &nbsp;|&nbsp; ':'')+'<span style="color:#B9770E;font-weight:600">\ud83d\udce6 Pending ('+pend.length+', qty '+pendQty+')</span>';
+    }
+    return '<div data-sku="'+s+'">'+s+'<span>'+(v?v[4].slice(0,42):'')+'</span>'+(status?'<div style="font-size:10px;margin-top:2px">'+status+'</div>':'')+'</div>';
+  }).join('');
   al.style.display='block';
 });
 al.addEventListener('click',function(e){var d=e.target.closest('[data-sku]');if(d){var sku=d.getAttribute('data-sku');si.value=sku;al.style.display='none';showR(sku);}});
