@@ -16,6 +16,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .topbar input{flex:1;min-width:200px;padding:7px 11px;border:1.5px solid #CCC;border-radius:6px;font-size:12px}
 .topbar input:focus{outline:none;border-color:#2980B9}
 .btn{padding:7px 12px;font-size:12px;border:1px solid #CCC;border-radius:6px;cursor:pointer;background:#FFF;white-space:nowrap}
+@media (max-width:700px){.btn{padding:6px 8px;font-size:11px}.topbar{gap:5px}}
 .btn:hover{background:#EEE}
 .btn-red{background:#E74C3C;color:#FFF;border-color:#C0392B}.btn-red:hover{background:#C0392B}
 .btn-blue{background:#2980B9;color:#FFF;border-color:#1A6DA8}.btn-blue:hover{background:#1A6DA8}
@@ -52,8 +53,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 #clog li{font-size:11px;color:#444;padding:2px 0;border-bottom:1px solid #F5F5F5}
 #recvp{display:none;background:#F0F8F0;border:1.5px solid #8CD98C;border-radius:7px;padding:10px;margin-bottom:10px;max-height:260px;overflow-y:auto}
 #recvp h3{font-size:11px;font-weight:600;color:#1F3864;margin-bottom:5px}
-#unplacedp{display:none;background:#FCE9D8;border:1.5px solid #E67E22;border-radius:7px;padding:10px;margin-bottom:10px;max-height:320px;overflow-y:auto}
-#unplacedp h3{font-size:11px;font-weight:600;color:#1F3864;margin-bottom:5px}
 .rcv-item{background:#FFF;border:1px solid #DDD;border-radius:6px;padding:6px 9px;margin-bottom:6px;font-size:12px}
 .rcv-item .rcv-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .rcv-item .rcv-meta{color:#777;font-size:10px;margin-top:2px}
@@ -150,9 +149,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
 <button class="btn" onclick="toggleLog()">Log</button>
-<button class="btn" style="background:#8CD98C" id="btn-rv" onclick="enterReceiveMode()">\ud83d\udce5 Receive stock</button>
+<button class="btn" style="background:#8CD98C" id="btn-rv" onclick="enterReceiveMode()">\ud83d\udce5 Receive</button>
 <button class="btn" id="btn-rl" onclick="toggleReceivedList()">\ud83d\udce6 Goods-in (<span id="recvCount">0</span>)</button>
-<button class="btn" id="btn-up" onclick="toggleUnplacedList()">\ud83d\udccb Not yet placed (<span id="unplacedCount">0</span>)</button>
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
 <button class="btn" id="btn-cm" onclick="enterCountMode()">\ud83d\udd22 Count mode</button>
@@ -162,9 +160,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
 <div id="recvp"><h3>Received -- not yet placed</h3><div id="rl"></div></div>
-<div id="unplacedp"><h3>In stock -- not yet placed on the map</h3>
-<input id="upFilter" type="text" placeholder="Filter by SKU or description..." autocomplete="off" style="width:100%;padding:7px 10px;border-radius:6px;border:1.5px solid #CCC;font-size:13px;box-sizing:border-box;margin-bottom:6px"/>
-<div id="ul2"></div></div>
 <div id="rc"></div>
 <div class="ww"><div class="wh">
 <div class="pb2">Bay 01 -- Packing / Dispatch | Customer pick-up | Walkway | Spare parts</div>
@@ -287,7 +282,6 @@ async function buildIdx(){
     lastSyncJSON=JSON.stringify(CHANGES);
   }
   renderReceivedList();
-  renderUnplacedList();
 }
 
 function applyC(c,rec){
@@ -553,7 +547,7 @@ function buildRow(r,container){
 
 function rebuildMap(){
   document.getElementById('fgz').innerHTML='';document.getElementById('mr').innerHTML='';
-  bFG();bMain();buildStats();renderUnplacedList();
+  bFG();bMain();buildStats();
 }
 
 function bFG(){
@@ -1298,8 +1292,6 @@ function removeFromMixed(loc,idx){
 
 function cRC(){document.getElementById('rc').style.display='none';clrHL();}
 
-document.getElementById('upFilter').addEventListener('input',function(){renderUnplacedList();});
-
 var si=document.getElementById('si'),al=document.getElementById('acl');
 si.addEventListener('input',function(){
   var q=si.value.trim().toUpperCase();if(q.length<2){al.style.display='none';return;}
@@ -1333,45 +1325,6 @@ function renderReceivedList(){
       '<div class="rcv-actions"><button class="btn btn-green" onclick="placeReceived(\''+r.id+'\')">\ud83d\udce6 Place now</button><button class="btn" onclick="dismissReceived(\''+r.id+'\')">Dismiss</button></div>'+
       '</div>';
   }).join('');
-}
-
-function toggleUnplacedList(){
-  var el=document.getElementById('unplacedp');
-  var opening=el.style.display==='none';
-  el.style.display=opening?'block':'none';
-  if(opening)renderUnplacedList();
-}
-
-function getUnplacedInStock(){
-  return Object.keys(DATA.d).filter(function(sku){
-    if(sku==='MIXED')return false;
-    var v=DATA.d[sku];if(!v)return false;
-    if(v[11]==null||v[11]<=0)return false;
-    var locs=SLOC[sku];
-    return !locs||locs.length===0;
-  }).sort(function(a,b){return (DATA.d[b][7]||0)-(DATA.d[a][7]||0);});
-}
-
-function renderUnplacedList(){
-  var all=getUnplacedInStock();
-  document.getElementById('unplacedCount').textContent=String(all.length);
-  var panelOpen=document.getElementById('unplacedp').style.display!=='none';
-  if(!panelOpen)return;
-  var q=(document.getElementById('upFilter').value||'').trim().toUpperCase();
-  var rows=q?all.filter(function(sku){var v=DATA.d[sku];return sku.includes(q)||(v&&v[4].toUpperCase().includes(q));}):all;
-  var wrap=document.getElementById('ul2');
-  if(!all.length){wrap.innerHTML='<div style="font-size:11px;color:#777">Everything with stock on hand is already placed on the map.</div>';return;}
-  if(!rows.length){wrap.innerHTML='<div style="font-size:11px;color:#777">No matches for that filter.</div>';return;}
-  wrap.innerHTML='<div style="font-size:10px;color:#7A4E00;margin-bottom:4px">'+rows.length+' of '+all.length+' shown, sorted by picks/day</div>'+
-    rows.slice(0,150).map(function(sku){
-    var v=DATA.d[sku];
-    return '<div class="rcv-item">'+
-      '<div class="rcv-top"><strong>'+sku+'</strong><span>'+v[11].toLocaleString()+' on hand</span></div>'+
-      '<div style="color:#555">'+v[4]+'</div>'+
-      '<div class="rcv-meta">'+v[5]+' | '+v[7].toFixed(1)+' picks/day | '+v[8]+' pallet'+(v[8]>1?'s':'')+'</div>'+
-      '<div class="rcv-actions"><button class="btn btn-amber" onclick="enterAddModeCard(\''+sku+'\')">+ Place this SKU</button></div>'+
-      '</div>';
-  }).join('')+(rows.length>150?'<div style="font-size:10px;color:#7A4E00;margin-top:4px">...and '+(rows.length-150)+' more -- narrow with the filter above.</div>':'');
 }
 
 function enterReceiveMode(){
