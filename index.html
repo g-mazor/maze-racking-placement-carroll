@@ -224,6 +224,8 @@ function postRemoteChange(change){
       '&qty='+encodeURIComponent(change.qty!=null?String(change.qty):'')+
       '&desc='+encodeURIComponent(desc)+
       '&contents='+encodeURIComponent(change.contents?JSON.stringify(change.contents):'')+
+      '&id='+encodeURIComponent(change.id||'')+
+      '&note='+encodeURIComponent(change.note||'')+
       '&t='+Date.now();
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
@@ -1444,7 +1446,7 @@ function syncModal(mode){
       document.body.removeChild(bg);
       oM('Import this data?','This will replace everything currently placed on THIS device with the '+parsed.length+' change'+(parsed.length!==1?'s':'')+' from the code you pasted. Continue?',function(){
         CHANGES=parsed.slice();LOG=[];
-        LOC={};SLOC={};
+        LOC={};SLOC={};RECEIVED=[];
         CHANGES.forEach(function(c){applyC(c,false);});
         lastSyncJSON=JSON.stringify(CHANGES);
         try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
