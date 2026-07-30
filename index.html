@@ -723,7 +723,8 @@ function showOccInfo(loc,sku,e){
     '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
     '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
-    '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\')" style="color:#F5D76E">\ud83d\udd04 Move</a>';
+    '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
+    '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
 }
