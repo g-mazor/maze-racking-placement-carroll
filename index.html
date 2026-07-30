@@ -1160,7 +1160,7 @@ document.addEventListener('contextmenu',function(e){
 
 function showR(sku){
   var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
-  if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';return;}
+  if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;}
   if(key==='MIXED'){showMixedCard();return;}
   var placed=SLOC[key]&&SLOC[key].length>0;
   var locs=placed?SLOC[key]:[];
@@ -1207,6 +1207,8 @@ function showR(sku){
       :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Place multiple</button></div>')+
     '</div></div>';
   el.style.display='block';hlSKU(key);
+  ttSticky=false;tt.style.display='none';
+  setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},150);
 }
 
 function showMixedCard(loc){
