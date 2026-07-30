@@ -60,6 +60,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .rr:last-child{border-bottom:none}
 .row-pair{border:2px solid #1F3864;border-radius:8px;padding:6px;margin-bottom:8px;background:rgba(31,56,100,0.03)}
 .aisle-marker{text-align:center;font-size:10px;font-weight:700;color:#888;letter-spacing:2px;padding:4px 0;margin-bottom:8px;background:repeating-linear-gradient(90deg,#E8E8E8,#E8E8E8 8px,#F4F4F4 8px,#F4F4F4 16px);border-radius:4px}
+.roller-door{flex:0 0 16px;background:repeating-linear-gradient(45deg,#111,#111 7px,#F5D700 7px,#F5D700 14px);border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #000}
+.roller-door span{writing-mode:vertical-rl;font-size:9px;font-weight:700;letter-spacing:2px;color:#111;background:#F5D700;padding:4px 2px;border-radius:3px;white-space:nowrap}
 .row-pair-label{font-size:10px;font-weight:700;color:#1F3864;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;padding-left:2px}
 .row-pair .rr{border-bottom:2px dashed #4A6FA5;margin-bottom:6px;padding-bottom:6px}
 .row-pair .rr:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
@@ -148,7 +150,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="mr" id="mr"></div>
 <div class="ob">Offices / Showroom / Tea room | Small van pick-up | Forklift zone</div>
 </div></div>
-<div class="leg"><div class="li"><div class="ld" style="background:#1D9E75"></div>Compost</div><div class="li"><div class="ld" style="background:#2980B9"></div>Keter Group</div><div class="li"><div class="ld" style="background:#C0561A"></div>Sheds</div><div class="li"><div class="ld" style="background:#8E44AD"></div>Canopia</div><div class="li"><div class="ld" style="background:#27AE60"></div>Greenhouses</div><div class="li"><div class="ld" style="background:#BA7517"></div>Tanks</div><div class="li"><div class="ld" style="background:#1F4E79"></div>Watering</div><div class="li"><div class="ld" style="background:#7F3F00"></div>Lechuza</div><div class="li"><div class="ld" style="background:#374A5C"></div>Planters</div><div class="li"><div class="ld" style="background:#375623"></div>Garden</div><div class="li"><div class="ld" style="background:#595959"></div>Home</div><div class="li"><div class="ld" style="background:#E8E8E8;border:1px solid #CCC"></div>Empty</div><div class="li"><div class="ld" style="background:#E24B4A;border:1px solid #A32D2D"></div>Selected</div><div class="li"><div class="ld" style="background:#A8D8FF;border:1px solid 1px dashed #2980B9"></div>Drop target</div></div>
+<div class="leg"><div class="li"><div class="ld" style="background:#1D9E75"></div>Compost</div><div class="li"><div class="ld" style="background:#2980B9"></div>Keter Group</div><div class="li"><div class="ld" style="background:#C0561A"></div>Sheds</div><div class="li"><div class="ld" style="background:#8E44AD"></div>Canopia</div><div class="li"><div class="ld" style="background:#27AE60"></div>Greenhouses</div><div class="li"><div class="ld" style="background:#BA7517"></div>Tanks</div><div class="li"><div class="ld" style="background:#1F4E79"></div>Watering</div><div class="li"><div class="ld" style="background:#7F3F00"></div>Lechuza</div><div class="li"><div class="ld" style="background:#374A5C"></div>Planters</div><div class="li"><div class="ld" style="background:#375623"></div>Garden</div><div class="li"><div class="ld" style="background:#595959"></div>Home</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(45deg,#111,#111 3px,#F5D700 3px,#F5D700 6px);border:1px solid #000"></div>Roller Door</div><div class="li"><div class="ld" style="background:#E8E8E8;border:1px solid #CCC"></div>Empty</div><div class="li"><div class="ld" style="background:#E24B4A;border:1px solid #A32D2D"></div>Selected</div><div class="li"><div class="ld" style="background:#A8D8FF;border:1px solid 1px dashed #2980B9"></div>Drop target</div></div>
 <div class="tt" id="tt"></div>
 <div id="sind">Saved!</div>
 <div class="mbg" id="mbg"><div class="mdl"><h3 id="mt"></h3><p id="mm"></p><div class="mdb"><button class="btn" onclick="cM()">Cancel</button><button class="btn btn-red" onclick="cfM()">OK</button></div></div></div>
@@ -528,6 +530,9 @@ function bFG(){
   var fb=document.createElement('div');fb.className='fb';fb.style.flex='0 0 auto';
   var ft=document.createElement('div');ft.className='ft';ft.textContent='Row F - Greenhouses (4 bays x 3 slots x 4 levels)';fb.appendChild(ft);
   buildRow('F',fb);z.appendChild(fb);
+  var rd=document.createElement('div');rd.className='roller-door';
+  var rdLbl=document.createElement('span');rdLbl.textContent='ROLLER DOOR';rd.appendChild(rdLbl);
+  z.appendChild(rd);
   var gb=document.createElement('div');gb.className='fb';gb.style.flex='1';
   var gt=document.createElement('div');gt.className='ft';gt.textContent='Row G - GH overflow + Canopia (13 bays x 3 slots x 4 levels)';gb.appendChild(gt);
   buildRow('G',gb);z.appendChild(gb);
