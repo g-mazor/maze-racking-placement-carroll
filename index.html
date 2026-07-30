@@ -382,7 +382,7 @@ function mkCell(loc){
     // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
     cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
-    cell.addEventListener('click',function(){onOcc(loc,sku);});
+    cell.addEventListener('click',function(e){onOcc(loc,sku,e);});
     cell.addEventListener('dragstart',function(ev){
       dragSku=sku;dragFrom=(SLOC[sku]||[loc]).slice();
       cell.classList.add('dragging');
@@ -669,7 +669,7 @@ function findSeq(startLoc,n){
   return cands;
 }
 
-function onOcc(loc,sku){
+function onOcc(loc,sku,e){
   if(mode==='movetarget'){
     var fromLocs=SLOC[sku]||[loc];
     var spaces3=fromLocs.length||1;
@@ -702,7 +702,30 @@ function onOcc(loc,sku){
   }
   var v=DATA.d[sku];
   if(sku==='MIXED'){showMixedCard(loc);hlSKU(sku);return;}
-  showR(sku);hlSKU(sku);
+  showOccInfo(loc,sku,e);hlSKU(sku);
+}
+
+function showOccInfo(loc,sku,e){
+  var v=DATA.d[sku];
+  clearTimeout(ttHideTimer);
+  tt.style.pointerEvents='auto';
+  if(!v){
+    tt.innerHTML=fl(loc)+' -- <strong>'+sku+'</strong><br>SKU not found in catalog';
+    tt.style.display='block';posTT(e);ttSticky=true;ttPinnedLoc=loc;
+    return;
+  }
+  var h=getBayHeight(loc);
+  var qty=QTY[loc];
+  var mp=v[13]||0;
+  tt.innerHTML=fl(loc)+' -- <strong>'+sku+'</strong>'+(h?' -- Height '+h:'')+'<br>'+
+    '<div style="opacity:.85;margin:2px 0">'+v[4]+'</div>'+
+    '<div style="opacity:.7;font-size:11px">'+v[5]+' | ABC '+v[6]+' | '+v[8]+' pallet'+(v[8]>1?'s':'')+'</div>'+
+    '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
+    '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
+    '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
+    '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\')" style="color:#F5D76E">\ud83d\udd04 Move</a>';
+  tt.style.display='block';posTT(e);
+  ttSticky=true;ttPinnedLoc=loc;
 }
 
 function onEmp(loc,e){
