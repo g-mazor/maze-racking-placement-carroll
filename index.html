@@ -53,8 +53,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .ww{overflow-x:auto;background:#FFF;border:1px solid #DDD;border-radius:8px;padding:8px}
 .wh{min-width:680px}
 .zt{display:flex;gap:6px;margin-bottom:5px}
-.roller-door{flex:0 0 auto;width:36px;background:repeating-linear-gradient(45deg,#FFD700,#FFD700 5px,#1A1A1A 5px,#1A1A1A 10px);border-radius:4px;display:flex;align-items:center;justify-content:center}
-.roller-door-label{font-size:8px;font-weight:700;color:#1A1A1A;text-align:center;background:#FFF3CD;padding:3px 2px;border-radius:3px;line-height:1.3}
 .fb{background:#F0F8F0;border:1.5px solid #27AE60;border-radius:6px;padding:5px 7px}
 .ft{font-size:9px;font-weight:700;color:#375623;margin-bottom:3px}
 .mr{display:flex;flex-direction:column;gap:3px}
@@ -161,7 +159,7 @@ var GRPC={'COMPOST':'#1D9E75','KETER GROUP':'#2980B9','KETER SHEDS':'#C0561A','G
 var RS={A:{b:42,s:2,l:3},AA:{b:42,s:2,l:3},B:{b:42,s:2,l:4},C:{b:42,s:2,l:4},D:{b:42,s:2,l:4},E:{b:42,s:2,l:3},F:{b:4,s:3,l:4},G:{b:13,s:3,l:4}};
 var RCOL={A:'#DEEAF1',AA:'#C9DCE8',B:'#D6E4F7',C:'#E8F0F8',D:'#EEF3F8',E:'#FCE9D8',F:'#E2EFDA',G:'#DDEBDA'};
 var RFCOL={A:'#1F3864',AA:'#1F3864',B:'#1F4E79',C:'#2E4057',D:'#374A5C',E:'#7F3F00',F:'#375623',G:'#2E6B1E'};
-var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels, 7.4m top clearance)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels, 7.4m top clearance)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels, 7.8m top clearance)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels, 7.8m top clearance)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels, 7.8m top clearance)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels, 7.8m top clearance)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels, 7.4m top clearance)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels, 7.4m top clearance)'};
+var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
 var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var SKUS=Object.keys(DATA.d).sort();
@@ -379,7 +377,8 @@ function mkCell(loc){
     cell.className='bc occ';cell.style.background=gc(v?v[5]:'');
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
-    cell.setAttribute('draggable','true');
+    // draggable removed entirely -- it caused unreliable taps on some tablets/phones
+    // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
     cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
     cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(){onOcc(loc,sku);});
@@ -424,8 +423,7 @@ function getLevelsForBay(row,bay){
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
 }
-var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
-var BRIDGE_STORAGE_HEIGHT={B:1.8,C:1.8,D:1.8,E:1.8};
+var BRIDGE_BAYS={B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
 function isBridgeBay(row,bay){
   return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
 }
@@ -511,7 +509,7 @@ function buildRow(r,container){
         overlay.style.width=(lrct.right-fr.left)+'px';
         overlay.style.top=(topRect.top-bodyRect.top)+'px';
         overlay.style.height=(botRect.bottom-topRect.top)+'px';
-        var lbl=document.createElement('div');lbl.className='bridge-path-label';lbl.textContent='BRIDGE BAY';
+        var lbl=document.createElement('div');lbl.className='bridge-path-label';lbl.textContent='WALKWAY';
         overlay.appendChild(lbl);
         body.appendChild(overlay);
       });
@@ -529,8 +527,6 @@ function bFG(){
   var fb=document.createElement('div');fb.className='fb';fb.style.flex='0 0 auto';
   var ft=document.createElement('div');ft.className='ft';ft.textContent='Row F - Greenhouses (4 bays x 3 slots x 4 levels)';fb.appendChild(ft);
   buildRow('F',fb);z.appendChild(fb);
-  var door=document.createElement('div');door.className='roller-door';door.innerHTML='<div class="roller-door-label">ROLLER<br>DOOR<br>5m</div>';
-  z.appendChild(door);
   var gb=document.createElement('div');gb.className='fb';gb.style.flex='1';
   var gt=document.createElement('div');gt.className='ft';gt.textContent='Row G - GH overflow + Canopia (13 bays x 3 slots x 4 levels)';gb.appendChild(gt);
   buildRow('G',gb);z.appendChild(gb);
@@ -569,14 +565,14 @@ function bestPhotoUrl(sku,desc,grp){
 }
 // Fill in real clearance heights per row+level here once measured, e.g. {A:[2.4,2.4,2.4], ...}
 var BAY_HEIGHTS={
-  A:[2.3,2.3,2.3],
-  AA:[2.3,2.3,2.3],
+  A:[2.3,2.3,2.1],
+  AA:[2.3,2.3,2.1],
   B:[1.7,2,2.2,1.5],
   C:[1.7,2,2.2,1.5],
   D:[1.7,2,2.2,1.5],
   E:[2.5,2.5,2.5],
-  F:[1.59,1.59,1.59,1.59],
-  G:[1.59,1.59,1.59,1.59]
+  F:[1.6,1.6,1.6,1.6],
+  G:[1.6,1.6,1.6,1.6]
 };
 // Bay-specific height overrides (same ranges as BAY_LEVEL_OVERRIDE above)
 var BAY_HEIGHT_OVERRIDE={
@@ -585,17 +581,9 @@ var BAY_HEIGHT_OVERRIDE={
   D:{from:34,to:42,heights:[2.5,2.5,2.5]}
 };
 var HEIGHT_UNIT='m';
-var BRIDGE_CLEARANCE_HEIGHT_BY_ROW={B:3.9,C:3.9,D:3.9,E:3.9};
-var TOP_CLEARANCE={A:7.4,AA:7.4,B:7.8,C:7.8,D:7.8,E:7.8,F:7.4,G:7.4};
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
-  if(isBridgeBay(row,bay)){
-    if(isBridgeEmptyLevel(row,bay,lvl)){
-      return BRIDGE_CLEARANCE_HEIGHT_BY_ROW[row]!=null?(BRIDGE_CLEARANCE_HEIGHT_BY_ROW[row]+HEIGHT_UNIT):null;
-    }
-    if(BRIDGE_STORAGE_HEIGHT[row]!=null)return BRIDGE_STORAGE_HEIGHT[row]+HEIGHT_UNIT;
-    // otherwise fall through below to the row's normal height table (e.g. A/AA keep their usual height)
-  }
+  if(isBridgeBay(row,bay)&&!isBridgeEmptyLevel(row,bay,lvl))return 1.8+HEIGHT_UNIT;
   var ov=BAY_HEIGHT_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to){
     return (ov.heights[lvl-1]!=null?ov.heights[lvl-1]+HEIGHT_UNIT:null);
