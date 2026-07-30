@@ -773,11 +773,13 @@ function showOccInfo(loc,sku,e){
   var h=getBayHeight(loc);
   var qty=QTY[loc];
   var mp=v[13]||0;
+  var photoUrl=bestPhotoUrl(sku,v[4],v[5]);
   tt.innerHTML=fl(loc)+' -- <strong>'+sku+'</strong>'+(h?' -- Height '+h:'')+'<br>'+
     '<div style="opacity:.85;margin:2px 0">'+v[4]+'</div>'+
     '<div style="opacity:.7;font-size:11px">'+v[5]+' | ABC '+v[6]+' | '+v[8]+' pallet'+(v[8]>1?'s':'')+'</div>'+
     '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
     '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
+    '<a href="'+photoUrl+'" target="_blank" rel="noopener" style="color:#7EC8FF">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
     '<a href="javascript:void(0)" onclick="changePalletSpace(\''+loc+'\',\''+sku+'\')" style="color:#BA7517">\ud83d\udce6 Change pallet space</a>'+
