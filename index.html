@@ -580,9 +580,13 @@ var BAY_HEIGHT_OVERRIDE={
   D:{from:34,to:42,heights:[2.5,2.5,2.5]}
 };
 var HEIGHT_UNIT='m';
+var BRIDGE_CLEARANCE_HEIGHT=3.9;
 function getBayHeight(loc){
   var p=loc.split('-');var row=p[0];var bay=parseInt(p[1],10);var lvl=parseInt(p[2],10);
-  if(isBridgeBay(row,bay)&&!isBridgeEmptyLevel(row,bay,lvl))return 1.8+HEIGHT_UNIT;
+  if(isBridgeBay(row,bay)){
+    if(isBridgeEmptyLevel(row,bay,lvl))return BRIDGE_CLEARANCE_HEIGHT+HEIGHT_UNIT;
+    return 1.8+HEIGHT_UNIT;
+  }
   var ov=BAY_HEIGHT_OVERRIDE[row];
   if(ov&&bay>=ov.from&&bay<=ov.to){
     return (ov.heights[lvl-1]!=null?ov.heights[lvl-1]+HEIGHT_UNIT:null);
