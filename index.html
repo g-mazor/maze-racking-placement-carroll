@@ -155,7 +155,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
 <button class="btn" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
+<button class="btn" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
 <button class="btn" onclick="undoLast()">Undo</button>
+<button class="btn btn-red" style="opacity:.75" onclick="clearPlacementsOnly()">⚠️ Clear placements</button>
+<button class="btn btn-red" style="opacity:.75" onclick="clearPendingOnly()">⚠️ Clear pending</button>
+<button class="btn btn-red" onclick="resetAll()">⚠️ Clear everything</button>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -245,6 +249,17 @@ function sendDescOnly(loc,desc){
   });
 }
 
+function sendPendingDescOnly(id,desc){
+  return new Promise(function(resolve){
+    var img=new Image();
+    var params='beacon=1&type=setpendingdesc&id='+encodeURIComponent(id)+'&desc='+encodeURIComponent(desc)+'&t='+Date.now();
+    var timer=setTimeout(function(){resolve(false);},8000);
+    img.onload=function(){clearTimeout(timer);resolve(true);};
+    img.onerror=function(){clearTimeout(timer);resolve(false);};
+    img.src=SHEET_API+'?'+params;
+  });
+}
+
 async function backfillDescriptions(){
   requirePin(async function(){
     var skus=Object.keys(SLOC);
@@ -261,6 +276,21 @@ async function backfillDescriptions(){
       if(done%20===0)si2('Backfilling descriptions... '+done+'/'+skus.length);
     }
     si2('Done -- sent descriptions for '+done+' SKUs.');
+  });
+}
+
+async function backfillPendingDescriptions(){
+  requirePin(async function(){
+    if(!RECEIVED.length){alert('Nothing pending to backfill.');return;}
+    if(!confirm('Send descriptions to the sheet for all '+RECEIVED.length+' pending goods-in items? This may take a minute.'))return;
+    var done=0;
+    for(var i=0;i<RECEIVED.length;i++){
+      var r=RECEIVED[i];var v=DATA.d[r.sku];if(!v)continue;
+      await sendPendingDescOnly(r.id,v[4]);
+      done++;
+      if(done%20===0)si2('Backfilling pending descriptions... '+done+'/'+RECEIVED.length);
+    }
+    si2('Done -- sent descriptions for '+done+' pending items.');
   });
 }
 
@@ -349,6 +379,16 @@ function requirePin(cb){
   }
 }
 
+// Restricted actions (clearing data for everyone) always re-prompt for this one
+// specific code, regardless of who is already logged in via requirePin above.
+var ADMIN_CODE='1409';
+function requireAdminPin(cb){
+  var entered=prompt('This is a restricted action. Enter the authorization code:');
+  if(entered===null)return;
+  if(entered.trim()===ADMIN_CODE){cb();}
+  else{alert('Incorrect code -- this action is restricted.');}
+}
+
 function undoLast(){
   requirePin(function(){
   if(!CHANGES.length){alert('Nothing to undo.');return;}
@@ -365,13 +405,39 @@ function undoLast(){
 }
 
 function resetAll(){
-  oM('Clear everything?','This will remove every pallet you\'ve placed and set the racking back to completely empty -- for everyone using this link.',function(){
-    CHANGES=[];LOG=[];localStorage.removeItem(LS);
+  requireAdminPin(function(){
+  oM('Clear everything?','This will remove every pallet you have placed, everything in the Pending goods-in list, and reset the racking back to completely empty -- for everyone using this link. This cannot be undone from here.',function(){
+    CHANGES=[];LOG=[];RECEIVED=[];localStorage.removeItem(LS);
     (async function(){
       lastSyncJSON=JSON.stringify(CHANGES);
       try{await postRemoteChange({type:'reset'});}catch(e){}
       await buildIdx();rebuildMap();updLog();si2('Cleared for everyone');
     })();
+  });
+  });
+}
+
+function clearPlacementsOnly(){
+  requireAdminPin(function(){
+  oM('Clear placements only?','This will remove every pallet placed on the map and clear Current Stock, but will leave the Pending goods-in list untouched -- for everyone using this link. This cannot be undone from here.',function(){
+    LOG=[];
+    (async function(){
+      try{await postRemoteChange({type:'resetplacements'});}catch(e){}
+      await buildIdx();rebuildMap();updLog();si2('Placements cleared -- Pending goods-in left as is');
+    })();
+  });
+  });
+}
+
+function clearPendingOnly(){
+  requireAdminPin(function(){
+  oM('Clear Pending goods-in only?','This will remove everything from the Pending goods-in list, but will leave all placed pallets and Current Stock untouched -- for everyone using this link. This cannot be undone from here.',function(){
+    LOG=[];
+    (async function(){
+      try{await postRemoteChange({type:'resetpending'});}catch(e){}
+      await buildIdx();rebuildMap();updLog();si2('Pending goods-in cleared');
+    })();
+  });
   });
 }
 
