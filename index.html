@@ -1341,8 +1341,16 @@ function enterReceiveMode(){
     '<input id="rcvSearch" type="text" placeholder="Type SKU code or description..." autocomplete="off" '+
     'style="width:100%;padding:9px 12px;border-radius:6px;border:1.5px solid #27AE60;font-size:14px;box-sizing:border-box"/>'+
     '<div id="rcvList" style="max-height:200px;overflow-y:auto;margin-top:4px"></div>'+
+    '<div style="text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid #CDE9CD">'+
+    '<label for="bulkRcvFile" style="text-decoration:underline;cursor:pointer;color:#1E8449">\ud83d\udcc4 Or upload a spreadsheet (CSV: SKU, Qty)</label>'+
+    '<input id="bulkRcvFile" type="file" accept=".csv,text/csv" style="display:none"/>'+
+    '</div>'+
     '<div style="text-align:center;margin-top:6px"><span style="text-decoration:underline;cursor:pointer" onclick="setNorm()">Cancel</span></div>'+
     '</div>';
+  document.getElementById('bulkRcvFile').addEventListener('change',function(ev){
+    var file=ev.target.files&&ev.target.files[0];if(!file)return;
+    handleBulkReceiveFile(file);
+  });
   var inp=document.getElementById('rcvSearch');
   inp.addEventListener('input',function(){
     var q=inp.value.trim().toUpperCase();var list=document.getElementById('rcvList');
@@ -1363,6 +1371,72 @@ function enterReceiveMode(){
   });
   setTimeout(function(){inp.focus();},50);
   });
+}
+
+function parseCSVSimple(text){
+  var lines=text.split(/\r\n|\r|\n/).filter(function(l){return l.trim()!=='';});
+  return lines.map(function(line){
+    var cells=[];var cur='';var inQ=false;
+    for(var i=0;i<line.length;i++){
+      var ch=line[i];
+      if(inQ){
+        if(ch==='"'){
+          if(line[i+1]==='"'){cur+='"';i++;}else{inQ=false;}
+        }else{cur+=ch;}
+      }else{
+        if(ch==='"'){inQ=true;}
+        else if(ch===','){cells.push(cur);cur='';}
+        else{cur+=ch;}
+      }
+    }
+    cells.push(cur);
+    return cells.map(function(c){return c.trim();});
+  });
+}
+
+function handleBulkReceiveFile(file){
+  var reader=new FileReader();
+  reader.onload=function(){
+    var rows=parseCSVSimple(String(reader.result));
+    if(!rows.length){alert('That file looks empty.');return;}
+    var header=rows[0].map(function(h){return h.toLowerCase();});
+    var skuCol=header.findIndex(function(h){return h.indexOf('sku')>=0;});
+    var qtyCol=header.findIndex(function(h){return h.indexOf('qty')>=0||h.indexOf('quantity')>=0;});
+    var noteCol=header.findIndex(function(h){return h.indexOf('note')>=0;});
+    var dataRows=rows;
+    if(skuCol<0){
+      alert('Could not find a "SKU" column header in the first row. Expected a header row like: SKU, Qty, Note (Note is optional). Please add a header row and try again.');
+      return;
+    }
+    dataRows=rows.slice(1);
+    var valid=[],invalid=[];
+    dataRows.forEach(function(r){
+      var rawSku=(r[skuCol]||'').trim();
+      if(!rawSku)return;
+      var key=rawSku.toUpperCase();
+      var qtyRaw=qtyCol>=0?(r[qtyCol]||'').trim():'';
+      var qty=parseInt(qtyRaw,10);if(isNaN(qty)||qty<0)qty=0;
+      var note=noteCol>=0?(r[noteCol]||'').trim():'';
+      if(DATA.d[key]){valid.push({sku:key,qty:qty,note:note});}
+      else{invalid.push(rawSku);}
+    });
+    if(!valid.length){
+      alert('No matching SKUs found in this file. Check that the SKU column contains codes that match the catalog.');
+      return;
+    }
+    var msg='Found '+valid.length+' SKU'+(valid.length>1?'s':'')+' to add to the goods-in list.'+
+      (invalid.length?(' '+invalid.length+' row'+(invalid.length>1?'s':'')+' did not match a known SKU and will be skipped: '+invalid.slice(0,10).join(', ')+(invalid.length>10?', ...':'')+'.'):'');
+    oM('Import this spreadsheet?',msg,function(){
+      valid.forEach(function(item){
+        applyC({type:'receive',id:genId(),sku:item.sku,qty:item.qty,note:item.note,ts:Date.now()},true);
+      });
+      renderReceivedList();
+      si2('Added '+valid.length+' SKU'+(valid.length>1?'s':'')+' to goods-in');
+      setNorm();
+    });
+  };
+  reader.onerror=function(){alert('Could not read that file. Try exporting it again as a CSV.');};
+  reader.readAsText(file);
 }
 
 function confirmReceiveTarget(sku){
