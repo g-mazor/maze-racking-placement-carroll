@@ -1145,7 +1145,7 @@ function emptyCountInRow(row){
   return cap-occ;
 }
 function pickRowForGroup(group){
-  var rows=groupRows(group);
+  var rows=groupRows(group).filter(function(r){return r!=='AA';});
   if(!rows.length)return null;
   rows.sort(function(a,b){return emptyCountInRow(b)-emptyCountInRow(a);});
   return rows[0];
@@ -1166,9 +1166,11 @@ function suggestBay(row,pct){
   var pos=Math.round(pct*(maxBay-1));
   return fastFromLow?(1+pos):(maxBay-pos);
 }
-function findNearestEmpty(row,targetBay,spaces){
+function findNearestEmpty(row,targetBay,spaces,pct){
   var spec=RS[row];
-  for(var lvl=1;lvl<=spec.l;lvl++){
+  var isFast=(pct!=null&&pct<=0.2);
+  var startLvl=(spaces>1&&!isFast)?2:1; // fast movers keep full level-1 access regardless of size; everything else keeps level 1 to one pallet per SKU
+  for(var lvl=startLvl;lvl<=spec.l;lvl++){
     for(var delta=0;delta<spec.b;delta++){
       var cands=[targetBay-delta,targetBay+delta].filter(function(b){return b>=1&&b<=spec.b;});
       if(delta===0)cands=[targetBay];
@@ -1196,7 +1198,7 @@ function suggestLocationFor(sku,spaces){
   if(!row)return null;
   var pct=velocityPercentile(sku);
   var targetBay=suggestBay(row,pct);
-  var loc=findNearestEmpty(row,targetBay,spaces||1);
+  var loc=findNearestEmpty(row,targetBay,spaces||1,pct);
   if(!loc)return null;
   var parts=loc.split('-');
   var bay=parseInt(parts[1],10);var level=parts[2];
