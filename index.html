@@ -351,7 +351,7 @@ function applyC(c,rec){
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
-    postRemoteChange(c).then(function(ok){if(!ok)si2('Saved on this device -- could not reach the shared sheet, will sync later');});
+    return postRemoteChange(c).then(function(ok){if(!ok)si2('Saved on this device -- could not reach the shared sheet, will sync later');return ok;});
   }
 }
 
@@ -1544,12 +1544,16 @@ function handleBulkReceiveFile(file){
     var msg='Found '+valid.length+' SKU'+(valid.length>1?'s':'')+' to add to the goods-in list.'+
       (invalid.length?(' '+invalid.length+' row'+(invalid.length>1?'s':'')+' did not match a known SKU and will be skipped: '+invalid.slice(0,10).join(', ')+(invalid.length>10?', ...':'')+'.'):'');
     oM('Import this spreadsheet?',msg,function(){
-      valid.forEach(function(item){
-        applyC({type:'receive',id:genId(),sku:item.sku,qty:item.qty,note:item.note,ts:Date.now()},true);
-      });
-      renderReceivedList();
-      si2('Added '+valid.length+' SKU'+(valid.length>1?'s':'')+' to goods-in');
-      setNorm();
+      (async function(){
+        for(var i=0;i<valid.length;i++){
+          var item=valid[i];
+          await applyC({type:'receive',id:genId(),sku:item.sku,qty:item.qty,note:item.note,ts:Date.now()},true);
+          if((i+1)%5===0||i===valid.length-1){renderReceivedList();si2('Importing... '+(i+1)+'/'+valid.length);}
+        }
+        renderReceivedList();
+        si2('Added '+valid.length+' SKU'+(valid.length>1?'s':'')+' to goods-in');
+        setNorm();
+      })();
     });
   };
   reader.onerror=function(){alert('Could not read that file. Try exporting it again as a CSV.');};
