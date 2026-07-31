@@ -154,6 +154,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" onclick="toggleLog()">Log</button>
 <button class="btn btn-green" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
 <button class="btn btn-blue" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
+<button class="btn" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
 <button class="btn" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
@@ -1145,6 +1146,11 @@ function emptyCountInRow(row){
   return cap-occ;
 }
 function pickRowForGroup(group){
+  if(group==='GREENHOUSES'||group==='Canopia'){
+    var fg=['F','G'];
+    fg.sort(function(a,b){return emptyCountInRow(b)-emptyCountInRow(a);});
+    return fg[0];
+  }
   var rows=groupRows(group).filter(function(r){return r!=='AA';});
   if(!rows.length)return null;
   rows.sort(function(a,b){return emptyCountInRow(b)-emptyCountInRow(a);});
@@ -1404,6 +1410,81 @@ function removeFromMixed(loc,idx){
     applyC({type:'mixedset',loc:loc,contents:contents},true);
     showMixedCard(loc);
     si2('Removed '+(removed[0]||'item')+' from mixed pallet at '+fl(loc));
+  });
+}
+
+function findOrCreateMixedBay(row){
+  var existing=(SLOC['MIXED']||[]).filter(function(l){return l[0]===row;});
+  if(existing.length)return existing[0];
+  var spec=RS[row];if(!spec)return null;
+  var targetBay=Math.round(spec.b/2)||1;
+  var loc=findNearestEmpty(row,targetBay,1);
+  if(!loc)return null;
+  applyC({type:'add',sku:'MIXED',tl:[loc]},true);
+  return loc;
+}
+
+async function autoPlaceAllPending(){
+  requirePin(async function(){
+    if(!RECEIVED.length){alert('Nothing pending to place.');return;}
+    var count=RECEIVED.length;
+    if(!confirm('Auto-place all '+count+' pending SKUs at their best suggested locations? Items with a quantity under 4 will be combined into shared mixed pallets where possible (this mainly affects Canopia/Greenhouses). This may take a minute.'))return;
+
+    var pending=RECEIVED.slice();
+    var lowQtyByGroup={};
+    var normalItems=[];
+    pending.forEach(function(r){
+      var v=DATA.d[r.sku];
+      if(!v)return;
+      if(r.qty>0&&r.qty<4){
+        var grp=v[5];
+        if(!lowQtyByGroup[grp])lowQtyByGroup[grp]=[];
+        lowQtyByGroup[grp].push(r);
+      } else {
+        normalItems.push(r);
+      }
+    });
+
+    var placedCount=0,mixedCount=0,failedList=[];
+
+    for(var i=0;i<normalItems.length;i++){
+      var r=normalItems[i];
+      var v=DATA.d[r.sku];
+      var spaces=v[8]||1;
+      var sugg=suggestLocationFor(r.sku,spaces);
+      if(!sugg){failedList.push(r.sku+' (no space found)');continue;}
+      var tl=spaces>1?findSeq(sugg.loc,spaces):[sugg.loc];
+      if(!tl){failedList.push(r.sku+' (space taken)');continue;}
+      await applyC({type:'add',sku:r.sku,tl:tl},true);
+      if(r.qty>0)await applyC({type:'count',sku:r.sku,loc:tl[0],qty:r.qty},true);
+      await applyC({type:'receiveresolve',id:r.id},true);
+      placedCount++;
+      if((placedCount+mixedCount)%5===0){rebuildMap();renderReceivedList();si2('Placing... '+(placedCount+mixedCount)+'/'+count);}
+    }
+
+    for(var grp in lowQtyByGroup){
+      var items=lowQtyByGroup[grp];
+      var row=pickRowForGroup(grp);
+      if(!row){items.forEach(function(r2){failedList.push(r2.sku+' (no row for group)');});continue;}
+      var mixedLoc=findOrCreateMixedBay(row);
+      if(!mixedLoc){items.forEach(function(r2){failedList.push(r2.sku+' (no mixed bay space)');});continue;}
+      var contents=(MIXED_CONTENTS[mixedLoc]||[]).slice();
+      for(var j=0;j<items.length;j++){
+        if(contents.indexOf(items[j].sku)<0)contents.push(items[j].sku);
+      }
+      await applyC({type:'mixedset',loc:mixedLoc,contents:contents},true);
+      for(var k=0;k<items.length;k++){
+        await applyC({type:'receiveresolve',id:items[k].id},true);
+        mixedCount++;
+      }
+      rebuildMap();renderReceivedList();
+      si2('Combined '+items.length+' '+grp+' SKU'+(items.length>1?'s':'')+' into a mixed pallet at '+fl(mixedLoc));
+    }
+
+    rebuildMap();renderReceivedList();
+    var summary='Placed '+placedCount+' individually, combined '+mixedCount+' into mixed pallets.'+(failedList.length?(' Could not place: '+failedList.join(', ')+'.'):'');
+    si2(summary);
+    speak('Auto placement complete. '+placedCount+' placed individually, '+mixedCount+' combined into shared pallets.'+(failedList.length?' '+failedList.length+' could not be placed.':''));
   });
 }
 
