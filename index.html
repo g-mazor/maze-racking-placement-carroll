@@ -147,7 +147,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <img src="maze-logo.jpg" alt="Maze" style="height:48px;display:block">
 <img src="keter-logo.png" alt="Keter" style="height:48px;display:block">
 </div>
-<div style="font-size:14px;font-weight:700;color:#1F3864;letter-spacing:.5px;margin-bottom:6px">SKU Location Map</div>
+<div style="font-size:14px;font-weight:700;color:#1F3864;letter-spacing:.5px;margin-bottom:6px">SKU Location Map<span style="font-size:9px;color:#DDD;cursor:pointer;margin-left:10px;user-select:none" onclick="openManagerPanel()">&bull;</span></div>
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
@@ -160,9 +160,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
 <button class="btn" onclick="undoLast()">Undo</button>
-<button class="btn btn-red" style="opacity:.75" onclick="clearPlacementsOnly()">⚠️ Clear placements</button>
-<button class="btn btn-red" style="opacity:.75" onclick="clearPendingOnly()">⚠️ Clear pending</button>
-<button class="btn btn-red" onclick="resetAll()">⚠️ Clear everything</button>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -170,6 +167,13 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <input id="pendingSearch" type="text" placeholder="Search pending by SKU or description..." autocomplete="off" style="width:100%;padding:7px 10px;border-radius:6px;border:1.5px solid #8CD98C;font-size:13px;box-sizing:border-box;margin-bottom:6px"/>
 <div id="rl"></div></div>
 <div id="rc"></div>
+<div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
+  <div style="font-size:11px;font-weight:700;color:#A32D2D;margin-bottom:8px">Manager actions</div>
+  <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
+  <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
+  <button class="btn btn-red" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="doResetAll()">⚠️ Clear everything</button>
+  <div style="text-align:center;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('mgrPanel').style.display='none'">Close</div>
+</div>
 <div class="ww"><div class="wh">
 <div class="pb2">Bay 01 -- Packing / Dispatch | Customer pick-up | Walkway | Spare parts</div>
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 42 (offices end)</span></div>
@@ -409,9 +413,15 @@ function undoLast(){
   });
 }
 
-function resetAll(){
+function openManagerPanel(){
   requireAdminPin(function(){
+    document.getElementById('mgrPanel').style.display='block';
+  });
+}
+
+function doResetAll(){
   oM('Clear everything?','This will remove every pallet you have placed, everything in the Pending goods-in list, and reset the racking back to completely empty -- for everyone using this link. This cannot be undone from here.',function(){
+    document.getElementById('mgrPanel').style.display='none';
     CHANGES=[];LOG=[];RECEIVED=[];localStorage.removeItem(LS);
     (async function(){
       lastSyncJSON=JSON.stringify(CHANGES);
@@ -419,30 +429,27 @@ function resetAll(){
       await buildIdx();rebuildMap();updLog();si2('Cleared for everyone');
     })();
   });
-  });
 }
 
-function clearPlacementsOnly(){
-  requireAdminPin(function(){
+function doClearPlacementsOnly(){
   oM('Clear placements only?','This will remove every pallet placed on the map and clear Current Stock, but will leave the Pending goods-in list untouched -- for everyone using this link. This cannot be undone from here.',function(){
+    document.getElementById('mgrPanel').style.display='none';
     LOG=[];
     (async function(){
       try{await postRemoteChange({type:'resetplacements'});}catch(e){}
       await buildIdx();rebuildMap();updLog();si2('Placements cleared -- Pending goods-in left as is');
     })();
   });
-  });
 }
 
-function clearPendingOnly(){
-  requireAdminPin(function(){
+function doClearPendingOnly(){
   oM('Clear Pending goods-in only?','This will remove everything from the Pending goods-in list, but will leave all placed pallets and Current Stock untouched -- for everyone using this link. This cannot be undone from here.',function(){
+    document.getElementById('mgrPanel').style.display='none';
     LOG=[];
     (async function(){
       try{await postRemoteChange({type:'resetpending'});}catch(e){}
       await buildIdx();rebuildMap();updLog();si2('Pending goods-in cleared');
     })();
-  });
   });
 }
 
