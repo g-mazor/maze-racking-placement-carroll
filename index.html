@@ -160,7 +160,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
 <button class="btn" onclick="undoLast()">Undo</button>
-<button class="btn btn-blue" id="voiceBtn" onclick="toggleVoiceCommand()">🎤 Voice command</button>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -890,6 +889,7 @@ function showOccInfo(loc,sku,e){
     '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
     '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener" style="color:#7EC8FF">\ud83d\udcf7 View photo</a>'+
+    '<a href="javascript:void(0)" onclick="speakSkuInfo(\''+sku+'\')" style="color:#C39BD3">\ud83d\udd0a Read aloud</a>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
     '<a href="javascript:void(0)" onclick="changePalletSpace(\''+loc+'\',\''+sku+'\')" style="color:#BA7517">\ud83d\udce6 Change pallet space</a>'+
@@ -905,6 +905,7 @@ function onEmp(loc,e){
     var v=DATA.d[addTgt];var spaces=addSpaces||(v?v[8]:1);var tl;
     if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}else{tl=[loc];}
     applyC({type:'add',sku:addTgt,tl:tl},true);rebuildMap();hlSKU(addTgt);si2('Added at '+fl(loc));
+    speakSkuInfo(addTgt);
     if(dupQueueQty!=null)applyC({type:'count',sku:addTgt,loc:tl[0],qty:dupQueueQty},true);
     else if(singleAddQty!=null){applyC({type:'count',sku:addTgt,loc:tl[0],qty:singleAddQty},true);singleAddQty=null;}
     if(pendingReceiveId!=null){
@@ -1408,158 +1409,12 @@ function speak(text){
   window.speechSynthesis.speak(u);
 }
 
-function confirmVoiceAction(text,cb){
-  speak(text);
-  oM('Voice command',text,cb);
-}
-
-// Picks out a row/bay/level/side from a spoken phrase, e.g. "row B bay 19 level 1 side left".
-function parseSpokenLocation(t){
-  var rowM=t.match(/\brow\s+([a-z]{1,2})\b/i);
-  var bayM=t.match(/\bbay\s+(\d+)/i);
-  if(!rowM||!bayM)return null;
-  var row=rowM[1].toUpperCase();
-  if(!RS[row])return null;
-  var bay=parseInt(bayM[1],10);
-  var levelM=t.match(/\blevel\s+(\d+)/i);
-  var level=levelM?parseInt(levelM[1],10):1;
-  var sideM=t.match(/\bside\s+(left|right|l|r|1|2|3)\b/i);
-  var sideRaw=sideM?sideM[1].toLowerCase():null;
-  var side;
-  if(getSidesForBay(row,bay)===3){
-    side=(sideRaw==='1'||sideRaw==='2'||sideRaw==='3')?sideRaw:'1';
-  } else {
-    side=(sideRaw==='right'||sideRaw==='r')?'R':'L';
-  }
-  return row+'-'+String(bay).padStart(2,'0')+'-'+level+'-'+side;
-}
-
-// Finds SKUs matching spoken description text -- exact code match first, otherwise
-// scores every SKU by how many of the spoken words appear in its description.
-function findBestSkuMatch(text){
-  var clean=text.toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-  var codeMatch=SKUS.find(function(s){return clean.indexOf(s)>=0;});
-  if(codeMatch)return [codeMatch];
-  var words=clean.split(' ').filter(function(w){return w.length>2;});
-  if(!words.length)return [];
-  var scored=SKUS.map(function(s){
-    var v=DATA.d[s];if(!v)return null;
-    var desc=v[4].toUpperCase();
-    var score=words.reduce(function(acc,w){return acc+(desc.indexOf(w)>=0?1:0);},0);
-    return score>0?{sku:s,score:score}:null;
-  }).filter(Boolean).sort(function(a,b){return b.score-a.score;});
-  if(!scored.length)return [];
-  var top=scored[0].score;
-  return scored.filter(function(x){return x.score===top;}).slice(0,5).map(function(x){return x.sku;});
-}
-
-function parseVoiceCommand(transcript){
-  var t=transcript.toLowerCase().trim();
-  var qtyM=t.match(/\b(\d+)\b/);
-  var qty=qtyM?parseInt(qtyM[1],10):null;
-  var loc=parseSpokenLocation(t);
-  var type=null;
-  if(/^(find|search|look\s*up)\b/.test(t))type='search';
-  else if(/^where\b/.test(t))type='where';
-  else if(/how\s+(much|many)\b|stock\s+of\b/.test(t))type='howmuch';
-  else if(/^(place|put|add)\b/.test(t))type='place';
-  else if(/^(count|set\s+count|update\s+count)\b/.test(t))type='count';
-  var stripped=t
-    .replace(/\b\d+\b/g,' ')
-    .replace(/\brow\s+[a-z]{1,2}\b/gi,' ')
-    .replace(/\bbay\s+\d+\b/gi,' ')
-    .replace(/\blevel\s+\d+\b/gi,' ')
-    .replace(/\bside\s+(left|right|l|r|1|2|3)\b/gi,' ')
-    .replace(/^(find|search|look\s*up|where\s+is|where's|how\s+much|how\s+many|stock\s+of|place|put|add|count|set\s+count|update\s+count)\b/,' ')
-    .replace(/\b(of|is|at|in|units?|pallets?|to|the)\b/g,' ')
-    .replace(/\s+/g,' ').trim();
-  return {type:type,qty:qty,loc:loc,skuText:stripped,raw:transcript};
-}
-
-function executeVoiceCommand(cmd){
-  var matches=findBestSkuMatch(cmd.skuText);
-  if(!matches.length){
-    speak('Sorry, I could not find a matching SKU.');
-    si2('Voice: no SKU match for "'+cmd.raw+'"');
-    return;
-  }
-  if(matches.length>1){
-    speak('I found '+matches.length+' possible matches. Please tap the one you mean.');
-    si.value=cmd.skuText;si.dispatchEvent(new Event('input'));
-    return;
-  }
-  var sku=matches[0];var v=DATA.d[sku];
-  if(cmd.type==='search'||cmd.type==='where'||cmd.type===null){
-    var placed=SLOC[sku]||[];
-    if(placed.length){
-      speak(sku+' is placed at '+placed.map(fl).join(', ')+'.');
-    } else {
-      var pend=RECEIVED.filter(function(r){return r.sku===sku;});
-      speak(pend.length?(sku+' is pending, not yet placed. '+pend.length+' received entr'+(pend.length>1?'ies':'y')+'.'):(sku+' is not currently placed or pending anywhere.'));
-    }
-    showR(sku);hlSKU(sku);
-  } else if(cmd.type==='howmuch'){
-    speak(sku+' has '+(v[11]!=null?v[11]:0)+' units on hand.');
-    showR(sku);
-  } else if(cmd.type==='place'){
-    var spaces=v[8]||1;
-    if(cmd.loc){
-      if(LOC[cmd.loc]){speak('Sorry, that location is already occupied.');return;}
-      confirmVoiceAction('Place '+sku+' at '+fl(cmd.loc)+(cmd.qty?', quantity '+cmd.qty:'')+'?',function(){
-        var tl=spaces>1?findSeq(cmd.loc,spaces):[cmd.loc];
-        if(!tl){speak('Not enough consecutive space there.');return;}
-        applyC({type:'add',sku:sku,tl:tl},true);
-        if(cmd.qty!=null)applyC({type:'count',sku:sku,loc:tl[0],qty:cmd.qty},true);
-        rebuildMap();hlSKU(sku);
-        speak('Done. Placed '+sku+' at '+fl(cmd.loc)+'.');
-        si2('Voice: placed '+sku+' at '+fl(cmd.loc));
-      });
-    } else {
-      var sugg=suggestLocationFor(sku,spaces);
-      if(!sugg){speak('I could not find a suggested location for that.');return;}
-      confirmVoiceAction('Place '+sku+' at the suggested spot, '+fl(sugg.loc)+(cmd.qty?', quantity '+cmd.qty:'')+'?',function(){
-        var tl2=spaces>1?findSeq(sugg.loc,spaces):[sugg.loc];
-        if(!tl2){speak('That suggested spot is no longer available.');return;}
-        applyC({type:'add',sku:sku,tl:tl2},true);
-        if(cmd.qty!=null)applyC({type:'count',sku:sku,loc:tl2[0],qty:cmd.qty},true);
-        rebuildMap();hlSKU(sku);
-        speak('Done. Placed '+sku+' at '+fl(sugg.loc)+'.');
-        si2('Voice: placed '+sku+' at '+fl(sugg.loc));
-      });
-    }
-  } else if(cmd.type==='count'){
-    var locs=SLOC[sku];
-    if(!locs||!locs.length){speak(sku+' is not currently placed, so I cannot update its count.');return;}
-    if(cmd.qty==null){speak('I did not catch a quantity for the count.');return;}
-    confirmVoiceAction('Set count for '+sku+' at '+fl(locs[0])+' to '+cmd.qty+'?',function(){
-      applyC({type:'count',sku:sku,loc:locs[0],qty:cmd.qty},true);
-      speak('Done. Count for '+sku+' set to '+cmd.qty+'.');
-      si2('Voice: counted '+sku+' = '+cmd.qty);
-    });
-  }
-}
-
-var voiceRecognition=null;
-function toggleVoiceCommand(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){alert('Voice commands need Chrome (Android or desktop) -- this browser does not support them.');return;}
-  if(!voiceRecognition){
-    voiceRecognition=new SR();
-    voiceRecognition.lang='en-US';voiceRecognition.continuous=false;voiceRecognition.interimResults=false;voiceRecognition.maxAlternatives=1;
-    voiceRecognition.onresult=function(event){
-      var transcript=event.results[0][0].transcript;
-      si2('Heard: "'+transcript+'"');
-      executeVoiceCommand(parseVoiceCommand(transcript));
-    };
-    voiceRecognition.onerror=function(event){si2('Voice error: '+event.error);};
-    voiceRecognition.onend=function(){
-      var btn=document.getElementById('voiceBtn');
-      btn.textContent='🎤 Voice command';btn.style.cssText='';
-    };
-  }
-  var btn=document.getElementById('voiceBtn');
-  btn.textContent='🎤 Listening...';btn.style.cssText='background:#E74C3C;color:#FFF';
-  voiceRecognition.start();
+// Speaks SKU code, description, total on-hand quantity, and how many locations it occupies.
+function speakSkuInfo(sku){
+  var v=DATA.d[sku];if(!v)return;
+  var locs=SLOC[sku]||[];
+  var onHand=v[11]!=null?v[11]:0;
+  speak(sku+'. '+v[4]+'. '+onHand+' units in the warehouse, in '+locs.length+' location'+(locs.length!==1?'s':'')+'.');
 }
 
 var si=document.getElementById('si'),al=document.getElementById('acl');
