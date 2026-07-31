@@ -939,6 +939,14 @@ function onEmp(loc,e){
   }
 }
 
+// Speaks a location in natural spoken form plus its height, e.g. tapping an empty bay.
+function speakEmptyLocation(loc,h){
+  var p=loc.split('-');
+  var row=p[0],bay=parseInt(p[1],10),lvl=p[2],side=p[3];
+  var sideWord=(side==='L')?'left':(side==='R')?'right':('side '+side);
+  speak('Row '+row+', bay '+bay+', level '+lvl+', '+sideWord+'. Empty.'+(h?' Height '+h+'.':' Height not set yet.'));
+}
+
 function showEmptyInfo(loc,e){
   var h=getBayHeight(loc);
   clearTimeout(ttHideTimer);
@@ -948,6 +956,7 @@ function showEmptyInfo(loc,e){
     '<a href="javascript:void(0)" onclick="startMoveToLocation(\''+loc+'\')" style="color:#F5D76E">\ud83d\udd04 Move existing SKU here</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
+  speakEmptyLocation(loc,h);
 }
 
 function startPlaceAtLocation(loc){
