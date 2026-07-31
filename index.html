@@ -1409,12 +1409,14 @@ function speak(text){
   window.speechSynthesis.speak(u);
 }
 
-// Speaks SKU code, description, total on-hand quantity, and how many locations it occupies.
+// Speaks SKU code, description, total counted quantity in THIS warehouse (summed
+// from the per-location counts entered on this map), and how many locations it's in.
 function speakSkuInfo(sku){
   var v=DATA.d[sku];if(!v)return;
   var locs=SLOC[sku]||[];
-  var onHand=v[11]!=null?v[11]:0;
-  speak(sku+'. '+v[4]+'. '+onHand+' units in the warehouse, in '+locs.length+' location'+(locs.length!==1?'s':'')+'.');
+  var total=0;
+  locs.forEach(function(l){total+=(QTY[l]||0);});
+  speak(sku+'. '+v[4]+'. '+total+' units in the Carroll Road warehouse, in '+locs.length+' location'+(locs.length!==1?'s':'')+'.');
 }
 
 var si=document.getElementById('si'),al=document.getElementById('acl');
