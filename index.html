@@ -472,12 +472,13 @@ function exitPickerMode(){
 // oversight tools (Picker Stats, Picker Walking Map). The three Clear actions
 // stay exclusively reachable via the hidden dot -- never exposed here.
 var currentManager=null;
+var MANAGER_NAMES=['Gil','Waj']; // Jude is forklift-only, not a manager
 function enterManagerLogin(){
   if(currentManager){exitManagerMode();return;}
   var entered=prompt('Enter your manager code:');
   if(entered===null)return;
   var name=USERS[entered.trim()];
-  if(!name){alert('Code not recognized.');return;}
+  if(!name||MANAGER_NAMES.indexOf(name)<0){alert('Code not recognized.');return;}
   currentManager=name;
   currentUser=name;
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='';});
