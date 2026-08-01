@@ -330,7 +330,7 @@ async function buildIdx(){
     try{var raw=localStorage.getItem(LS);if(raw)saved=JSON.parse(raw);}catch(e2){}
   }
   if(saved&&saved.length){
-    saved.forEach(function(c){applyC(c,false);});
+    saved.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during load:',c,e);}});
     CHANGES=saved.slice();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
@@ -1559,11 +1559,12 @@ async function autoPlaceAllPending(){
     for(var i=0;i<normalItems.length;i++){
       var r=normalItems[i];
       var v=DATA.d[r.sku];
-      var spaces=v[8]||1;
+      var spaces=1; // always place received stock as a single pallet on the ground level --
+                    // the real pallet count isn't known until it's physically confirmed; use
+                    // "Change pallet space" afterward if it actually needs more room.
       var sugg=suggestLocationFor(r.sku,spaces);
       if(!sugg){failedList.push(r.sku+' (no space found)');continue;}
-      var tl=spaces>1?findSeq(sugg.loc,spaces):[sugg.loc];
-      if(!tl){failedList.push(r.sku+' (space taken)');continue;}
+      var tl=[sugg.loc];
       await applyC({type:'add',sku:r.sku,tl:tl},true);
       if(r.qty>0)await applyC({type:'count',sku:r.sku,loc:tl[0],qty:r.qty},true);
       await applyC({type:'receiveresolve',id:r.id},true);
@@ -1998,7 +1999,7 @@ function syncModal(mode){
       oM('Import this data?','This will replace everything currently placed on THIS device with the '+parsed.length+' change'+(parsed.length!==1?'s':'')+' from the code you pasted. Continue?',function(){
         CHANGES=parsed.slice();LOG=[];
         LOC={};SLOC={};RECEIVED=[];
-        CHANGES.forEach(function(c){applyC(c,false);});
+        CHANGES.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record on import:',c,e);}});
         lastSyncJSON=JSON.stringify(CHANGES);
         try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
         rebuildMap();updLog();
@@ -2027,7 +2028,7 @@ async function pollSync(manual){
     lastSyncJSON=json;
     CHANGES=saved.slice();
     LOC={};SLOC={};RECEIVED=[];
-    CHANGES.forEach(function(c){applyC(c,false);});
+    CHANGES.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during sync:',c,e);}});
     try{localStorage.setItem(LS,json);}catch(e){}
     rebuildMap();updLog();renderReceivedList();si2('Updated -- someone else made a change');
   }catch(e){
@@ -2036,7 +2037,8 @@ async function pollSync(manual){
 }
 
 (async function init(){
-  await buildIdx();bFG();bMain();buildStats();
+  try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
+  bFG();bMain();buildStats();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
 })();
 
