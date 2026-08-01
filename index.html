@@ -170,6 +170,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <input id="pendingSearch" type="text" placeholder="Search pending by SKU or description..." autocomplete="off" style="width:100%;padding:7px 10px;border-radius:6px;border:1.5px solid #8CD98C;font-size:13px;box-sizing:border-box;margin-bottom:6px"/>
 <div id="rl"></div></div>
 <div id="rc"></div>
+<div id="pickerPanel" style="display:none;max-width:480px;margin:20px auto;text-align:left;background:#F0F8F0;border:2px solid #374A5C;border-radius:8px;padding:16px">
+  <div style="font-size:16px;font-weight:700;color:#1F3864;margin-bottom:10px">Hi <span id="pickerName"></span> -- Picker Panel (Step 2 test)</div>
+  <div style="font-size:12px;color:#555">This is just the panel showing/hiding correctly. Confirm Pick wiring comes in Step 3.</div>
+  <div style="text-align:center;margin-top:14px"><span style="text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerPanel').style.display='none'">Close</span></div>
+</div>
 <div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
   <div style="font-size:11px;font-weight:700;color:#A32D2D;margin-bottom:8px">Manager actions</div>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
@@ -384,15 +389,16 @@ var PICKERS={
   '1982':'Tom'
 };
 var currentPicker=null;
-// STEP 1 TEST ONLY: just proves the login check works, with zero changes to the
-// existing page. Safe to test freely -- does not touch or hide anything.
+// STEP 2 TEST: shows the picker panel on successful login. Staff view stays
+// visible too, for now -- hiding it is Step 4, once everything else is proven.
 function testPickerLogin(){
   var entered=prompt('Enter your picker code:');
   if(entered===null)return;
   var name=PICKERS[entered.trim()];
   if(!name){alert('Code not recognized.');return;}
   currentPicker=name;
-  alert('Logged in as picker: '+name);
+  document.getElementById('pickerName').textContent=name;
+  document.getElementById('pickerPanel').style.display='block';
 }
 function requirePin(cb){
   if(currentUser){cb();return;}
