@@ -1194,17 +1194,44 @@ function detectSubtype(desc){
   }
   return null;
 }
-function findSubtypeClusterBay(row,subtype){
-  var bays=[];
-  Object.keys(LOC).forEach(function(loc){
-    if(loc[0]!==row)return;
-    var sku=LOC[loc];if(sku==='MIXED')return;
-    var v=DATA.d[sku];if(!v)return;
-    if(detectSubtype(v[4])===subtype)bays.push(parseInt(loc.split('-')[1],10));
+// Percentile of this SKU's pick velocity relative only to other members of the
+// same subtype cluster (not the whole product group) -- lets fast/medium/slow
+// movers of the SAME item type spread out from each other, instead of being
+// collapsed to one point just because they share a subtype.
+function velocityPercentileAmong(sku,memberList){
+  var v=DATA.d[sku];if(!v)return 0.5;
+  var myRate=v[7]||0;var faster=0,total=memberList.length;
+  memberList.forEach(function(k){
+    var vv=DATA.d[k];
+    if((vv[7]||0)>myRate)faster++;
   });
-  if(!bays.length)return null;
-  bays.sort(function(a,b){return a-b;});
-  return bays[Math.floor(bays.length/2)];
+  if(total<=1)return 0;
+  return faster/(total-1);
+}
+
+// Reserves a bay-range for a subtype sized by EVERY catalog member of that
+// subtype (whether placed yet or not), so there's always room left for items
+// not yet placed -- then spreads this SKU within that range by its velocity
+// relative to other members of the same subtype, so a fast mover and a slow
+// mover of the same item type never end up crammed next to each other.
+function findSubtypeClusterBay(row,subtype,group,sku){
+  var members=Object.keys(DATA.d).filter(function(k){
+    var v=DATA.d[k];if(!v)return false;
+    return v[5]===group&&detectSubtype(v[4])===subtype;
+  });
+  if(!members.length)return null;
+  var totalSpaces=members.reduce(function(acc,k){return acc+(DATA.d[k][8]||1);},0);
+  var spec=RS[row];
+  var halfWidth=Math.max(1,Math.round(totalSpaces/2));
+  var anchorMember=members.slice().sort()[0];
+  var anchorPct=velocityPercentile(anchorMember);
+  var anchorBay=suggestBay(row,anchorPct);
+  var rangeStart=Math.max(1,anchorBay-halfWidth);
+  var rangeEnd=Math.min(spec.b,anchorBay+halfWidth);
+  var subtypePct=velocityPercentileAmong(sku,members);
+  var fastFromLow=(row==='A'||row==='B'||row==='C'||row==='D');
+  var pos=Math.round(subtypePct*(rangeEnd-rangeStart));
+  return fastFromLow?(rangeStart+pos):(rangeEnd-pos);
 }
 
 function searchBaysAtLevel(row,targetBay,lvl,spaces){
@@ -1266,7 +1293,7 @@ function suggestLocationFor(sku,spaces){
   if(!row)return null;
   var pct=velocityPercentile(sku);
   var subtype=detectSubtype(v[4]);
-  var clusterBay=subtype?findSubtypeClusterBay(row,subtype):null;
+  var clusterBay=subtype?findSubtypeClusterBay(row,subtype,group,sku):null;
   var targetBay=clusterBay!=null?clusterBay:suggestBay(row,pct);
   var isFG=(row==='F'||row==='G');
   var loc=findNearestEmpty(row,targetBay,spaces||1,pct,sku,isFG);
