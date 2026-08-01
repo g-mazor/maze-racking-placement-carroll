@@ -162,6 +162,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
 <button class="btn" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
 <button class="btn" onclick="undoLast()">Undo</button>
+<button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="testPickerLogin()">👷 Test Picker Login (Step 1)</button>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -379,6 +380,20 @@ var USERS={
   '2005':'Jude'
 };
 var currentUser=null;
+var PICKERS={
+  '1982':'Tom'
+};
+var currentPicker=null;
+// STEP 1 TEST ONLY: just proves the login check works, with zero changes to the
+// existing page. Safe to test freely -- does not touch or hide anything.
+function testPickerLogin(){
+  var entered=prompt('Enter your picker code:');
+  if(entered===null)return;
+  var name=PICKERS[entered.trim()];
+  if(!name){alert('Code not recognized.');return;}
+  currentPicker=name;
+  alert('Logged in as picker: '+name);
+}
 function requirePin(cb){
   if(currentUser){cb();return;}
   var entered=prompt('Enter your 4-digit code to make changes:');
