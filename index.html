@@ -57,7 +57,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .rcv-item .rcv-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .rcv-item .rcv-meta{color:#777;font-size:10px;margin-top:2px}
 .rcv-item .rcv-actions{margin-top:5px;display:flex;gap:6px}
-.ww{overflow-x:auto;background:#FFF;border:1px solid #DDD;border-radius:8px;padding:8px}
+.ww{position:relative;overflow-x:auto;background:#FFF;border:1px solid #DDD;border-radius:8px;padding:8px}
 .wh{min-width:680px}
 .zt{display:flex;gap:6px;margin-bottom:5px}
 .fb{background:#F0F8F0;border:1.5px solid #27AE60;border-radius:6px;padding:5px 7px}
@@ -682,11 +682,12 @@ function formatMinSec(totalSeconds){
 function showPickerStats(){
   var sessions=getPickerSessions();
   var body=document.getElementById('pickerStatsBody');
+  var liveBtn='<button class="btn btn-blue" style="width:100%;box-sizing:border-box;margin-bottom:10px" onclick="showLiveOrTodayMap()">🔴 Show live / today\'s map</button>';
   var explainer='<div style="font-size:10px;color:#888;margin-bottom:8px">Each session below is one login-to-logout shift. "Estimated" = expected time for that pick, based on the walking distance between the two locations (using bridge shortcuts where available) plus ~20s to grab the item. "Slower than estimate" means the actual gap was notably longer than that prediction.</div>';
   if(!sessions.length){
-    body.innerHTML=explainer+'<div style="font-size:12px;color:#777">No picker sessions recorded yet.</div>';
+    body.innerHTML=liveBtn+explainer+'<div style="font-size:12px;color:#777">No picker sessions recorded yet.</div>';
   } else {
-    body.innerHTML=explainer+sessions.map(function(s){
+    body.innerHTML=liveBtn+explainer+sessions.map(function(s){
       var ratio=(s.avgActual!=null&&s.avgEstimated)?(s.avgActual/s.avgEstimated):null;
       var speedLabel=ratio==null?'Not enough consecutive picks yet to estimate pace.':(ratio<0.85?'Faster than estimate':ratio>1.15?'Slower than estimate':'About as expected');
       var speedColor=ratio==null?'#777':(ratio<0.85?'#1E8449':ratio>1.15?'#A32D2D':'#7A4E00');
@@ -742,11 +743,11 @@ function drawWalkMapOverlay(wwEl,picks,user){
   var wwRect=wwEl.getBoundingClientRect();
   var overlay=document.createElement('div');
   overlay.id='walkMapOverlay';
-  overlay.style.cssText='position:absolute;left:'+(wwRect.left+window.scrollX)+'px;top:'+(wwRect.top+window.scrollY)+'px;width:'+wwRect.width+'px;height:'+wwRect.height+'px;pointer-events:none;z-index:2500;';
+  overlay.style.cssText='position:absolute;left:0;top:0;width:'+wwEl.scrollWidth+'px;height:'+wwEl.scrollHeight+'px;pointer-events:none;z-index:2500;';
 
   var svgNS='http://www.w3.org/2000/svg';
   var svg=document.createElementNS(svgNS,'svg');
-  svg.setAttribute('width',wwRect.width);svg.setAttribute('height',wwRect.height);
+  svg.setAttribute('width',wwEl.scrollWidth);svg.setAttribute('height',wwEl.scrollHeight);
   svg.style.cssText='position:absolute;left:0;top:0;overflow:visible;';
 
   var plotted=[];
@@ -754,7 +755,10 @@ function drawWalkMapOverlay(wwEl,picks,user){
     var cell=document.getElementById('c_'+p.loc);
     if(!cell)return;
     var r=cell.getBoundingClientRect();
-    plotted.push({x:r.left+r.width/2-wwRect.left,y:r.top+r.height/2-wwRect.top,ts:p.ts,loc:p.loc});
+    // Position relative to .ww's own scrollable content, not the page -- so the
+    // dots stay physically locked to their cells regardless of how the grid is
+    // scrolled afterward (this container scrolls independently of the page).
+    plotted.push({x:r.left+r.width/2-wwRect.left+wwEl.scrollLeft,y:r.top+r.height/2-wwRect.top+wwEl.scrollTop,ts:p.ts,loc:p.loc});
   });
 
   var svgContent='';
@@ -777,7 +781,7 @@ function drawWalkMapOverlay(wwEl,picks,user){
   });
   svg.innerHTML=svgContent;
   overlay.appendChild(svg);
-  document.body.appendChild(overlay);
+  wwEl.appendChild(overlay);
 
   var ctrl=document.getElementById('walkMapCtrl');
   if(!ctrl){
@@ -832,6 +836,27 @@ function showWalkMapForSession(user,loginTs){
   if(!session){alert('Session not found.');return;}
   document.getElementById('pickerStatsPanel').style.display='none';
   renderWalkMapOnRealGrid(session.picks,user);
+}
+
+// Shows whichever picker is currently mid-shift (still logged in) if any --
+// otherwise falls back to everyone's combined picks from today so far.
+function showLiveOrTodayMap(){
+  var sessions=getPickerSessions();
+  var ongoing=sessions.filter(function(s){return s.ongoing;});
+  document.getElementById('pickerStatsPanel').style.display='none';
+  if(ongoing.length){
+    var s=ongoing[0];
+    renderWalkMapOnRealGrid(s.picks,s.user+' (live now)');
+    return;
+  }
+  var startOfDay=new Date();startOfDay.setHours(0,0,0,0);
+  var todayPicks=[];
+  sessions.forEach(function(sess){
+    sess.picks.forEach(function(p){if(p.ts>=startOfDay.getTime())todayPicks.push(p);});
+  });
+  todayPicks.sort(function(a,b){return a.ts-b.ts;});
+  if(!todayPicks.length){alert('No picks recorded today yet.');return;}
+  renderWalkMapOnRealGrid(todayPicks,'Today (all pickers)');
 }
 
 function doResetAll(){
