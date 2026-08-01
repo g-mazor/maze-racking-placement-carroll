@@ -143,8 +143,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </style>
 </head>
 <body>
-<div style="text-align:right;margin-bottom:4px"><button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button></div>
-<div id="staffView">
 <div style="display:flex;align-items:center;gap:14px;margin-bottom:2px">
 <img src="maze-logo.jpg" alt="Maze" style="height:48px;display:block">
 <img src="keter-logo.png" alt="Keter" style="height:48px;display:block">
@@ -186,18 +184,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="ob">Offices / Showroom / Tea room | Small van pick-up | Forklift zone</div>
 </div></div>
 <div class="leg"><div class="li"><div class="ld" style="background:#1D9E75"></div>Compost</div><div class="li"><div class="ld" style="background:#2980B9"></div>Keter Group</div><div class="li"><div class="ld" style="background:#C0561A"></div>Sheds</div><div class="li"><div class="ld" style="background:#8E44AD"></div>Canopia</div><div class="li"><div class="ld" style="background:#27AE60"></div>Greenhouses</div><div class="li"><div class="ld" style="background:#BA7517"></div>Tanks</div><div class="li"><div class="ld" style="background:#1F4E79"></div>Watering</div><div class="li"><div class="ld" style="background:#7F3F00"></div>Lechuza</div><div class="li"><div class="ld" style="background:#374A5C"></div>Planters</div><div class="li"><div class="ld" style="background:#375623"></div>Garden</div><div class="li"><div class="ld" style="background:#595959"></div>Home</div><div class="li"><div class="ld" style="background:#FFE699;border:1px solid #DDD"></div>Forklift Aisle</div><div class="li"><div class="ld" style="background:#A9DFBF;border:1px solid #DDD"></div>Picker Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(90deg,#2980B9,#2980B9 5px,#FFF 5px,#FFF 6px);border:1px solid #CCC"></div>Pedestrian Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(45deg,#111,#111 3px,#F5D700 3px,#F5D700 6px);border:1px solid #000"></div>Roller Door</div><div class="li"><div class="ld" style="background:#E8E8E8;border:1px solid #CCC"></div>Empty</div><div class="li"><div class="ld" style="background:#E24B4A;border:1px solid #A32D2D"></div>Selected</div><div class="li"><div class="ld" style="background:#A8D8FF;border:1px solid 1px dashed #2980B9"></div>Drop target</div></div>
-</div>
-<div id="pickerPanel" style="display:none;max-width:480px;margin:20px auto;text-align:left">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-    <img src="maze-logo.jpg" alt="Maze" style="height:36px;display:block">
-    <div style="font-size:16px;font-weight:700;color:#1F3864">Hi <span id="pickerName"></span> -- Confirm Pick</div>
-  </div>
-  <div style="text-align:center;margin-bottom:6px;color:#555">Scan or type a location code, then press Enter</div>
-  <input id="pickerScanInput" type="text" placeholder="e.g. A-B12-L1" autocomplete="off"
-    style="width:100%;padding:12px 14px;border-radius:6px;border:2px solid #2980B9;font-size:16px;box-sizing:border-box"/>
-  <div id="pickerScanResult" style="margin-top:10px"></div>
-  <div style="text-align:center;margin-top:16px"><span style="text-decoration:underline;cursor:pointer;color:#888" onclick="exitPickerMode()">Log out</span></div>
-</div>
+<div class="tt" id="tt"></div>
 <div id="sind">Saved!</div>
 <div class="mbg" id="mbg"><div class="mdl"><h3 id="mt"></h3><p id="mm"></p><div class="mdb"><button class="btn" onclick="cM()">Cancel</button><button class="btn btn-red" onclick="cfM()">OK</button></div></div></div>
 <script>
@@ -364,7 +351,7 @@ function applyC(c,rec){
   else if(c.type==='receiveresolve'){RECEIVED=RECEIVED.filter(function(r){return r.id!==c.id;});}
   else if(c.type==='pick'){QTY[c.loc]=c.remainingQty;}
   if(rec){
-    if((currentPicker||currentUser)&&!c.user)c.user=currentPicker||currentUser;
+    if(currentUser&&!c.user)c.user=currentUser;
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
@@ -392,10 +379,6 @@ var USERS={
   '2005':'Jude'
 };
 var currentUser=null;
-var PICKERS={
-  '1982':'Tom'
-};
-var currentPicker=null;
 function requirePin(cb){
   if(currentUser){cb();return;}
   var entered=prompt('Enter your 4-digit code to make changes:');
@@ -1658,11 +1641,7 @@ function enterConfirmPickMode(){
 }
 
 function handleScanForPick(rawCode){
-  handleScanForPickInPanel(rawCode,'pickScanResult');
-}
-
-function handleScanForPickInPanel(rawCode,resultId){
-  var result=document.getElementById(resultId);
+  var result=document.getElementById('pickScanResult');
   if(!rawCode)return;
   var parsed=parseHumanLocCode(rawCode);
   if(!parsed||!RS[parsed.row]){
@@ -1705,38 +1684,8 @@ function confirmPick(loc,sku){
   rebuildMap();
   speak('Confirmed. Picked '+picked+' of '+sku+'. '+remaining+' remaining.');
   si2('Picked '+picked+' of '+sku+' at '+fl(loc)+' -- '+remaining+' remaining');
-  ['pickScanResult','pickerScanResult'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='';});
-  ['pickScanInput','pickerScanInput'].forEach(function(id){var el=document.getElementById(id);if(el)el.focus();});
-}
-
-// ---------- Picker Mode: restricted login for warehouse pickers ----------
-// Pickers can ONLY confirm picks -- no placement, deletion, receiving, or manager
-// actions are reachable from this view.
-function enterPickerLogin(){
-  var entered=prompt('Enter your picker code:');
-  if(entered===null)return;
-  var name=PICKERS[entered.trim()];
-  if(!name){alert('Code not recognized.');return;}
-  currentPicker=name;
-  document.getElementById('staffView').style.display='none';
-  document.getElementById('pickerPanel').style.display='block';
-  document.getElementById('pickerName').textContent=name;
-  var inp=document.getElementById('pickerScanInput');
-  inp.value='';
-  inp.onkeydown=function(e){
-    if(e.key==='Enter'){
-      handleScanForPickInPanel(inp.value.trim(),'pickerScanResult');
-      inp.value='';
-    }
-  };
-  setTimeout(function(){inp.focus();},50);
-  si2('Logged in as picker: '+name);
-}
-
-function exitPickerMode(){
-  currentPicker=null;
-  document.getElementById('pickerPanel').style.display='none';
-  document.getElementById('staffView').style.display='block';
+  var resDiv=document.getElementById('pickScanResult');if(resDiv)resDiv.innerHTML='';
+  var inp=document.getElementById('pickScanInput');if(inp)inp.focus();
 }
 
 var si=document.getElementById('si'),al=document.getElementById('acl');
