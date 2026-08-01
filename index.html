@@ -431,6 +431,32 @@ var STAFF_ALWAYS_VISIBLE='#logoBar,#titleBar,.stats,.topbar,.ww,.leg';
 // the manager panel after the admin PIN). These must be explicitly re-hidden on
 // logout, NOT just "restored" -- restoring would make them fall back to visible.
 var STAFF_ON_DEMAND='#mb,#clog,#recvp,#rc,#mgrPanel';
+
+// Friendly time-of-day greeting shown on every login/logout, for any role.
+function getGreetingWord(){
+  var h=new Date().getHours();
+  if(h<12)return 'Good morning';
+  if(h<17)return 'Good afternoon';
+  if(h<21)return 'Good evening';
+  return 'Good night';
+}
+function showGreetingOverlay(message){
+  var old=document.getElementById('greetingOverlay');if(old)old.remove();
+  var el=document.createElement('div');
+  el.id='greetingOverlay';
+  el.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(31,56,100,0.94);color:#FFF;display:flex;align-items:center;justify-content:center;z-index:5000;text-align:center;padding:24px;box-sizing:border-box';
+  el.innerHTML='<div><div style="font-size:24px;font-weight:700;margin-bottom:16px">'+message+'</div>'+
+    '<div style="font-size:14px;text-decoration:underline;cursor:pointer;opacity:.85" onclick="document.getElementById(\'greetingOverlay\').remove()">Continue</div></div>';
+  document.body.appendChild(el);
+  setTimeout(function(){var e=document.getElementById('greetingOverlay');if(e)e.remove();},4000);
+}
+function loginGreeting(name){
+  showGreetingOverlay(getGreetingWord()+', '+name+'! Have a great '+(new Date().getHours()<17?'day':'shift')+'.');
+}
+function logoutGreeting(name){
+  showGreetingOverlay('Have a good night, '+name+'!<br>See you next time.');
+}
+
 function enterPickerLogin(){
   var entered=prompt('Enter your picker code:');
   if(entered===null)return;
@@ -438,6 +464,7 @@ function enterPickerLogin(){
   if(!name){alert('Code not recognized.');return;}
   currentPicker=name;
   applyC({type:'login',user:name,ts:Date.now()},true);
+  loginGreeting(name);
   document.querySelectorAll(STAFF_ALWAYS_VISIBLE+','+STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   document.getElementById('pickerName').textContent=name;
   document.getElementById('pickerPanel').style.display='block';
@@ -461,7 +488,7 @@ function enterPickerLogin(){
 }
 
 function exitPickerMode(){
-  if(currentPicker)applyC({type:'logout',user:currentPicker,ts:Date.now()},true);
+  if(currentPicker){applyC({type:'logout',user:currentPicker,ts:Date.now()},true);logoutGreeting(currentPicker);}
   currentPicker=null;
   document.getElementById('pickerPanel').style.display='none';
   document.querySelectorAll(STAFF_ALWAYS_VISIBLE).forEach(function(el){el.style.display='';});
@@ -481,12 +508,14 @@ function enterManagerLogin(){
   if(!name||MANAGER_NAMES.indexOf(name)<0){alert('Code not recognized.');return;}
   currentManager=name;
   currentUser=name;
+  loginGreeting(name);
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='';});
   document.getElementById('managerLoginPanel').style.display='block';
   si2('Logged in as '+name+' (manager)');
 }
 
 function exitManagerMode(){
+  if(currentManager)logoutGreeting(currentManager);
   currentManager=null;
   currentUser=null;
   document.getElementById('managerLoginPanel').style.display='none';
@@ -508,12 +537,14 @@ function enterForkliftLogin(){
   if(!name){alert('Code not recognized.');return;}
   currentForklift=name;
   currentUser=name;
+  loginGreeting(name);
   document.querySelectorAll('#btn-rv,#btn-rl,#btn-am,#btn-ap').forEach(function(el){el.style.display='';});
   document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='none';});
   document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   si2('Logged in as '+name+' (forklift/receiving)');
 }
 function exitForkliftMode(){
+  if(currentForklift)logoutGreeting(currentForklift);
   currentForklift=null;
   currentUser=null;
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
