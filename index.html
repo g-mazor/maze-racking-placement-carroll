@@ -396,19 +396,23 @@ var PICKERS={
   '1982':'Tom'
 };
 var currentPicker=null;
-// STEP 3 TEST: full Confirm Pick wiring inside the picker panel. Staff view
-// still stays visible too -- hiding it is Step 4, the last and smallest change.
-// STEP 4: hides the staff view (toolbar, grid, panels) for a logged-in picker --
-// nothing else reachable from Tom's screen. Only new/existing elements are
-// targeted by id/class here; no HTML structure is changed.
-var STAFF_HIDE_SELECTORS='#logoBar,#titleBar,.stats,.topbar,#mb,#clog,#recvp,#rc,#mgrPanel,.ww,.leg';
+// Restricted picker login: hides the whole staff interface, leaving only the
+// Confirm Pick panel reachable. On-demand panels (manager panel, change log,
+// pending list, detail card) are explicitly re-hidden on logout, not just
+// "restored" -- restoring would make them fall back to visible by default.
+// Always-visible staff elements: restored to normal display on logout.
+var STAFF_ALWAYS_VISIBLE='#logoBar,#titleBar,.stats,.topbar,.ww,.leg';
+// On-demand panels: hidden by default, only shown when explicitly opened (e.g.
+// the manager panel after the admin PIN). These must be explicitly re-hidden on
+// logout, NOT just "restored" -- restoring would make them fall back to visible.
+var STAFF_ON_DEMAND='#mb,#clog,#recvp,#rc,#mgrPanel';
 function enterPickerLogin(){
   var entered=prompt('Enter your picker code:');
   if(entered===null)return;
   var name=PICKERS[entered.trim()];
   if(!name){alert('Code not recognized.');return;}
   currentPicker=name;
-  document.querySelectorAll(STAFF_HIDE_SELECTORS).forEach(function(el){el.style.display='none';});
+  document.querySelectorAll(STAFF_ALWAYS_VISIBLE+','+STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   document.getElementById('pickerName').textContent=name;
   document.getElementById('pickerPanel').style.display='block';
   var inp=document.getElementById('pickerScanInput');
@@ -433,7 +437,8 @@ function enterPickerLogin(){
 function exitPickerMode(){
   currentPicker=null;
   document.getElementById('pickerPanel').style.display='none';
-  document.querySelectorAll(STAFF_HIDE_SELECTORS).forEach(function(el){el.style.display='';});
+  document.querySelectorAll(STAFF_ALWAYS_VISIBLE).forEach(function(el){el.style.display='';});
+  document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
 }
 function requirePin(cb){
   if(currentUser){cb();return;}
