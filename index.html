@@ -154,6 +154,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <button class="btn" onclick="toggleLog()">Log</button>
 <button class="btn btn-green" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
 <button class="btn btn-blue" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
+<button class="btn" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
 <button class="btn" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
 <button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
@@ -240,6 +241,7 @@ function postRemoteChange(change){
       '&contents='+encodeURIComponent(change.contents?JSON.stringify(change.contents):'')+
       '&id='+encodeURIComponent(change.id||'')+
       '&note='+encodeURIComponent(change.note||'')+
+      '&remainingQty='+encodeURIComponent(change.remainingQty!=null?String(change.remainingQty):'')+
       '&t='+Date.now();
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
@@ -347,6 +349,7 @@ function applyC(c,rec){
   else if(c.type==='mixedset'){MIXED_CONTENTS[c.loc]=c.contents||[];}
   else if(c.type==='receive'){RECEIVED.push({id:c.id,sku:c.sku,qty:c.qty,note:c.note||'',ts:c.ts||Date.now(),user:c.user||''});}
   else if(c.type==='receiveresolve'){RECEIVED=RECEIVED.filter(function(r){return r.id!==c.id;});}
+  else if(c.type==='pick'){QTY[c.loc]=c.remainingQty;}
   if(rec){
     if(currentUser&&!c.user)c.user=currentUser;
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
@@ -364,6 +367,7 @@ function fmtLog(c){
   if(c.type==='add')return who+'ADDED '+c.sku+' ('+desc+') -- '+c.tl.length+' pallet space'+(c.tl.length>1?'s':'')+' at '+c.tl.map(fl).join(', ');
   if(c.type==='count')return who+'COUNTED '+c.sku+' at '+fl(c.loc)+': '+c.qty+' units';
   if(c.type==='receive')return who+'RECEIVED '+c.sku+' ('+desc+') -- qty '+c.qty+(c.note?' -- '+c.note:'')+' -- awaiting placement';
+  if(c.type==='pick')return who+'PICKED '+c.qty+' of '+c.sku+' at '+fl(c.loc)+' -- '+c.remainingQty+' remaining';
   if(c.type==='receiveresolve')return who+'PLACED goods-in item -- removed from received list';
   return '';
 }
@@ -1163,44 +1167,114 @@ function suggestBay(row,pct){
   var pos=Math.round(pct*(maxBay-1));
   return fastFromLow?(1+pos):(maxBay-pos);
 }
-function findNearestEmpty(row,targetBay,spaces,pct){
+
+// Groups visually/functionally similar products together within a row (sheds with
+// sheds, storage boxes with storage boxes, etc.) rather than one smooth velocity
+// gradient across totally different item types.
+var SUBTYPE_PATTERNS=[
+  [/\bSHED\b|CABIN\b/,'SHED'],
+  [/STORAGE BOX|DECK BOX|GLENWOOD|CORTINA|DARWIN BOX|NORTHWOOD|SPRINGWOOD|WESTWOOD|EASTWOOD|BRIGHTWOOD|ONTARIO|SUMATRA|CAPRI BOX|VENETIAN|NOVEL BOX|URBAN BOX|PREMIER BOX|PARCEL BOX|SCUBA BOX|BI-BOX/,'STORAGE BOX'],
+  [/\bBIN\b/,'BIN'],
+  [/CHAIR|ARMCHAIR|ROCKING|\bSTOOL\b/,'CHAIR'],
+  [/\bTABLE\b/,'TABLE'],
+  [/CABINET/,'CABINET'],
+  [/BASKET|HAMPER/,'LAUNDRY'],
+  [/PLANTER|FLOWER POT|\bPOT\b/,'PLANTER'],
+  [/TUMBLER|COMPOSTER|COMPOST BIN/,'COMPOST BIN'],
+  [/WORM FARM/,'WORM FARM'],
+  [/GREENHOUSE|TUNNEL|CROP CAGE/,'GREENHOUSE'],
+  [/SOFA|LOUNGE|SUNLOUNGER/,'LOUNGE'],
+  [/BENCH/,'BENCH']
+];
+function detectSubtype(desc){
+  if(!desc)return null;
+  var d=desc.toUpperCase();
+  for(var i=0;i<SUBTYPE_PATTERNS.length;i++){
+    if(SUBTYPE_PATTERNS[i][0].test(d))return SUBTYPE_PATTERNS[i][1];
+  }
+  return null;
+}
+function findSubtypeClusterBay(row,subtype){
+  var bays=[];
+  Object.keys(LOC).forEach(function(loc){
+    if(loc[0]!==row)return;
+    var sku=LOC[loc];if(sku==='MIXED')return;
+    var v=DATA.d[sku];if(!v)return;
+    if(detectSubtype(v[4])===subtype)bays.push(parseInt(loc.split('-')[1],10));
+  });
+  if(!bays.length)return null;
+  bays.sort(function(a,b){return a-b;});
+  return bays[Math.floor(bays.length/2)];
+}
+
+function searchBaysAtLevel(row,targetBay,lvl,spaces){
   var spec=RS[row];
-  var isFast=(pct!=null&&pct<=0.2);
-  var startLvl=(spaces>1&&!isFast)?2:1; // fast movers keep full level-1 access regardless of size; everything else keeps level 1 to one pallet per SKU
-  for(var lvl=startLvl;lvl<=spec.l;lvl++){
-    for(var delta=0;delta<spec.b;delta++){
-      var cands=[targetBay-delta,targetBay+delta].filter(function(b){return b>=1&&b<=spec.b;});
-      if(delta===0)cands=[targetBay];
-      for(var ci=0;ci<cands.length;ci++){
-        var bay=cands[ci];
-        if(lvl>getLevelsForBay(row,bay))continue;
-        if(isBridgeBay(row,bay)&&isBridgeEmptyLevel(row,bay,lvl))continue;
-        var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
-        for(var si=0;si<sides.length;si++){
-          var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lvl+'-'+sides[si];
-          if(!LOC[loc]){
-            if(spaces<=1)return loc;
-            var seq=findSeq(loc,spaces);
-            if(seq)return seq[0];
-          }
+  for(var delta=0;delta<spec.b;delta++){
+    var cands=[targetBay-delta,targetBay+delta].filter(function(b){return b>=1&&b<=spec.b;});
+    if(delta===0)cands=[targetBay];
+    for(var ci=0;ci<cands.length;ci++){
+      var bay=cands[ci];
+      if(lvl>getLevelsForBay(row,bay))continue;
+      if(isBridgeBay(row,bay)&&isBridgeEmptyLevel(row,bay,lvl))continue;
+      var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
+      for(var si=0;si<sides.length;si++){
+        var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lvl+'-'+sides[si];
+        if(!LOC[loc]){
+          if(spaces<=1)return loc;
+          var seq=findSeq(loc,spaces);
+          if(seq)return seq[0];
         }
       }
     }
   }
   return null;
 }
+
+function findNearestEmpty(row,targetBay,spaces,pct,sku,isFG){
+  var spec=RS[row];
+  if(isFG){
+    // F/G: every level is open to any SKU (no per-SKU cap) -- but fast movers are
+    // searched from the bottom up, slow movers from the top down, so speed still
+    // biases toward the floor without hard-blocking anything.
+    var slow=(pct!=null&&pct>=0.5);
+    var levels=[];
+    if(slow){for(var lv=spec.l;lv>=1;lv--)levels.push(lv);}
+    else{for(var lv2=1;lv2<=spec.l;lv2++)levels.push(lv2);}
+    for(var li=0;li<levels.length;li++){
+      var found=searchBaysAtLevel(row,targetBay,levels[li],spaces);
+      if(found)return found;
+    }
+    return null;
+  }
+  // All other rows: level 1 is capped at one pallet-space per SKU, total, across
+  // every existing placement of that SKU -- not just this one request. The first
+  // pallet of a SKU goes to level 1 for easy picking; a second pallet of the same
+  // SKU (or any multi-space request) goes straight to level 2+.
+  var existingLevel1=sku?(SLOC[sku]||[]).filter(function(l){return l[0]===row&&l.split('-')[2]==='1';}).length:0;
+  var canUseLevel1=(spaces<=1)&&(existingLevel1===0);
+  var startLvl=canUseLevel1?1:2;
+  for(var lvl3=startLvl;lvl3<=spec.l;lvl3++){
+    var found2=searchBaysAtLevel(row,targetBay,lvl3,spaces);
+    if(found2)return found2;
+  }
+  return null;
+}
+
 function suggestLocationFor(sku,spaces){
   var v=DATA.d[sku];if(!v)return null;
   var group=v[5];var row=pickRowForGroup(group);
   if(!row)return null;
   var pct=velocityPercentile(sku);
-  var targetBay=suggestBay(row,pct);
-  var loc=findNearestEmpty(row,targetBay,spaces||1,pct);
+  var subtype=detectSubtype(v[4]);
+  var clusterBay=subtype?findSubtypeClusterBay(row,subtype):null;
+  var targetBay=clusterBay!=null?clusterBay:suggestBay(row,pct);
+  var isFG=(row==='F'||row==='G');
+  var loc=findNearestEmpty(row,targetBay,spaces||1,pct,sku,isFG);
   if(!loc)return null;
   var parts=loc.split('-');
   var bay=parseInt(parts[1],10);var level=parts[2];
   var label=pct<=0.2?'fast mover':pct>=0.8?'slow mover':'mid-range mover';
-  return {row:row,bay:bay,level:level,loc:loc,code:fl(loc),reason:label+' in '+group};
+  return {row:row,bay:bay,level:level,loc:loc,code:fl(loc),reason:label+' in '+group+(subtype?' ('+subtype+' cluster)':'')};
 }
 function highlightSuggested(loc){
   var c=document.getElementById('c_'+loc);
@@ -1500,6 +1574,90 @@ function speakSkuInfo(sku){
   var total=0;
   locs.forEach(function(l){total+=(QTY[l]||0);});
   speak(sku+'. '+v[4]+'. '+total+' units in the Carroll Road warehouse, in '+locs.length+' location'+(locs.length!==1?'s':'')+'.');
+}
+
+// ---------- Phase 1: Confirm pick via scan ----------
+// Parses a ground-level label code like "A-B12-L1" (matches the printed QR labels).
+function parseHumanLocCode(code){
+  var m=code.trim().toUpperCase().match(/^([A-Z]{1,2})-B(\d+)-L(\d+)$/);
+  if(!m)return null;
+  return {row:m[1],bay:parseInt(m[2],10),level:parseInt(m[3],10)};
+}
+
+function locsForBayLevel(row,bay,level){
+  var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
+  return sides.map(function(s){return row+'-'+String(bay).padStart(2,'0')+'-'+level+'-'+s;});
+}
+
+function enterConfirmPickMode(){
+  if(mode==='pickscan'){setNorm();return;}
+  requirePin(function(){
+    mode='pickscan';
+    mb.style.display='block';mb.className='am';mb.onclick=null;
+    mb.innerHTML='<div style="max-width:420px;margin:0 auto;text-align:left">'+
+      '<div style="text-align:center;margin-bottom:6px">Scan or type a location code, then press Enter</div>'+
+      '<input id="pickScanInput" type="text" placeholder="e.g. A-B12-L1" autocomplete="off" '+
+      'style="width:100%;padding:9px 12px;border-radius:6px;border:1.5px solid #2980B9;font-size:14px;box-sizing:border-box"/>'+
+      '<div id="pickScanResult" style="margin-top:8px"></div>'+
+      '<div style="text-align:center;margin-top:6px"><span style="text-decoration:underline;cursor:pointer" onclick="setNorm()">Cancel</span></div>'+
+      '</div>';
+    var inp=document.getElementById('pickScanInput');
+    inp.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){
+        handleScanForPick(inp.value.trim());
+        inp.value='';
+      }
+    });
+    setTimeout(function(){inp.focus();},50);
+  });
+}
+
+function handleScanForPick(rawCode){
+  var result=document.getElementById('pickScanResult');
+  if(!rawCode)return;
+  var parsed=parseHumanLocCode(rawCode);
+  if(!parsed||!RS[parsed.row]){
+    result.innerHTML='<div style="color:#A32D2D;font-size:12px">Could not read that code. Expected a format like A-B12-L1.</div>';
+    speak('Could not read that location code.');
+    return;
+  }
+  var candidateLocs=locsForBayLevel(parsed.row,parsed.bay,parsed.level);
+  var occupied=candidateLocs.filter(function(l){return LOC[l];});
+  if(!occupied.length){
+    result.innerHTML='<div style="color:#A32D2D;font-size:12px">No SKU found at '+parsed.row+'-B'+parsed.bay+'-L'+parsed.level+'.</div>';
+    speak('No SKU found at that location.');
+    return;
+  }
+  result.innerHTML=occupied.map(function(loc){
+    var sku=LOC[loc];var v=DATA.d[sku];
+    var currentQty=QTY[loc]!=null?QTY[loc]:0;
+    return '<div style="background:#FFF;border:1px solid #DDD;border-radius:6px;padding:10px;font-size:12px;margin-bottom:6px">'+
+      '<strong>'+sku+'</strong> -- '+(v?v[4]:'')+'<br>'+
+      'At '+fl(loc)+' -- current count: '+currentQty+'<br>'+
+      '<div style="margin-top:6px">Qty picked: <input id="pickQtyInput_'+loc+'" type="number" min="1" value="1" style="width:70px;padding:4px"/> '+
+      '<button class="btn btn-green" onclick="confirmPick(\''+loc+'\',\''+sku+'\')">Confirm pick</button></div>'+
+      '</div>';
+  }).join('');
+  if(occupied.length===1){
+    var sku0=LOC[occupied[0]];var v0=DATA.d[sku0];
+    speak(sku0+'. '+(v0?v0[4]:'')+'. Currently '+(QTY[occupied[0]]||0)+' units.');
+  } else {
+    speak('Found '+occupied.length+' items at this location.');
+  }
+}
+
+function confirmPick(loc,sku){
+  var qtyInput=document.getElementById('pickQtyInput_'+loc);
+  var picked=parseInt(qtyInput.value,10);
+  if(isNaN(picked)||picked<=0){alert('Enter a valid quantity picked.');return;}
+  var currentQty=QTY[loc]!=null?QTY[loc]:0;
+  var remaining=Math.max(0,currentQty-picked);
+  applyC({type:'pick',sku:sku,loc:loc,qty:picked,remainingQty:remaining},true);
+  rebuildMap();
+  speak('Confirmed. Picked '+picked+' of '+sku+'. '+remaining+' remaining.');
+  si2('Picked '+picked+' of '+sku+' at '+fl(loc)+' -- '+remaining+' remaining');
+  var resDiv=document.getElementById('pickScanResult');if(resDiv)resDiv.innerHTML='';
+  var inp=document.getElementById('pickScanInput');if(inp)inp.focus();
 }
 
 var si=document.getElementById('si'),al=document.getElementById('acl');
