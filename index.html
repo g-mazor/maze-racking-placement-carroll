@@ -196,12 +196,12 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div id="pickerStatsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerStatsPanel').style.display='none'">Close</div>
 </div>
-<div id="pickerMapPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:640px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:85vh;overflow-y:auto">
+<div id="pickerMapPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:420px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100">
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:8px">Picker Walking Map</div>
   <select id="pickerMapUserSelect" style="width:100%;padding:6px;border-radius:6px;border:1px solid #CCC;font-size:13px;margin-bottom:8px"></select>
-  <div id="pickerMapInfo" style="font-size:11px;color:#555;margin-bottom:6px"></div>
-  <div id="pickerMapSvgContainer"></div>
-  <div style="font-size:10px;color:#777;margin-top:8px">🟢 pick, numbered in order &nbsp; 🔴 most recent pick &nbsp; ┊ yellow dashed = bridge crossing</div>
+  <div id="pickerMapInfo" style="font-size:11px;color:#555;margin-bottom:8px"></div>
+  <button class="btn btn-blue" style="width:100%;box-sizing:border-box" onclick="confirmShowWalkMap()">Show on map</button>
+  <div style="font-size:10px;color:#777;margin-top:8px">🟢 pick, numbered in order &nbsp; 🔴 most recent pick, with the time it happened</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerMapPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
@@ -530,20 +530,27 @@ function computePickerStats(){
   return stats;
 }
 
+function formatMinSec(totalSeconds){
+  var mins=Math.floor(totalSeconds/60);
+  var secs=Math.round(totalSeconds%60);
+  return mins>0?(mins+'m '+secs+'s'):(secs+'s');
+}
+
 function showPickerStats(){
   var stats=computePickerStats();
   var body=document.getElementById('pickerStatsBody');
+  var explainer='<div style="font-size:10px;color:#888;margin-bottom:8px">"Estimated" = expected time for that pick, based on the walking distance between the two locations (using bridge shortcuts where available) plus ~20s to grab the item. "Slower than estimate" means the actual gap was notably longer than that prediction.</div>';
   if(!stats.length){
-    body.innerHTML='<div style="font-size:12px;color:#777">No pick data recorded yet.</div>';
+    body.innerHTML=explainer+'<div style="font-size:12px;color:#777">No pick data recorded yet.</div>';
   } else {
-    body.innerHTML=stats.map(function(s){
+    body.innerHTML=explainer+stats.map(function(s){
       var ratio=(s.avgActual!=null&&s.avgEstimated)?(s.avgActual/s.avgEstimated):null;
       var speedLabel=ratio==null?'Not enough consecutive picks yet to estimate pace.':(ratio<0.85?'Faster than estimate':ratio>1.15?'Slower than estimate':'About as expected');
       var speedColor=ratio==null?'#777':(ratio<0.85?'#1E8449':ratio>1.15?'#A32D2D':'#7A4E00');
       return '<div style="background:#F8F9FA;border:1px solid #DDD;border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:12px">'+
         '<strong>'+s.user+'</strong> -- '+s.totalPicks+' pick'+(s.totalPicks>1?'s':'')+'<br>'+
         (s.avgActual!=null?
-          'Avg actual: <strong>'+(s.avgActual/60).toFixed(1)+' min/pick</strong> | Estimated: '+(s.avgEstimated/60).toFixed(1)+' min/pick<br><span style="color:'+speedColor+';font-weight:600">'+speedLabel+'</span>'
+          'Avg actual: <strong>'+formatMinSec(s.avgActual)+'/pick</strong> | Estimated: '+formatMinSec(s.avgEstimated)+'/pick<br><span style="color:'+speedColor+';font-weight:600">'+speedLabel+'</span>'
           :'<span style="color:#777">'+speedLabel+'</span>')+
         '</div>';
     }).join('');
@@ -565,52 +572,68 @@ function getPicksByUser(){
   return byUser;
 }
 
-// Draws the picker's actual walked sequence across rows A-D as a simple
-// schematic diagram -- lets a manager visually sanity-check the route/direction
-// choices rather than just reading a table of numbers.
-function renderPickerWalkMapSVG(picks){
-  var rows=['A','B','C','D'];
-  var rowY={};rows.forEach(function(r,i){rowY[r]=50+i*55;});
-  var w=760,h=50+rows.length*55+20;
-  var xForBay=function(bay){return 70+(bay-1)*((w-110)/41);};
-  var svg='<svg viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#FAFAFA;border-radius:6px">';
-  rows.forEach(function(r){
-    var y=rowY[r];
-    svg+='<line x1="70" y1="'+y+'" x2="'+(w-40)+'" y2="'+y+'" stroke="#CCC" stroke-width="3"/>';
-    svg+='<text x="30" y="'+(y+4)+'" font-size="13" font-weight="700" fill="#1F3864">'+r+'</text>';
+// Draws the picker's actual walked sequence directly on top of the REAL
+// warehouse grid (minimized so the whole thing fits on screen), rather than a
+// separate simplified diagram -- lets a manager see exactly where things are.
+function renderWalkMapOnRealGrid(picks,user){
+  var wwEl=document.querySelector('.ww');
+  wwEl.style.transform='scale(0.35)';
+  wwEl.style.transformOrigin='top left';
+
+  var oldOverlay=document.getElementById('walkMapOverlay');if(oldOverlay)oldOverlay.remove();
+  var wwRect=wwEl.getBoundingClientRect();
+  var overlay=document.createElement('div');
+  overlay.id='walkMapOverlay';
+  overlay.style.cssText='position:absolute;left:'+(wwRect.left+window.scrollX)+'px;top:'+(wwRect.top+window.scrollY)+'px;width:'+wwRect.width+'px;height:'+wwRect.height+'px;pointer-events:none;z-index:2500;';
+
+  var svgNS='http://www.w3.org/2000/svg';
+  var svg=document.createElementNS(svgNS,'svg');
+  svg.setAttribute('width',wwRect.width);svg.setAttribute('height',wwRect.height);
+  svg.style.cssText='position:absolute;left:0;top:0;overflow:visible;';
+
+  var plotted=[];
+  picks.forEach(function(p){
+    var cell=document.getElementById('c_'+p.loc);
+    if(!cell)return;
+    var r=cell.getBoundingClientRect();
+    plotted.push({x:r.left+r.width/2-wwRect.left,y:r.top+r.height/2-wwRect.top,ts:p.ts,loc:p.loc});
   });
-  BRIDGE_CROSSING_BAYS.forEach(function(bx){
-    var x=xForBay(bx);
-    svg+='<line x1="'+x+'" y1="'+(rowY['A']-8)+'" x2="'+x+'" y2="'+(rowY['D']+8)+'" stroke="#D4AC0D" stroke-width="2" stroke-dasharray="4,3"/>';
-  });
-  var plotted=picks.filter(function(p){return rowY[p.loc[0]]!=null;});
-  for(var i=0;i<plotted.length;i++){
-    var p=plotted[i];var bay=parseInt(p.loc.split('-')[1],10);
-    var x=xForBay(bay),y=rowY[p.loc[0]];
-    if(i>0){
-      var prev=plotted[i-1];var pbay=parseInt(prev.loc.split('-')[1],10);
-      var px=xForBay(pbay),py=rowY[prev.loc[0]];
-      svg+='<line x1="'+px+'" y1="'+py+'" x2="'+x+'" y2="'+y+'" stroke="#2980B9" stroke-width="2" opacity="0.55"/>';
-    }
-    var isLast=(i===plotted.length-1);
-    svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(isLast?9:6)+'" fill="'+(isLast?'#E74C3C':'#27AE60')+'" stroke="#FFF" stroke-width="1.5"/>';
-    svg+='<text x="'+x+'" y="'+(y-13)+'" font-size="9" text-anchor="middle" fill="#444">'+(i+1)+'</text>';
+
+  var svgContent='';
+  for(var i=1;i<plotted.length;i++){
+    svgContent+='<line x1="'+plotted[i-1].x+'" y1="'+plotted[i-1].y+'" x2="'+plotted[i].x+'" y2="'+plotted[i].y+'" stroke="#2980B9" stroke-width="2.5" opacity="0.7"/>';
   }
-  svg+='</svg>';
-  return svg;
+  plotted.forEach(function(p,i){
+    var isLast=(i===plotted.length-1);
+    svgContent+='<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(isLast?15:10)+'" fill="'+(isLast?'#E74C3C':'#27AE60')+'" stroke="#FFF" stroke-width="2.5"/>';
+    svgContent+='<text x="'+p.x+'" y="'+(p.y+5)+'" font-size="'+(isLast?14:12)+'" text-anchor="middle" fill="#FFF" font-weight="700">'+(i+1)+'</text>';
+    if(isLast){
+      var timeStr=new Date(p.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      svgContent+='<rect x="'+(p.x-38)+'" y="'+(p.y+20)+'" width="76" height="22" rx="4" fill="#E74C3C"/>';
+      svgContent+='<text x="'+p.x+'" y="'+(p.y+35)+'" font-size="13" text-anchor="middle" fill="#FFF" font-weight="700">'+timeStr+'</text>';
+    }
+  });
+  svg.innerHTML=svgContent;
+  overlay.appendChild(svg);
+  document.body.appendChild(overlay);
+
+  var ctrl=document.getElementById('walkMapCtrl');
+  if(!ctrl){
+    ctrl=document.createElement('div');
+    ctrl.id='walkMapCtrl';
+    ctrl.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#1F3864;color:#FFF;padding:9px 18px;border-radius:20px;z-index:2600;font-size:12px;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.35)';
+    document.body.appendChild(ctrl);
+  }
+  var lastTxt=plotted.length?(' -- last pick '+new Date(plotted[plotted.length-1].ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})):'';
+  ctrl.innerHTML='Walking map: <strong>'+user+'</strong>'+lastTxt+' &nbsp; <span style="text-decoration:underline;cursor:pointer" onclick="exitWalkMapView()">Exit</span>';
+  ctrl.style.display='block';
 }
 
-function renderPickerWalkMapFor(user){
-  var byUser=getPicksByUser();
-  var picks=byUser[user]||[];
-  document.getElementById('pickerMapSvgContainer').innerHTML=renderPickerWalkMapSVG(picks);
-  var info='No picks recorded for '+user+' yet.';
-  if(picks.length){
-    var last=picks[picks.length-1];
-    var minsAgo=Math.round((Date.now()-last.ts)/60000);
-    info=picks.length+' pick'+(picks.length>1?'s':'')+' recorded. Last pick: '+(minsAgo<1?'just now':minsAgo+' min ago')+' -- '+last.qty+' of '+picks[picks.length-1].loc;
-  }
-  document.getElementById('pickerMapInfo').textContent=info;
+function exitWalkMapView(){
+  var wwEl=document.querySelector('.ww');
+  wwEl.style.transform='';wwEl.style.transformOrigin='';
+  var overlay=document.getElementById('walkMapOverlay');if(overlay)overlay.remove();
+  var ctrl=document.getElementById('walkMapCtrl');if(ctrl)ctrl.style.display='none';
 }
 
 function showPickerWalkMap(){
@@ -619,20 +642,28 @@ function showPickerWalkMap(){
   var sel=document.getElementById('pickerMapUserSelect');
   if(!users.length){
     sel.innerHTML='<option>No pickers yet</option>';
-    document.getElementById('pickerMapSvgContainer').innerHTML='';
     document.getElementById('pickerMapInfo').textContent='No pick data recorded yet.';
     document.getElementById('pickerMapPanel').style.display='block';
     return;
   }
   users.sort(function(a,b){
-    var lastA=byUser[a][byUser[a].length-1].ts,lastB=byUser[b][byUser[b].length-1].ts;
-    return lastB-lastA;
+    return byUser[b][byUser[b].length-1].ts-byUser[a][byUser[a].length-1].ts;
   });
   sel.innerHTML=users.map(function(u){return '<option value="'+u+'">'+u+'</option>';}).join('');
   sel.value=users[0];
-  sel.onchange=function(){renderPickerWalkMapFor(sel.value);};
-  renderPickerWalkMapFor(users[0]);
+  sel.onchange=function(){
+    document.getElementById('pickerMapPanel').style.display='none';
+    renderWalkMapOnRealGrid(byUser[sel.value],sel.value);
+  };
+  document.getElementById('pickerMapInfo').textContent='Pick a picker, then tap "Show on map."';
   document.getElementById('pickerMapPanel').style.display='block';
+}
+
+function confirmShowWalkMap(){
+  var sel=document.getElementById('pickerMapUserSelect');
+  var byUser=getPicksByUser();
+  document.getElementById('pickerMapPanel').style.display='none';
+  renderWalkMapOnRealGrid(byUser[sel.value]||[],sel.value);
 }
 
 function doResetAll(){
