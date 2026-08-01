@@ -151,18 +151,20 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
-<button class="btn" onclick="toggleLog()">Log</button>
+<button class="btn fk-hide" onclick="toggleLog()">Log</button>
 <button class="btn btn-green" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
 <button class="btn btn-blue" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
-<button class="btn" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
+<button class="btn fk-hide" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
 <button class="btn" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
 <button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
-<button class="btn btn-red" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
-<button class="btn" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
-<button class="btn" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
-<button class="btn" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
-<button class="btn" onclick="undoLast()">Undo</button>
+<button class="btn btn-red fk-hide" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
+<button class="btn fk-hide" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
+<button class="btn fk-hide" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
+<button class="btn fk-hide" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
+<button class="btn fk-hide" onclick="undoLast()">Undo</button>
 <button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button>
+<button class="btn" style="background:#7D3C98;color:#FFF;font-size:11px" onclick="enterManagerLogin()">👔 Manager Login</button>
+<button class="btn" style="background:#B9770E;color:#FFF;font-size:11px" onclick="enterForkliftLogin()">🚜 Forklift Login</button>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -190,6 +192,12 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
   <button class="btn btn-red" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="doResetAll()">⚠️ Clear everything</button>
   <div style="text-align:center;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('mgrPanel').style.display='none'">Close</div>
+</div>
+<div id="managerLoginPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #7D3C98;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
+  <div style="font-size:11px;font-weight:700;color:#7D3C98;margin-bottom:8px">Manager view</div>
+  <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
+  <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="showPickerWalkMap()">🗺️ Picker Walking Map</button>
+  <div style="text-align:center;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="exitManagerMode()">Log out</div>
 </div>
 <div id="pickerStatsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
@@ -458,6 +466,51 @@ function exitPickerMode(){
   document.getElementById('pickerPanel').style.display='none';
   document.querySelectorAll(STAFF_ALWAYS_VISIBLE).forEach(function(el){el.style.display='';});
   document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
+}
+
+// Manager Login: restricted to oversight tools only (Picker Stats, Walking Map,
+// Clear actions) -- no placement/receiving/deletion tools reachable. The grid
+// itself stays visible since the Walking Map draws directly on top of it.
+var currentManager=null;
+var MANAGER_HIDE='#logoBar,#titleBar,.stats,.topbar';
+function enterManagerLogin(){
+  var entered=prompt('Enter your manager code:');
+  if(entered===null)return;
+  if(entered.trim()!==ADMIN_CODE){alert('Code not recognized.');return;}
+  currentManager='Manager';
+  document.querySelectorAll(MANAGER_HIDE).forEach(function(el){el.style.display='none';});
+  document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
+  document.getElementById('managerLoginPanel').style.display='block';
+}
+
+function exitManagerMode(){
+  currentManager=null;
+  document.getElementById('managerLoginPanel').style.display='none';
+  document.querySelectorAll(MANAGER_HIDE).forEach(function(el){el.style.display='';});
+}
+
+// Forklift/Receiver Login: restricted to Receive, Pending, Add pallet, and
+// Auto-place pending -- reuses an existing staff code (from USERS) rather than
+// a separate registry, and also sets currentUser so those actions don't
+// re-prompt for a code once logged in this way.
+var currentForklift=null;
+function enterForkliftLogin(){
+  if(currentForklift){exitForkliftMode();return;}
+  var entered=prompt('Enter your forklift/receiving code:');
+  if(entered===null)return;
+  var name=USERS[entered.trim()];
+  if(!name){alert('Code not recognized.');return;}
+  currentForklift=name;
+  currentUser=name;
+  document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='none';});
+  document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
+  si2('Logged in as '+name+' (forklift/receiving)');
+}
+function exitForkliftMode(){
+  currentForklift=null;
+  currentUser=null;
+  document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='';});
+  si2('Forklift session ended');
 }
 function requirePin(cb){
   if(currentUser){cb();return;}
