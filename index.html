@@ -396,6 +396,8 @@ function fmtLog(c){
   if(c.type==='count')return who+'COUNTED '+c.sku+' at '+fl(c.loc)+': '+c.qty+' units';
   if(c.type==='receive')return who+'RECEIVED '+c.sku+' ('+desc+') -- qty '+c.qty+(c.note?' -- '+c.note:'')+' -- awaiting placement';
   if(c.type==='pick')return who+'PICKED '+c.qty+' of '+c.sku+' at '+fl(c.loc)+' -- '+c.remainingQty+' remaining';
+  if(c.type==='login')return c.user+' LOGGED IN (picker session started)';
+  if(c.type==='logout')return c.user+' LOGGED OUT (picker session ended)';
   if(c.type==='receiveresolve')return who+'PLACED goods-in item -- removed from received list';
   return '';
 }
@@ -427,6 +429,7 @@ function enterPickerLogin(){
   var name=PICKERS[entered.trim()];
   if(!name){alert('Code not recognized.');return;}
   currentPicker=name;
+  applyC({type:'login',user:name,ts:Date.now()},true);
   document.querySelectorAll(STAFF_ALWAYS_VISIBLE+','+STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   document.getElementById('pickerName').textContent=name;
   document.getElementById('pickerPanel').style.display='block';
@@ -450,6 +453,7 @@ function enterPickerLogin(){
 }
 
 function exitPickerMode(){
+  if(currentPicker)applyC({type:'logout',user:currentPicker,ts:Date.now()},true);
   currentPicker=null;
   document.getElementById('pickerPanel').style.display='none';
   document.querySelectorAll(STAFF_ALWAYS_VISIBLE).forEach(function(el){el.style.display='';});
@@ -530,6 +534,56 @@ function computePickerStats(){
   return stats;
 }
 
+// Builds a per-shift breakdown using login/logout events as the boundaries --
+// each login/logout pair (or a still-open login) is one session, with its own
+// picks and stats, so a picker's daily numbers reset each shift while managers
+// keep a permanent log of every session.
+function getPickerSessions(){
+  var events={};
+  CHANGES.forEach(function(c){
+    if((c.type==='login'||c.type==='logout')&&c.user&&c.ts){
+      if(!events[c.user])events[c.user]=[];
+      events[c.user].push({type:c.type,ts:c.ts});
+    }
+  });
+  var byUserPicks={};
+  CHANGES.forEach(function(c){
+    if(c.type==='pick'&&c.user&&c.ts&&c.loc){
+      if(!byUserPicks[c.user])byUserPicks[c.user]=[];
+      byUserPicks[c.user].push({loc:c.loc,ts:c.ts,qty:c.qty});
+    }
+  });
+  var sessions=[];
+  Object.keys(events).forEach(function(user){
+    var evs=events[user].slice().sort(function(a,b){return a.ts-b.ts;});
+    var openLogin=null;
+    evs.forEach(function(e){
+      if(e.type==='login'){openLogin=e.ts;}
+      else if(e.type==='logout'&&openLogin!=null){
+        sessions.push({user:user,loginTs:openLogin,logoutTs:e.ts,ongoing:false});
+        openLogin=null;
+      }
+    });
+    if(openLogin!=null)sessions.push({user:user,loginTs:openLogin,logoutTs:null,ongoing:true});
+  });
+  sessions.forEach(function(s){
+    var picks=(byUserPicks[s.user]||[]).filter(function(p){
+      return p.ts>=s.loginTs&&(s.logoutTs==null||p.ts<=s.logoutTs);
+    }).sort(function(a,b){return a.ts-b.ts;});
+    s.picks=picks;
+    var gaps=[];
+    for(var i=1;i<picks.length;i++){
+      var actualSec=(picks[i].ts-picks[i-1].ts)/1000;
+      if(actualSec>900||actualSec<=0)continue;
+      gaps.push({actual:actualSec,estimated:estimateWalkSeconds(picks[i-1].loc,picks[i].loc)+PICK_HANDLING_SECONDS});
+    }
+    s.avgActual=gaps.length?gaps.reduce(function(a,g){return a+g.actual;},0)/gaps.length:null;
+    s.avgEstimated=gaps.length?gaps.reduce(function(a,g){return a+g.estimated;},0)/gaps.length:null;
+  });
+  sessions.sort(function(a,b){return b.loginTs-a.loginTs;});
+  return sessions;
+}
+
 function formatMinSec(totalSeconds){
   var mins=Math.floor(totalSeconds/60);
   var secs=Math.round(totalSeconds%60);
@@ -537,18 +591,22 @@ function formatMinSec(totalSeconds){
 }
 
 function showPickerStats(){
-  var stats=computePickerStats();
+  var sessions=getPickerSessions();
   var body=document.getElementById('pickerStatsBody');
-  var explainer='<div style="font-size:10px;color:#888;margin-bottom:8px">"Estimated" = expected time for that pick, based on the walking distance between the two locations (using bridge shortcuts where available) plus ~20s to grab the item. "Slower than estimate" means the actual gap was notably longer than that prediction.</div>';
-  if(!stats.length){
-    body.innerHTML=explainer+'<div style="font-size:12px;color:#777">No pick data recorded yet.</div>';
+  var explainer='<div style="font-size:10px;color:#888;margin-bottom:8px">Each session below is one login-to-logout shift. "Estimated" = expected time for that pick, based on the walking distance between the two locations (using bridge shortcuts where available) plus ~20s to grab the item. "Slower than estimate" means the actual gap was notably longer than that prediction.</div>';
+  if(!sessions.length){
+    body.innerHTML=explainer+'<div style="font-size:12px;color:#777">No picker sessions recorded yet.</div>';
   } else {
-    body.innerHTML=explainer+stats.map(function(s){
+    body.innerHTML=explainer+sessions.map(function(s){
       var ratio=(s.avgActual!=null&&s.avgEstimated)?(s.avgActual/s.avgEstimated):null;
       var speedLabel=ratio==null?'Not enough consecutive picks yet to estimate pace.':(ratio<0.85?'Faster than estimate':ratio>1.15?'Slower than estimate':'About as expected');
       var speedColor=ratio==null?'#777':(ratio<0.85?'#1E8449':ratio>1.15?'#A32D2D':'#7A4E00');
+      var loginStr=new Date(s.loginTs).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      var logoutStr=s.ongoing?'still logged in':new Date(s.logoutTs).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
       return '<div style="background:#F8F9FA;border:1px solid #DDD;border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:12px">'+
-        '<strong>'+s.user+'</strong> -- '+s.totalPicks+' pick'+(s.totalPicks>1?'s':'')+'<br>'+
+        '<strong>'+s.user+'</strong>'+(s.ongoing?' <span style="color:#1E8449;font-weight:700">(active session)</span>':'')+'<br>'+
+        '<span style="color:#555">'+loginStr+' -> '+logoutStr+'</span><br>'+
+        s.picks.length+' pick'+(s.picks.length!==1?'s':'')+' this session<br>'+
         (s.avgActual!=null?
           'Avg actual: <strong>'+formatMinSec(s.avgActual)+'/pick</strong> | Estimated: '+formatMinSec(s.avgEstimated)+'/pick<br><span style="color:'+speedColor+';font-weight:600">'+speedLabel+'</span>'
           :'<span style="color:#777">'+speedLabel+'</span>')+
@@ -577,9 +635,19 @@ function getPicksByUser(){
 // separate simplified diagram -- lets a manager see exactly where things are.
 function renderWalkMapOnRealGrid(picks,user){
   var wwEl=document.querySelector('.ww');
+  wwEl.style.transition='transform .3s ease';
   wwEl.style.transform='scale(0.35)';
   wwEl.style.transformOrigin='top left';
+  wwEl.style.outline='4px solid #2980B9';
+  wwEl.style.outlineOffset='4px';
+  window.scrollTo({top:0,left:0,behavior:'smooth'});
 
+  // Wait for the shrink transition + scroll to actually finish before measuring
+  // positions -- measuring mid-animation would misplace every dot.
+  setTimeout(function(){drawWalkMapOverlay(wwEl,picks,user);},400);
+}
+
+function drawWalkMapOverlay(wwEl,picks,user){
   var oldOverlay=document.getElementById('walkMapOverlay');if(oldOverlay)oldOverlay.remove();
   var wwRect=wwEl.getBoundingClientRect();
   var overlay=document.createElement('div');
@@ -631,14 +699,15 @@ function renderWalkMapOnRealGrid(picks,user){
 
 function exitWalkMapView(){
   var wwEl=document.querySelector('.ww');
-  wwEl.style.transform='';wwEl.style.transformOrigin='';
+  wwEl.style.transform='';wwEl.style.transformOrigin='';wwEl.style.outline='';wwEl.style.outlineOffset='';
   var overlay=document.getElementById('walkMapOverlay');if(overlay)overlay.remove();
   var ctrl=document.getElementById('walkMapCtrl');if(ctrl)ctrl.style.display='none';
 }
 
 function showPickerWalkMap(){
-  var byUser=getPicksByUser();
-  var users=Object.keys(byUser);
+  var sessions=getPickerSessions();
+  var users=[];
+  sessions.forEach(function(s){if(users.indexOf(s.user)<0)users.push(s.user);});
   var sel=document.getElementById('pickerMapUserSelect');
   if(!users.length){
     sel.innerHTML='<option>No pickers yet</option>';
@@ -646,24 +715,19 @@ function showPickerWalkMap(){
     document.getElementById('pickerMapPanel').style.display='block';
     return;
   }
-  users.sort(function(a,b){
-    return byUser[b][byUser[b].length-1].ts-byUser[a][byUser[a].length-1].ts;
-  });
   sel.innerHTML=users.map(function(u){return '<option value="'+u+'">'+u+'</option>';}).join('');
   sel.value=users[0];
-  sel.onchange=function(){
-    document.getElementById('pickerMapPanel').style.display='none';
-    renderWalkMapOnRealGrid(byUser[sel.value],sel.value);
-  };
-  document.getElementById('pickerMapInfo').textContent='Pick a picker, then tap "Show on map."';
+  sel.onchange=function(){confirmShowWalkMap();};
+  document.getElementById('pickerMapInfo').textContent='Shows the most recent session for the selected picker. Pick one, then tap "Show on map."';
   document.getElementById('pickerMapPanel').style.display='block';
 }
 
 function confirmShowWalkMap(){
   var sel=document.getElementById('pickerMapUserSelect');
-  var byUser=getPicksByUser();
+  var sessions=getPickerSessions().filter(function(s){return s.user===sel.value;});
+  var latest=sessions[0]; // sessions are sorted newest-first
   document.getElementById('pickerMapPanel').style.display='none';
-  renderWalkMapOnRealGrid(byUser[sel.value]||[],sel.value);
+  renderWalkMapOnRealGrid(latest?latest.picks:[],sel.value);
 }
 
 function doResetAll(){
