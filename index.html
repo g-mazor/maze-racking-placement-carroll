@@ -151,22 +151,30 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
-<button class="btn fk-hide public-hide" onclick="toggleLog()">Log</button>
-<button class="btn btn-green public-hide" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
-<button class="btn btn-blue public-hide" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
-<button class="btn fk-hide public-hide" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
-<button class="btn public-hide" id="btn-ap" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
-<button class="btn btn-amber public-hide" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
-<button class="btn btn-red fk-hide public-hide" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
-<button class="btn fk-hide public-hide" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
-<button class="btn fk-hide public-hide" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
-<button class="btn fk-hide public-hide" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
-<button class="btn fk-hide public-hide" onclick="undoLast()">Undo</button>
-<button class="btn btn-blue public-hide" onclick="showPickerStats()">📊 Picker Stats</button>
-<button class="btn btn-blue public-hide" onclick="showPickerWalkMap()">🗺️ Picker Walking Map</button>
+<button class="btn public-hide" id="settingsBtn" style="background:#1F3864;color:#FFF" onclick="toggleSettingsPanel()">⚙️ Settings</button>
 <button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button>
 <button class="btn" style="background:#7D3C98;color:#FFF;font-size:11px" onclick="enterManagerLogin()">👔 Manager Login</button>
 <button class="btn" style="background:#B9770E;color:#FFF;font-size:11px" onclick="enterForkliftLogin()">🚜 Forklift Login</button>
+</div>
+<div id="settingsPanel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:4000">
+  <div style="background:#FFF;max-width:420px;margin:40px auto;border-radius:10px;padding:16px;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:14px;font-weight:700;color:#1F3864;margin-bottom:4px">Settings</div>
+    <button class="btn btn-green public-hide" id="btn-rv" style="width:100%;box-sizing:border-box" onclick="enterReceiveMode()">📥 Receive</button>
+    <button class="btn btn-blue public-hide" id="btn-rl" style="width:100%;box-sizing:border-box" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
+    <button class="btn public-hide" id="btn-ap" style="width:100%;box-sizing:border-box;background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
+    <button class="btn btn-amber public-hide" id="btn-am" style="width:100%;box-sizing:border-box" onclick="enterAddMode()">+ Add pallet</button>
+    <button class="btn btn-red fk-hide public-hide" id="btn-dm" style="width:100%;box-sizing:border-box" onclick="enterDelMode()">Delete mode</button>
+    <button class="btn fk-hide public-hide" id="btn-cm" style="width:100%;box-sizing:border-box" onclick="enterCountMode()">🔢 Count mode</button>
+    <div style="border-top:1px solid #EEE;margin:4px 0"></div>
+    <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box" onclick="toggleLog()">Log</button>
+    <div style="border-top:1px solid #EEE;margin:4px 0"></div>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box" onclick="undoLast()">Undo</button>
+    <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
+  </div>
 </div>
 <div id="mb"></div>
 <div id="clog"><h3>Change log</h3><ul id="ll"></ul></div>
@@ -189,7 +197,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
   <div style="font-size:11px;font-weight:700;color:#A32D2D;margin-bottom:8px">Manager actions</div>
   <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
-  <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="showPickerWalkMap()">🗺️ Picker Walking Map</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
   <button class="btn btn-red" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="doResetAll()">⚠️ Clear everything</button>
@@ -199,14 +206,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
   <div id="pickerStatsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerStatsPanel').style.display='none'">Close</div>
-</div>
-<div id="pickerMapPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:420px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100">
-  <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:8px">Picker Walking Map</div>
-  <select id="pickerMapUserSelect" style="width:100%;padding:6px;border-radius:6px;border:1px solid #CCC;font-size:13px;margin-bottom:8px"></select>
-  <div id="pickerMapInfo" style="font-size:11px;color:#555;margin-bottom:8px"></div>
-  <button class="btn btn-blue" style="width:100%;box-sizing:border-box" onclick="confirmShowWalkMap()">Show on map</button>
-  <div style="font-size:10px;color:#777;margin-top:8px">🟢 pick, numbered in order &nbsp; 🔴 most recent pick, with the time it happened</div>
-  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerMapPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="pb2">Bay 01 -- Packing / Dispatch | Customer pick-up | Walkway | Spare parts</div>
@@ -426,7 +425,7 @@ var STAFF_ALWAYS_VISIBLE='#logoBar,#titleBar,.stats,.topbar,.ww,.leg';
 // On-demand panels: hidden by default, only shown when explicitly opened (e.g.
 // the manager panel after the admin PIN). These must be explicitly re-hidden on
 // logout, NOT just "restored" -- restoring would make them fall back to visible.
-var STAFF_ON_DEMAND='#mb,#clog,#recvp,#rc,#mgrPanel';
+var STAFF_ON_DEMAND='#mb,#clog,#recvp,#rc,#mgrPanel,#settingsPanel';
 
 // Friendly time-of-day greeting shown on every login/logout, for any role.
 function getGreetingWord(){
@@ -518,7 +517,13 @@ function exitManagerMode(){
   currentManager=null;
   currentUser=null;
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
+  document.getElementById('settingsPanel').style.display='none';
   si2('Manager session ended');
+}
+
+function toggleSettingsPanel(){
+  var p=document.getElementById('settingsPanel');
+  p.style.display=(p.style.display==='block')?'none':'block';
 }
 
 // Forklift/Receiver Login: restricted to Receive, Pending, Add pallet, and
@@ -536,7 +541,7 @@ function enterForkliftLogin(){
   currentForklift=name;
   currentUser=name;
   loginGreeting(name);
-  document.querySelectorAll('#btn-rv,#btn-rl,#btn-am,#btn-ap').forEach(function(el){el.style.display='';});
+  document.querySelectorAll('#btn-rv,#btn-rl,#btn-am,#btn-ap,#settingsBtn').forEach(function(el){el.style.display='';});
   document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='none';});
   document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   si2('Logged in as '+name+' (forklift/receiving)');
@@ -546,6 +551,7 @@ function exitForkliftMode(){
   currentForklift=null;
   currentUser=null;
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
+  document.getElementById('settingsPanel').style.display='none';
   si2('Forklift session ended');
 }
 function requirePin(cb){
@@ -800,32 +806,6 @@ function exitWalkMapView(){
   wwEl.style.transform='';wwEl.style.transformOrigin='';wwEl.style.outline='';wwEl.style.outlineOffset='';
   var overlay=document.getElementById('walkMapOverlay');if(overlay)overlay.remove();
   var ctrl=document.getElementById('walkMapCtrl');if(ctrl)ctrl.style.display='none';
-}
-
-function showPickerWalkMap(){
-  var sessions=getPickerSessions();
-  var users=[];
-  sessions.forEach(function(s){if(users.indexOf(s.user)<0)users.push(s.user);});
-  var sel=document.getElementById('pickerMapUserSelect');
-  if(!users.length){
-    sel.innerHTML='<option>No pickers yet</option>';
-    document.getElementById('pickerMapInfo').textContent='No pick data recorded yet.';
-    document.getElementById('pickerMapPanel').style.display='block';
-    return;
-  }
-  sel.innerHTML=users.map(function(u){return '<option value="'+u+'">'+u+'</option>';}).join('');
-  sel.value=users[0];
-  sel.onchange=function(){confirmShowWalkMap();};
-  document.getElementById('pickerMapInfo').textContent='Shows the most recent session for the selected picker. Pick one, then tap "Show on map."';
-  document.getElementById('pickerMapPanel').style.display='block';
-}
-
-function confirmShowWalkMap(){
-  var sel=document.getElementById('pickerMapUserSelect');
-  var sessions=getPickerSessions().filter(function(s){return s.user===sel.value;});
-  var latest=sessions[0]; // sessions are sorted newest-first
-  document.getElementById('pickerMapPanel').style.display='none';
-  renderWalkMapOnRealGrid(latest?latest.picks:[],sel.value);
 }
 
 // Opens the Walking Map for one specific past session, tapped directly from
