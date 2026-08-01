@@ -151,17 +151,18 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
-<button class="btn fk-hide" onclick="toggleLog()">Log</button>
-<button class="btn btn-green" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
-<button class="btn btn-blue" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
-<button class="btn fk-hide" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
-<button class="btn" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
-<button class="btn btn-amber" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
-<button class="btn btn-red fk-hide" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
-<button class="btn fk-hide" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
-<button class="btn fk-hide" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
-<button class="btn fk-hide" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
-<button class="btn fk-hide" onclick="undoLast()">Undo</button>
+<button class="btn fk-hide public-hide" onclick="toggleLog()">Log</button>
+<button class="btn btn-green public-hide" id="btn-rv" onclick="enterReceiveMode()">📥 Receive</button>
+<button class="btn btn-blue public-hide" id="btn-rl" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
+<button class="btn fk-hide public-hide" style="background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
+<button class="btn public-hide" id="btn-ap" style="background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
+<button class="btn btn-amber public-hide" id="btn-am" onclick="enterAddMode()">+ Add pallet</button>
+<button class="btn btn-red fk-hide public-hide" id="btn-dm" onclick="enterDelMode()">Delete mode</button>
+<button class="btn fk-hide public-hide" id="btn-cm" onclick="enterCountMode()">🔢 Count mode</button>
+<button class="btn fk-hide public-hide" style="font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
+<button class="btn fk-hide public-hide" style="font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
+<button class="btn fk-hide public-hide" onclick="undoLast()">Undo</button>
+<button class="btn" style="background:#1F3864;color:#FFF;font-size:11px" onclick="enterStaffLogin()">🔑 Staff Login</button>
 <button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button>
 <button class="btn" style="background:#7D3C98;color:#FFF;font-size:11px" onclick="enterManagerLogin()">👔 Manager Login</button>
 <button class="btn" style="background:#B9770E;color:#FFF;font-size:11px" onclick="enterForkliftLogin()">🚜 Forklift Login</button>
@@ -494,6 +495,28 @@ function exitManagerMode(){
 // a separate registry, and also sets currentUser so those actions don't
 // re-prompt for a code once logged in this way.
 var currentForklift=null;
+// Staff Login: reveals the complete operational toolbar (everything hidden by
+// default from the general public) for anyone with a regular staff code. This
+// is what Gil/Waj/Jude use for full, unrestricted access.
+var currentStaff=null;
+function enterStaffLogin(){
+  if(currentStaff){exitStaffMode();return;}
+  var entered=prompt('Enter your staff code:');
+  if(entered===null)return;
+  var name=USERS[entered.trim()];
+  if(!name){alert('Code not recognized.');return;}
+  currentStaff=name;
+  currentUser=name;
+  document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='';});
+  si2('Logged in as '+name+' (full staff access)');
+}
+function exitStaffMode(){
+  currentStaff=null;
+  currentUser=null;
+  document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
+  si2('Staff session ended');
+}
+
 function enterForkliftLogin(){
   if(currentForklift){exitForkliftMode();return;}
   var entered=prompt('Enter your forklift/receiving code:');
@@ -502,6 +525,7 @@ function enterForkliftLogin(){
   if(!name){alert('Code not recognized.');return;}
   currentForklift=name;
   currentUser=name;
+  document.querySelectorAll('#btn-rv,#btn-rl,#btn-am,#btn-ap').forEach(function(el){el.style.display='';});
   document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='none';});
   document.querySelectorAll(STAFF_ON_DEMAND).forEach(function(el){el.style.display='none';});
   si2('Logged in as '+name+' (forklift/receiving)');
@@ -509,7 +533,7 @@ function enterForkliftLogin(){
 function exitForkliftMode(){
   currentForklift=null;
   currentUser=null;
-  document.querySelectorAll('.fk-hide').forEach(function(el){el.style.display='';});
+  document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   si2('Forklift session ended');
 }
 function requirePin(cb){
@@ -2453,6 +2477,7 @@ async function pollSync(manual){
 }
 
 (async function init(){
+  document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
