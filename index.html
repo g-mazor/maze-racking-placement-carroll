@@ -171,8 +171,15 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="rl"></div></div>
 <div id="rc"></div>
 <div id="pickerPanel" style="display:none;max-width:480px;margin:20px auto;text-align:left;background:#F0F8F0;border:2px solid #374A5C;border-radius:8px;padding:16px">
-  <div style="font-size:16px;font-weight:700;color:#1F3864;margin-bottom:10px">Hi <span id="pickerName"></span> -- Picker Panel (Step 2 test)</div>
-  <div style="font-size:12px;color:#555">This is just the panel showing/hiding correctly. Confirm Pick wiring comes in Step 3.</div>
+  <div style="font-size:16px;font-weight:700;color:#1F3864;margin-bottom:10px">Hi <span id="pickerName"></span> -- Confirm Pick</div>
+  <div style="text-align:center;margin-bottom:6px;color:#555">Scan or type a location code, then press Enter</div>
+  <input id="pickerScanInput" type="text" placeholder="e.g. A-B12-L1" autocomplete="off"
+    style="width:100%;padding:12px 14px;border-radius:6px;border:2px solid #2980B9;font-size:16px;box-sizing:border-box"/>
+  <div style="text-align:center;margin:10px 0;color:#888;font-size:11px">-- or --</div>
+  <div style="text-align:center;margin-bottom:6px;color:#555">Type the SKU you picked, then press Enter</div>
+  <input id="pickerSkuInput" type="text" placeholder="e.g. MC-PB7-15" autocomplete="off"
+    style="width:100%;padding:12px 14px;border-radius:6px;border:2px solid #27AE60;font-size:16px;box-sizing:border-box"/>
+  <div id="pickerScanResult" style="margin-top:10px"></div>
   <div style="text-align:center;margin-top:14px"><span style="text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerPanel').style.display='none'">Close</span></div>
 </div>
 <div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
@@ -357,7 +364,7 @@ function applyC(c,rec){
   else if(c.type==='receiveresolve'){RECEIVED=RECEIVED.filter(function(r){return r.id!==c.id;});}
   else if(c.type==='pick'){QTY[c.loc]=c.remainingQty;}
   if(rec){
-    if(currentUser&&!c.user)c.user=currentUser;
+    if((currentPicker||currentUser)&&!c.user)c.user=currentPicker||currentUser;
     CHANGES.push(c);LOG.unshift(fmtLog(c));updLog();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
@@ -389,8 +396,8 @@ var PICKERS={
   '1982':'Tom'
 };
 var currentPicker=null;
-// STEP 2 TEST: shows the picker panel on successful login. Staff view stays
-// visible too, for now -- hiding it is Step 4, once everything else is proven.
+// STEP 3 TEST: full Confirm Pick wiring inside the picker panel. Staff view
+// still stays visible too -- hiding it is Step 4, the last and smallest change.
 function testPickerLogin(){
   var entered=prompt('Enter your picker code:');
   if(entered===null)return;
@@ -399,6 +406,23 @@ function testPickerLogin(){
   currentPicker=name;
   document.getElementById('pickerName').textContent=name;
   document.getElementById('pickerPanel').style.display='block';
+  var inp=document.getElementById('pickerScanInput');
+  inp.value='';
+  inp.onkeydown=function(e){
+    if(e.key==='Enter'){
+      handleScanForPickInPanel(inp.value.trim(),'pickerScanResult');
+      inp.value='';
+    }
+  };
+  var skuInp=document.getElementById('pickerSkuInput');
+  skuInp.value='';
+  skuInp.onkeydown=function(e){
+    if(e.key==='Enter'){
+      handleSkuLookupForPick(skuInp.value.trim(),'pickerScanResult');
+      skuInp.value='';
+    }
+  };
+  setTimeout(function(){inp.focus();},50);
 }
 function requirePin(cb){
   if(currentUser){cb();return;}
@@ -1662,12 +1686,21 @@ function enterConfirmPickMode(){
 }
 
 function handleScanForPick(rawCode){
-  var result=document.getElementById('pickScanResult');
+  handleScanForPickInPanel(rawCode,'pickScanResult');
+}
+
+function handleScanForPickInPanel(rawCode,resultId){
+  var result=document.getElementById(resultId);
   if(!rawCode)return;
   var parsed=parseHumanLocCode(rawCode);
   if(!parsed||!RS[parsed.row]){
     result.innerHTML='<div style="color:#A32D2D;font-size:12px">Could not read that code. Expected a format like A-B12-L1.</div>';
     speak('Could not read that location code.');
+    return;
+  }
+  if(parsed.row==='E'||parsed.row==='F'||parsed.row==='G'){
+    result.innerHTML='<div style="color:#A32D2D;font-size:12px">Row '+parsed.row+' is oversize stock -- not for regular picking. This needs an oversize pick, handled separately.</div>';
+    speak('This is an oversize pick. Not for regular picking.');
     return;
   }
   var candidateLocs=locsForBayLevel(parsed.row,parsed.bay,parsed.level);
@@ -1695,6 +1728,49 @@ function handleScanForPick(rawCode){
   }
 }
 
+// Lets a picker confirm a pick by typing the SKU code directly, since there are
+// no physical scanners/labels in place yet. Same oversize exclusion applies.
+function handleSkuLookupForPick(rawSku,resultId){
+  var result=document.getElementById(resultId);
+  if(!rawSku)return;
+  var sku=rawSku.trim().toUpperCase();
+  var v=DATA.d[sku];
+  if(!v){
+    result.innerHTML='<div style="color:#A32D2D;font-size:12px">SKU not found: '+sku+'</div>';
+    speak('SKU not found.');
+    return;
+  }
+  var locs=SLOC[sku]||[];
+  if(!locs.length){
+    result.innerHTML='<div style="color:#A32D2D;font-size:12px">'+sku+' is not currently placed anywhere.</div>';
+    speak(sku+' is not currently placed anywhere.');
+    return;
+  }
+  var oversizeLocs=locs.filter(function(l){return l[0]==='E'||l[0]==='F'||l[0]==='G';});
+  var regularLocs=locs.filter(function(l){return l[0]!=='E'&&l[0]!=='F'&&l[0]!=='G';});
+  var html='';
+  if(oversizeLocs.length){
+    html+='<div style="color:#A32D2D;font-size:12px;margin-bottom:6px">'+oversizeLocs.length+' location'+(oversizeLocs.length>1?'s are':' is')+' oversize (Row '+oversizeLocs.map(function(l){return l[0];}).join(', ')+') -- not for regular picking, handled separately.</div>';
+  }
+  html+=regularLocs.map(function(loc){
+    var currentQty=QTY[loc]!=null?QTY[loc]:0;
+    return '<div style="background:#FFF;border:1px solid #DDD;border-radius:6px;padding:10px;font-size:12px;margin-bottom:6px">'+
+      '<strong>'+sku+'</strong> -- '+v[4]+'<br>'+
+      'At '+fl(loc)+' -- current count: '+currentQty+'<br>'+
+      '<div style="margin-top:6px">Qty picked: <input id="pickQtyInput_'+loc+'" type="number" min="1" value="1" style="width:70px;padding:4px"/> '+
+      '<button class="btn btn-green" onclick="confirmPick(\''+loc+'\',\''+sku+'\')">Confirm pick</button></div>'+
+      '</div>';
+  }).join('');
+  result.innerHTML=html;
+  if(regularLocs.length===1){
+    speak(sku+'. '+v[4]+'. At '+fl(regularLocs[0])+'. Currently '+(QTY[regularLocs[0]]||0)+' units.');
+  } else if(regularLocs.length>1){
+    speak('Found '+regularLocs.length+' locations for '+sku+'.');
+  } else if(oversizeLocs.length){
+    speak('This is an oversize pick. Not for regular picking.');
+  }
+}
+
 function confirmPick(loc,sku){
   var qtyInput=document.getElementById('pickQtyInput_'+loc);
   var picked=parseInt(qtyInput.value,10);
@@ -1705,8 +1781,8 @@ function confirmPick(loc,sku){
   rebuildMap();
   speak('Confirmed. Picked '+picked+' of '+sku+'. '+remaining+' remaining.');
   si2('Picked '+picked+' of '+sku+' at '+fl(loc)+' -- '+remaining+' remaining');
-  var resDiv=document.getElementById('pickScanResult');if(resDiv)resDiv.innerHTML='';
-  var inp=document.getElementById('pickScanInput');if(inp)inp.focus();
+  ['pickScanResult','pickerScanResult'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML='';});
+  ['pickScanInput','pickerScanInput'].forEach(function(id){var el=document.getElementById(id);if(el)el.focus();});
 }
 
 var si=document.getElementById('si'),al=document.getElementById('acl');
