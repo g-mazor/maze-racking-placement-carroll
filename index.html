@@ -159,20 +159,20 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="settingsPanel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:4000">
   <div style="background:#FFF;max-width:420px;margin:40px auto;border-radius:10px;padding:16px;max-height:80vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
     <div style="font-size:14px;font-weight:700;color:#1F3864;margin-bottom:4px">Settings</div>
-    <button class="btn btn-green public-hide" id="btn-rv" style="width:100%;box-sizing:border-box" onclick="enterReceiveMode()">📥 Receive</button>
-    <button class="btn btn-blue public-hide" id="btn-rl" style="width:100%;box-sizing:border-box" onclick="toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
-    <button class="btn public-hide" id="btn-ap" style="width:100%;box-sizing:border-box;background:#8CD98C" onclick="autoPlaceAllPending()">🤖 Auto-place pending</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#2980B9;color:#FFF" onclick="enterConfirmPickMode()">📤 Confirm pick</button>
-    <button class="btn btn-amber public-hide" id="btn-am" style="width:100%;box-sizing:border-box" onclick="enterAddMode()">+ Add pallet</button>
-    <button class="btn btn-red fk-hide public-hide" id="btn-dm" style="width:100%;box-sizing:border-box" onclick="enterDelMode()">Delete mode</button>
-    <button class="btn fk-hide public-hide" id="btn-cm" style="width:100%;box-sizing:border-box" onclick="enterCountMode()">🔢 Count mode</button>
+    <button class="btn btn-green public-hide" id="btn-rv" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();enterReceiveMode()">📥 Receive</button>
+    <button class="btn btn-blue public-hide" id="btn-rl" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();toggleReceivedList()">📦 Pending (<span id="recvCount">0</span>)</button>
+    <button class="btn public-hide" id="btn-ap" style="width:100%;box-sizing:border-box;background:#8CD98C" onclick="closeSettingsPanel();autoPlaceAllPending()">🤖 Auto-place pending</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#2980B9;color:#FFF" onclick="closeSettingsPanel();enterConfirmPickMode()">📤 Confirm pick</button>
+    <button class="btn btn-amber public-hide" id="btn-am" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();enterAddMode()">+ Add pallet</button>
+    <button class="btn btn-red fk-hide public-hide" id="btn-dm" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();enterDelMode()">Delete mode</button>
+    <button class="btn fk-hide public-hide" id="btn-cm" style="width:100%;box-sizing:border-box;background:#8E44AD;color:#FFF" onclick="closeSettingsPanel();enterCountMode()">🔢 Count mode</button>
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
-    <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box" onclick="toggleLog()">Log</button>
+    <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#607D8B;color:#FFF" onclick="closeSettingsPanel();toggleLog()">Log</button>
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;font-size:10px;opacity:.7" onclick="backfillDescriptions()">Backfill descriptions</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;font-size:10px;opacity:.7" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box" onclick="undoLast()">Undo</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillDescriptions()">Backfill descriptions</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillPendingDescriptions()">Backfill pending descriptions</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="closeSettingsPanel();undoLast()">Undo</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -524,6 +524,9 @@ function exitManagerMode(){
 function toggleSettingsPanel(){
   var p=document.getElementById('settingsPanel');
   p.style.display=(p.style.display==='block')?'none':'block';
+}
+function closeSettingsPanel(){
+  document.getElementById('settingsPanel').style.display='none';
 }
 
 // Forklift/Receiver Login: restricted to Receive, Pending, Add pallet, and
