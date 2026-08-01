@@ -1792,7 +1792,12 @@ function confirmPick(loc,sku){
   var picked=parseInt(qtyInput.value,10);
   if(isNaN(picked)||picked<=0){alert('Enter a valid quantity picked.');return;}
   var currentQty=QTY[loc]!=null?QTY[loc]:0;
-  var remaining=Math.max(0,currentQty-picked);
+  if(picked>currentQty){
+    alert('Only '+currentQty+' available to pick at this location -- you entered '+picked+'. Please correct the quantity.');
+    speak('Only '+currentQty+' available. Please correct the quantity.');
+    return;
+  }
+  var remaining=currentQty-picked;
   applyC({type:'pick',sku:sku,loc:loc,qty:picked,remainingQty:remaining},true);
   rebuildMap();
   speak('Confirmed. Picked '+picked+' of '+sku+'. '+remaining+' remaining.');
