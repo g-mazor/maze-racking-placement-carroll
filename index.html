@@ -821,14 +821,45 @@ function drawWalkMapOverlay(wwEl,picks,user){
     // vulnerable to (it mixed scaled coordinates with unscaled scroll offsets,
     // which could misplace specific cells depending on scroll position).
     var off=offsetRelativeTo(cell,wwEl);
-    plotted.push({x:off.x+cell.offsetWidth/2,y:off.y+cell.offsetHeight/2,ts:p.ts,loc:p.loc});
+    plotted.push({x:off.x+cell.offsetWidth/2,y:off.y+cell.offsetHeight/2,ts:p.ts,loc:p.loc,row:p.loc.split('-')[0]});
   });
+
+  // Finds the pixel X-position of a given bay column by locating any real
+  // cell there (tries multiple levels/sides since bridge bays have different
+  // side counts than regular bays).
+  function getBayXPosition(row,bay){
+    var paddedBay=String(bay).padStart(2,'0');
+    var sides=['L','R','1','2','3'];
+    for(var lvl=1;lvl<=4;lvl++){
+      for(var s=0;s<sides.length;s++){
+        var cell=document.getElementById('c_'+row+'-'+paddedBay+'-'+lvl+'-'+sides[s]);
+        if(cell){
+          var off=offsetRelativeTo(cell,wwEl);
+          return off.x+cell.offsetWidth/2;
+        }
+      }
+    }
+    return null;
+  }
 
   var svgContent='';
   for(var i=1;i<plotted.length;i++){
-    svgContent+='<line x1="'+plotted[i-1].x+'" y1="'+plotted[i-1].y+'" x2="'+plotted[i].x+'" y2="'+plotted[i].y+'" stroke="#2980B9" stroke-width="2.5" opacity="0.7"/>';
-    var midX=(plotted[i-1].x+plotted[i].x)/2,midY=(plotted[i-1].y+plotted[i].y)/2;
-    var gapLabel=formatMinSec((plotted[i].ts-plotted[i-1].ts)/1000);
+    var prev=plotted[i-1],curr=plotted[i];
+    var pathD;
+    if(prev.row===curr.row){
+      pathD='M'+prev.x+','+prev.y+' L'+curr.x+','+curr.y;
+    } else {
+      // Different rows: route through the actual bridge/end crossing point
+      // (the same one the distance/time estimate already assumes) instead of
+      // a straight diagonal, which would visually cut through racking.
+      var crossBay=getCrossingBay(prev.loc,curr.loc);
+      var crossX=getBayXPosition(prev.row,crossBay);
+      if(crossX==null)crossX=(prev.x+curr.x)/2;
+      pathD='M'+prev.x+','+prev.y+' L'+crossX+','+prev.y+' L'+crossX+','+curr.y+' L'+curr.x+','+curr.y;
+    }
+    svgContent+='<path d="'+pathD+'" fill="none" stroke="#2980B9" stroke-width="2.5" opacity="0.7"/>';
+    var midX=(prev.x+curr.x)/2,midY=(prev.y+curr.y)/2;
+    var gapLabel=formatMinSec((curr.ts-prev.ts)/1000);
     svgContent+='<rect x="'+(midX-22)+'" y="'+(midY-9)+'" width="44" height="16" rx="3" fill="#1F3864" opacity="0.9"/>';
     svgContent+='<text x="'+midX+'" y="'+(midY+3)+'" font-size="10" text-anchor="middle" fill="#FFF" font-weight="700">'+gapLabel+'</text>';
   }
@@ -1501,18 +1532,31 @@ var PICK_HANDLING_SECONDS=20;  // assumed time to grab an item once at the bay
 // "a whole racking block away" (B<->D), and picks bad routes as a result.
 var ROW_BLOCK={A:0,AA:0,B:1,C:1,D:2,E:2};
 var INTER_BLOCK_AISLE_WIDTH_M=8;
+// Returns which bay a cross-row walk actually crosses at (a row-end, or a
+// specific bridge bay) -- exposed so the visual route drawing can match
+// exactly what the distance/time model assumes, instead of drawing a
+// straight line that would visually cut through racking.
+function getCrossingBay(locA,locB){
+  var pa=locA.split('-'),pb=locB.split('-');
+  var bayA=parseInt(pa[1],10),bayB=parseInt(pb[1],10);
+  var viaEndStart=(bayA-1)+(bayB-1);
+  var viaEndFar=(42-bayA)+(42-bayB);
+  var best=Math.min(viaEndStart,viaEndFar);
+  var bestBay=viaEndStart<=viaEndFar?1:42;
+  BRIDGE_CROSSING_BAYS.forEach(function(bx){
+    var d=Math.abs(bayA-bx)+Math.abs(bayB-bx);
+    if(d<best){best=d;bestBay=bx;}
+  });
+  return bestBay;
+}
+
 function estimateWalkDistance(locA,locB){
   var pa=locA.split('-'),pb=locB.split('-');
   var rowA=pa[0],bayA=parseInt(pa[1],10);
   var rowB=pb[0],bayB=parseInt(pb[1],10);
   if(rowA===rowB)return Math.abs(bayA-bayB)*BAY_SPACING_M;
-  var viaEndStart=((bayA-1)+(bayB-1))*BAY_SPACING_M;
-  var viaEndFar=((42-bayA)+(42-bayB))*BAY_SPACING_M;
-  var best=Math.min(viaEndStart,viaEndFar)+ROW_CROSSING_WIDTH_M;
-  BRIDGE_CROSSING_BAYS.forEach(function(bx){
-    var d=(Math.abs(bayA-bx)+Math.abs(bayB-bx))*BAY_SPACING_M+ROW_CROSSING_WIDTH_M;
-    if(d<best)best=d;
-  });
+  var crossBay=getCrossingBay(locA,locB);
+  var best=(Math.abs(bayA-crossBay)+Math.abs(bayB-crossBay))*BAY_SPACING_M+ROW_CROSSING_WIDTH_M;
   var blockA=ROW_BLOCK[rowA]!=null?ROW_BLOCK[rowA]:0;
   var blockB=ROW_BLOCK[rowB]!=null?ROW_BLOCK[rowB]:0;
   var blockGap=Math.abs(blockA-blockB);
