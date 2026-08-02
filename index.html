@@ -745,9 +745,13 @@ function renderWalkMapOnRealGrid(picks,user){
                         // unpredictable and could still be moving when we
                         // measure cell positions below, misplacing every dot
 
-  // Wait for the shrink transition + scroll to actually finish before measuring
-  // positions -- measuring mid-animation would misplace every dot.
-  setTimeout(function(){drawWalkMapOverlay(wwEl,picks,user);},400);
+  // Wait for the shrink transition to genuinely finish (the real event, not a
+  // guessed delay) before measuring positions -- a fixed timeout can still
+  // fire mid-animation on a slower device, misplacing dots.
+  var drawn=false;
+  function draw(){if(drawn)return;drawn=true;drawWalkMapOverlay(wwEl,picks,user);}
+  wwEl.addEventListener('transitionend',draw,{once:true});
+  setTimeout(draw,600); // safety net in case the transition event never fires
 }
 
 function drawWalkMapOverlay(wwEl,picks,user){
@@ -1435,7 +1439,7 @@ function sortLocationsByWalkPath(locs){
 // Bridge-aware walking distance/time model.
 // Measurements are estimates -- adjust the constants below if real timing data
 // (from actual pick logs) shows they're off.
-var BAY_SPACING_M=100/41;      // bay 1 to bay 42 measured at ~100m -> ~2.44m/bay
+var BAY_SPACING_M=2.6;         // measured directly: each bay is 2.6m wide
 var ROW_CROSSING_WIDTH_M=3;    // assumed aisle width when crossing between rows
 var BRIDGE_CROSSING_BAYS=[12,17,22,30,33]; // known bridge-bay shortcut points (from BRIDGE_BAYS)
 var WALK_SPEED_MPS=1.2;        // assumed walking pace while picking (~4.3 km/h)
@@ -1443,6 +1447,13 @@ var PICK_HANDLING_SECONDS=20;  // assumed time to grab an item once at the bay
 
 // Distance between two locations, considering bridge-bay shortcuts for
 // cross-row travel instead of always walking to the end of the row.
+// Physical racking blocks: A pairs with AA, B pairs with C, D pairs with E.
+// Crossing WITHIN a pair (B<->C) is cheap (just the shared aisle). Crossing
+// BETWEEN separate blocks (e.g. B<->D, A<->B) needs an extra, wider aisle --
+// without this, the router can't tell "right there" (B<->C) apart from
+// "a whole racking block away" (B<->D), and picks bad routes as a result.
+var ROW_BLOCK={A:0,AA:0,B:1,C:1,D:2,E:2};
+var INTER_BLOCK_AISLE_WIDTH_M=8;
 function estimateWalkDistance(locA,locB){
   var pa=locA.split('-'),pb=locB.split('-');
   var rowA=pa[0],bayA=parseInt(pa[1],10);
@@ -1455,6 +1466,10 @@ function estimateWalkDistance(locA,locB){
     var d=(Math.abs(bayA-bx)+Math.abs(bayB-bx))*BAY_SPACING_M+ROW_CROSSING_WIDTH_M;
     if(d<best)best=d;
   });
+  var blockA=ROW_BLOCK[rowA]!=null?ROW_BLOCK[rowA]:0;
+  var blockB=ROW_BLOCK[rowB]!=null?ROW_BLOCK[rowB]:0;
+  var blockGap=Math.abs(blockA-blockB);
+  if(blockGap>0)best+=blockGap*INTER_BLOCK_AISLE_WIDTH_M;
   return best;
 }
 
@@ -1820,6 +1835,30 @@ function parsePickListLine(line){
 // picking) and the picker-facing checklist (next step) will both reuse.
 var lastPickListPreview=[]; // resolvable items from the most recent preview, in walk order
 
+// Orders a set of stops by always going to whichever REMAINING stop is
+// actually closest to wherever the picker currently is -- using the real
+// distance model (which already knows about bridge shortcuts and cross-row
+// adjacency), rather than a rigid "finish this row, then start the next row
+// from bay 1" rule. This is what avoids unnecessary backtracking, e.g. being
+// at bay 32 in Row B and correctly going to bay 32 in Row C next (right
+// there) before doubling back for bay 17 in Row C, instead of the reverse.
+function nearestNeighborRoute(items,startLoc){
+  var remaining=items.slice();
+  var route=[];
+  var currentLoc=startLoc;
+  while(remaining.length){
+    var bestIdx=0,bestDist=Infinity;
+    for(var i=0;i<remaining.length;i++){
+      var d=estimateWalkDistance(currentLoc,remaining[i].loc);
+      if(d<bestDist){bestDist=d;bestIdx=i;}
+    }
+    var next=remaining.splice(bestIdx,1)[0];
+    route.push(next);
+    currentLoc=next.loc;
+  }
+  return route;
+}
+
 function previewPickList(){
   var raw=document.getElementById('pickListInput').value;
   var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
@@ -1836,8 +1875,8 @@ function previewPickList(){
 
   var resolvable=items.filter(function(it){return it.loc;});
   var unresolvable=items.filter(function(it){return !it.loc;});
-  var sortedLocs=sortLocationsByWalkPath(resolvable.map(function(it){return it.loc;}));
-  resolvable.sort(function(a,b){return sortedLocs.indexOf(a.loc)-sortedLocs.indexOf(b.loc);});
+  var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
+  resolvable=nearestNeighborRoute(resolvable,START_LOC);
   var ordered=resolvable.concat(unresolvable);
   lastPickListPreview=resolvable;
 
