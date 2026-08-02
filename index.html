@@ -1816,6 +1816,8 @@ function parsePickListLine(line){
 // Resolves each line to a real, pickable (non-oversize) location, then orders
 // the whole list by walk path -- the same building block Phase 4 (wave
 // picking) and the picker-facing checklist (next step) will both reuse.
+var lastPickListPreview=[]; // resolvable items from the most recent preview, in walk order
+
 function previewPickList(){
   var raw=document.getElementById('pickListInput').value;
   var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
@@ -1835,6 +1837,22 @@ function previewPickList(){
   var sortedLocs=sortLocationsByWalkPath(resolvable.map(function(it){return it.loc;}));
   resolvable.sort(function(a,b){return sortedLocs.indexOf(a.loc)-sortedLocs.indexOf(b.loc);});
   var ordered=resolvable.concat(unresolvable);
+  lastPickListPreview=resolvable;
+
+  // Estimated time: walk from the start point (bay 1, near Row AA) to the
+  // first stop, then leg-to-leg between each subsequent stop, plus handling
+  // time per pick -- same distance/time model used everywhere else.
+  var totalSeconds=0;
+  var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
+  resolvable.forEach(function(it,i){
+    var fromLoc=i===0?START_LOC:resolvable[i-1].loc;
+    totalSeconds+=estimateWalkSeconds(fromLoc,it.loc)+PICK_HANDLING_SECONDS;
+  });
+  var summary=resolvable.length?
+    '<div style="background:#EAF3DE;border:1px solid #27AE60;border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:12px">'+
+    '<strong>Estimated total: '+formatMinSec(totalSeconds)+'</strong> for '+resolvable.length+' stop'+(resolvable.length!==1?'s':'')+
+    '<div style="text-align:right;margin-top:6px"><button class="btn btn-blue" onclick="showPickListMap()">🗺️ Show route on map</button></div>'+
+    '</div>' : '';
 
   var html=ordered.map(function(it,i){
     if(it.error){
@@ -1844,7 +1862,24 @@ function previewPickList(){
       '<strong>'+(i+1)+'. '+it.sku+'</strong> -- '+it.desc+' -- qty '+it.qty+'<br>At '+fl(it.loc)+
       '</div>';
   }).join('');
-  document.getElementById('pickListPreview').innerHTML=html||'<div style="color:#777;font-size:12px">No items entered.</div>';
+  document.getElementById('pickListPreview').innerHTML=summary+(html||'<div style="color:#777;font-size:12px">No items entered.</div>');
+}
+
+// Shows the pick list's route on the real map, reusing the Walking Map
+// renderer -- synthetic timestamps (now + cumulative estimated seconds) make
+// it display estimated per-leg times and an estimated finish time, using the
+// exact same rendering code as the actual picker walking maps.
+function showPickListMap(){
+  if(!lastPickListPreview.length){alert('Preview the pick list first.');return;}
+  var t=Date.now();
+  var START_LOC='A-01-1-L';
+  var synthetic=lastPickListPreview.map(function(it,i){
+    var fromLoc=i===0?START_LOC:lastPickListPreview[i-1].loc;
+    t+=(estimateWalkSeconds(fromLoc,it.loc)+PICK_HANDLING_SECONDS)*1000;
+    return {loc:it.loc,ts:t,qty:it.qty};
+  });
+  setNorm();
+  renderWalkMapOnRealGrid(synthetic,'Pick list preview (estimated)');
 }
 
 function enterCountMode(){
