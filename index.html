@@ -1791,7 +1791,7 @@ function enterCreatePickListMode(){
     mb.style.display='block';mb.className='am';mb.onclick=null;
     mb.innerHTML='<div style="max-width:460px;margin:0 auto;text-align:left">'+
       '<div style="text-align:center;margin-bottom:6px">Enter one SKU and quantity per line (e.g. "MC-PB7-15 2")</div>'+
-      '<textarea id="pickListInput" rows="6" placeholder="MC-PB7-15 2&#10;MWT-100 1" style="width:100%;padding:9px;border-radius:6px;border:1.5px solid #16A085;font-size:13px;box-sizing:border-box;font-family:monospace"></textarea>'+
+      '<textarea id="pickListInput" rows="6" placeholder="MC-PB7-15 2&#10;MWT-100 x6" style="width:100%;padding:9px;border-radius:6px;border:1.5px solid #16A085;font-size:13px;box-sizing:border-box;font-family:monospace"></textarea>'+
       '<div style="text-align:center;margin-top:8px"><button class="btn btn-blue" onclick="previewPickList()">Preview pick list</button></div>'+
       '<div id="pickListPreview" style="margin-top:10px"></div>'+
       '<div style="text-align:center;margin-top:6px"><span style="text-decoration:underline;cursor:pointer" onclick="setNorm()">Cancel</span></div>'+
@@ -1800,12 +1800,17 @@ function enterCreatePickListMode(){
 }
 
 function parsePickListLine(line){
-  var parts=line.trim().split(/[\s,]+/).filter(function(p){return p.length;});
-  if(!parts.length)return null;
-  var sku=parts[0].toUpperCase();
-  var qty=parts.length>1?parseInt(parts[1],10):1;
-  if(isNaN(qty)||qty<=0)qty=1;
-  return {sku:sku,qty:qty};
+  var trimmed=line.trim();
+  if(!trimmed)return null;
+  // Looks for a trailing quantity at the end of the line -- handles "SKU 6",
+  // "SKU x6", "SKU X6", and "SKU, 6". Requires a space/comma before the
+  // quantity so real SKU codes ending in digits (e.g. "MC-PB7-15") are never
+  // mistaken for a line with no quantity.
+  var m=trimmed.match(/^(.*?)[\s,]+[xX]?(\d+)$/);
+  if(m&&m[1].trim()){
+    return {sku:m[1].trim().toUpperCase(),qty:parseInt(m[2],10)};
+  }
+  return {sku:trimmed.toUpperCase(),qty:1};
 }
 
 // Resolves each line to a real, pickable (non-oversize) location, then orders
