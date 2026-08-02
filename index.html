@@ -169,12 +169,6 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();enterCreatePickListMode()">📋 Create Pick List</button>
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#607D8B;color:#FFF" onclick="closeSettingsPanel();toggleLog()">Log</button>
-    <div style="border-top:1px solid #EEE;margin:4px 0"></div>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillDescriptions()">Backfill descriptions</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillPendingDescriptions()">Backfill pending descriptions</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();repairLocationIndex()">🔧 Repair location index</button>
-    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="closeSettingsPanel();undoLast()">Undo</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -197,9 +191,14 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div id="pickerScanResult" style="margin-top:10px"></div>
   <div style="text-align:center;margin-top:14px"><span style="text-decoration:underline;cursor:pointer;color:#888" onclick="exitPickerMode()">Log out</span></div>
 </div>
-<div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px">
+<div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px;max-height:85vh;overflow-y:auto">
   <div style="font-size:11px;font-weight:700;color:#A32D2D;margin-bottom:8px">Manager actions</div>
   <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#607D8B;color:#FFF" onclick="toggleLog()">Log</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="backfillDescriptions()">Backfill descriptions</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
   <button class="btn btn-red" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="doResetAll()">⚠️ Clear everything</button>
