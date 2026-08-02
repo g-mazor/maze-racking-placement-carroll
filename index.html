@@ -346,6 +346,8 @@ async function backfillPendingDescriptions(){
 // overwritten without properly cleaning up the previous SKU's record.
 function repairLocationIndex(){
   requirePin(function(){
+    var placedCount=Object.keys(LOC).length;
+    if(!confirm('This will rebuild the location index from '+placedCount+' currently placed pallet space'+(placedCount!==1?'s':'')+'.\n\nIf that number looks too low (e.g. the page just loaded and hasn\'t finished syncing yet), tap Cancel, wait a few seconds, and try again -- otherwise this will overwrite the location index with an incomplete picture.\n\nContinue?')){return;}
     var newSloc={};
     Object.keys(LOC).forEach(function(loc){
       var sku=LOC[loc];
@@ -1954,7 +1956,6 @@ function previewPickList(){
   // first stop, then leg-to-leg between each subsequent stop, plus handling
   // time per pick -- same distance/time model used everywhere else.
   var totalSeconds=0;
-  var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
   resolvable.forEach(function(it,i){
     var fromLoc=i===0?START_LOC:resolvable[i-1].loc;
     totalSeconds+=estimateWalkSeconds(fromLoc,it.loc)+PICK_HANDLING_SECONDS;
