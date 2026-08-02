@@ -893,6 +893,7 @@ function exitWalkMapView(){
   wwEl.style.transform='';wwEl.style.transformOrigin='';wwEl.style.outline='';wwEl.style.outlineOffset='';
   var overlay=document.getElementById('walkMapOverlay');if(overlay)overlay.remove();
   var ctrl=document.getElementById('walkMapCtrl');if(ctrl)ctrl.style.display='none';
+  if(mode==='createpicklist'&&mb.innerHTML)mb.style.display='block';
 }
 
 // Opens the Walking Map for one specific past session, tapped directly from
@@ -2042,7 +2043,9 @@ function showPickListMap(){
     t+=(estimateWalkSeconds(fromLoc,it.loc)+PICK_HANDLING_SECONDS)*1000;
     return {loc:it.loc,ts:t,qty:it.qty};
   });
-  setNorm();
+  mb.style.display='none'; // hide only -- do NOT reset mode/content, so the
+                            // pick list you were building is still there
+                            // when you exit the map view
   renderWalkMapOnRealGrid(synthetic,'Pick list preview (estimated)');
 }
 
