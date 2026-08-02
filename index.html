@@ -741,22 +741,29 @@ function renderWalkMapOnRealGrid(picks,user){
   wwEl.style.transformOrigin='top left';
   wwEl.style.outline='4px solid #2980B9';
   wwEl.style.outlineOffset='4px';
-  window.scrollTo(0,0); // instant, not smooth -- a smooth scroll's duration is
-                        // unpredictable and could still be moving when we
-                        // measure cell positions below, misplacing every dot
+  window.scrollTo(0,0);
+  // Layout offsets (used below) are computed before any visual transform is
+  // applied, so there's no need to wait for the shrink animation to finish --
+  // draw immediately.
+  drawWalkMapOverlay(wwEl,picks,user);
+}
 
-  // Wait for the shrink transition to genuinely finish (the real event, not a
-  // guessed delay) before measuring positions -- a fixed timeout can still
-  // fire mid-animation on a slower device, misplacing dots.
-  var drawn=false;
-  function draw(){if(drawn)return;drawn=true;drawWalkMapOverlay(wwEl,picks,user);}
-  wwEl.addEventListener('transitionend',draw,{once:true});
-  setTimeout(draw,600); // safety net in case the transition event never fires
+// Walks up the offsetParent chain to get a position relative to `ancestor`,
+// in layout (untransformed) coordinates -- unlike getBoundingClientRect(),
+// this is unaffected by CSS transforms/scale or scroll position, so it can't
+// be thrown off by scaling, scrolling, or animation timing.
+function offsetRelativeTo(el,ancestor){
+  var x=0,y=0,node=el;
+  while(node&&node!==ancestor){
+    x+=node.offsetLeft||0;
+    y+=node.offsetTop||0;
+    node=node.offsetParent;
+  }
+  return {x:x,y:y};
 }
 
 function drawWalkMapOverlay(wwEl,picks,user){
   var oldOverlay=document.getElementById('walkMapOverlay');if(oldOverlay)oldOverlay.remove();
-  var wwRect=wwEl.getBoundingClientRect();
   var overlay=document.createElement('div');
   overlay.id='walkMapOverlay';
   overlay.style.cssText='position:absolute;left:0;top:0;width:'+wwEl.scrollWidth+'px;height:'+wwEl.scrollHeight+'px;pointer-events:none;z-index:2500;';
@@ -770,11 +777,12 @@ function drawWalkMapOverlay(wwEl,picks,user){
   picks.forEach(function(p){
     var cell=document.getElementById('c_'+p.loc);
     if(!cell)return;
-    var r=cell.getBoundingClientRect();
-    // Position relative to .ww's own scrollable content, not the page -- so the
-    // dots stay physically locked to their cells regardless of how the grid is
-    // scrolled afterward (this container scrolls independently of the page).
-    plotted.push({x:r.left+r.width/2-wwRect.left+wwEl.scrollLeft,y:r.top+r.height/2-wwRect.top+wwEl.scrollTop,ts:p.ts,loc:p.loc});
+    // Layout-based offset relative to .ww -- immune to the scale transform,
+    // scroll position, and animation timing that getBoundingClientRect() was
+    // vulnerable to (it mixed scaled coordinates with unscaled scroll offsets,
+    // which could misplace specific cells depending on scroll position).
+    var off=offsetRelativeTo(cell,wwEl);
+    plotted.push({x:off.x+cell.offsetWidth/2,y:off.y+cell.offsetHeight/2,ts:p.ts,loc:p.loc});
   });
 
   var svgContent='';
@@ -1859,6 +1867,31 @@ function nearestNeighborRoute(items,startLoc){
   return route;
 }
 
+// Processes racking blocks strictly in physical walk order (A/AA, then B/C,
+// then D/E) -- a picker walks through the building roughly in that sequence,
+// so this prevents pure nearest-neighbor from being lured into visiting a
+// distant block early just because one item there happens to look close.
+// Nearest-neighbor ordering is still used WITHIN each block, which is exactly
+// where it's needed (e.g. the B/C pairing).
+function blockAwareRoute(items,startLoc){
+  var byBlock={};
+  items.forEach(function(it){
+    var row=it.loc.split('-')[0];
+    var block=ROW_BLOCK[row]!=null?ROW_BLOCK[row]:0;
+    if(!byBlock[block])byBlock[block]=[];
+    byBlock[block].push(it);
+  });
+  var blockOrder=Object.keys(byBlock).map(Number).sort(function(a,b){return a-b;});
+  var route=[];
+  var currentLoc=startLoc;
+  blockOrder.forEach(function(block){
+    var blockItems=nearestNeighborRoute(byBlock[block],currentLoc);
+    route=route.concat(blockItems);
+    if(blockItems.length)currentLoc=blockItems[blockItems.length-1].loc;
+  });
+  return route;
+}
+
 function previewPickList(){
   var raw=document.getElementById('pickListInput').value;
   var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
@@ -1868,7 +1901,7 @@ function previewPickList(){
     if(!parsed)return;
     var v=DATA.d[parsed.sku];
     if(!v){items.push({sku:parsed.sku,qty:parsed.qty,error:'SKU not found'});return;}
-    var locs=(SLOC[parsed.sku]||[]).filter(function(l){return l[0]!=='E'&&l[0]!=='F'&&l[0]!=='G';});
+    var locs=(SLOC[parsed.sku]||[]).filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
     if(!locs.length){items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],error:'Not currently placed (or only in oversize rows E/F/G)'});return;}
     items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],loc:sortLocationsByWalkPath(locs)[0]});
   });
@@ -1876,7 +1909,7 @@ function previewPickList(){
   var resolvable=items.filter(function(it){return it.loc;});
   var unresolvable=items.filter(function(it){return !it.loc;});
   var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
-  resolvable=nearestNeighborRoute(resolvable,START_LOC);
+  resolvable=blockAwareRoute(resolvable,START_LOC);
   var ordered=resolvable.concat(unresolvable);
   lastPickListPreview=resolvable;
 
@@ -2307,7 +2340,7 @@ function handleSkuLookupForPick(rawSku,resultId){
     return;
   }
   var oversizeLocs=locs.filter(function(l){return l[0]==='E'||l[0]==='F'||l[0]==='G';});
-  var regularLocs=locs.filter(function(l){return l[0]!=='E'&&l[0]!=='F'&&l[0]!=='G';});
+  var regularLocs=locs.filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
   var html='';
   if(oversizeLocs.length){
     html+='<div style="color:#A32D2D;font-size:12px;margin-bottom:6px">'+oversizeLocs.length+' location'+(oversizeLocs.length>1?'s are':' is')+' oversize (Row '+oversizeLocs.map(function(l){return l[0];}).join(', ')+') -- not for regular picking, handled separately.</div>';
