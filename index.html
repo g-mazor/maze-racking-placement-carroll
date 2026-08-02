@@ -166,6 +166,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn btn-amber public-hide" id="btn-am" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();enterAddMode()">+ Add pallet</button>
     <button class="btn btn-red fk-hide public-hide" id="btn-dm" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();enterDelMode()">Delete mode</button>
     <button class="btn fk-hide public-hide" id="btn-cm" style="width:100%;box-sizing:border-box;background:#8E44AD;color:#FFF" onclick="closeSettingsPanel();enterCountMode()">🔢 Count mode</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();enterCreatePickListMode()">📋 Create Pick List</button>
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#607D8B;color:#FFF" onclick="closeSettingsPanel();toggleLog()">Log</button>
@@ -1781,6 +1782,64 @@ function enterDelMode(){
   mb.textContent='DELETE MODE: Click any coloured pallet cell to remove it | Right-click also works anywhere | Click "Delete mode" again to exit';
   document.getElementById('btn-dm').style.cssText='background:#C0392B;color:#FFF';
   });
+}
+
+// ---------- Phase 3: Pick Lists (Step 1 -- create & preview only, no persistence yet) ----------
+function enterCreatePickListMode(){
+  requirePin(function(){
+    mode='createpicklist';
+    mb.style.display='block';mb.className='am';mb.onclick=null;
+    mb.innerHTML='<div style="max-width:460px;margin:0 auto;text-align:left">'+
+      '<div style="text-align:center;margin-bottom:6px">Enter one SKU and quantity per line (e.g. "MC-PB7-15 2")</div>'+
+      '<textarea id="pickListInput" rows="6" placeholder="MC-PB7-15 2&#10;MWT-100 1" style="width:100%;padding:9px;border-radius:6px;border:1.5px solid #16A085;font-size:13px;box-sizing:border-box;font-family:monospace"></textarea>'+
+      '<div style="text-align:center;margin-top:8px"><button class="btn btn-blue" onclick="previewPickList()">Preview pick list</button></div>'+
+      '<div id="pickListPreview" style="margin-top:10px"></div>'+
+      '<div style="text-align:center;margin-top:6px"><span style="text-decoration:underline;cursor:pointer" onclick="setNorm()">Cancel</span></div>'+
+      '</div>';
+  });
+}
+
+function parsePickListLine(line){
+  var parts=line.trim().split(/[\s,]+/).filter(function(p){return p.length;});
+  if(!parts.length)return null;
+  var sku=parts[0].toUpperCase();
+  var qty=parts.length>1?parseInt(parts[1],10):1;
+  if(isNaN(qty)||qty<=0)qty=1;
+  return {sku:sku,qty:qty};
+}
+
+// Resolves each line to a real, pickable (non-oversize) location, then orders
+// the whole list by walk path -- the same building block Phase 4 (wave
+// picking) and the picker-facing checklist (next step) will both reuse.
+function previewPickList(){
+  var raw=document.getElementById('pickListInput').value;
+  var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
+  var items=[];
+  lines.forEach(function(line){
+    var parsed=parsePickListLine(line);
+    if(!parsed)return;
+    var v=DATA.d[parsed.sku];
+    if(!v){items.push({sku:parsed.sku,qty:parsed.qty,error:'SKU not found'});return;}
+    var locs=(SLOC[parsed.sku]||[]).filter(function(l){return l[0]!=='E'&&l[0]!=='F'&&l[0]!=='G';});
+    if(!locs.length){items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],error:'Not currently placed (or only in oversize rows E/F/G)'});return;}
+    items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],loc:sortLocationsByWalkPath(locs)[0]});
+  });
+
+  var resolvable=items.filter(function(it){return it.loc;});
+  var unresolvable=items.filter(function(it){return !it.loc;});
+  var sortedLocs=sortLocationsByWalkPath(resolvable.map(function(it){return it.loc;}));
+  resolvable.sort(function(a,b){return sortedLocs.indexOf(a.loc)-sortedLocs.indexOf(b.loc);});
+  var ordered=resolvable.concat(unresolvable);
+
+  var html=ordered.map(function(it,i){
+    if(it.error){
+      return '<div style="background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;color:#A32D2D">'+it.sku+' -- qty '+it.qty+' -- '+it.error+'</div>';
+    }
+    return '<div style="background:#F0F8F0;border:1px solid #8CD98C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<strong>'+(i+1)+'. '+it.sku+'</strong> -- '+it.desc+' -- qty '+it.qty+'<br>At '+fl(it.loc)+
+      '</div>';
+  }).join('');
+  document.getElementById('pickListPreview').innerHTML=html||'<div style="color:#777;font-size:12px">No items entered.</div>';
 }
 
 function enterCountMode(){
