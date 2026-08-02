@@ -173,6 +173,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillDescriptions()">Backfill descriptions</button>
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();backfillPendingDescriptions()">Backfill pending descriptions</button>
+    <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="closeSettingsPanel();repairLocationIndex()">🔧 Repair location index</button>
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="closeSettingsPanel();undoLast()">Undo</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
@@ -338,6 +339,29 @@ async function backfillPendingDescriptions(){
   });
 }
 
+// Rebuilds SLOC (which SKU is tracked at which location) entirely from LOC
+// (the actual live map -- the single source of truth for what's really at
+// each cell), discarding any stale entries left over from a location being
+// overwritten without properly cleaning up the previous SKU's record.
+function repairLocationIndex(){
+  requirePin(function(){
+    var newSloc={};
+    Object.keys(LOC).forEach(function(loc){
+      var sku=LOC[loc];
+      if(sku==='MIXED')return; // mixed pallets are tracked separately via MIXED_CONTENTS
+      if(!newSloc[sku])newSloc[sku]=[];
+      newSloc[sku].push(loc);
+    });
+    var staleCount=0;
+    Object.keys(SLOC).forEach(function(sku){
+      (SLOC[sku]||[]).forEach(function(l){if(!(newSloc[sku]||[]).includes(l))staleCount++;});
+    });
+    SLOC=newSloc;
+    rebuildMap();
+    alert(staleCount?('Repaired location index -- removed '+staleCount+' stale entr'+(staleCount!==1?'ies':'y')+'.'):'Location index checked -- no stale entries found.');
+  });
+}
+
 async function buildIdx(){
   LOC={};SLOC={};RECEIVED=[];
   // Racking starts empty for the move-in -- DATA.d stays as the full SKU catalog
@@ -376,7 +400,18 @@ function applyC(c,rec){
     SLOC[c.sku]=c.tl;
     if(movedMixed&&c.tl.length===1)MIXED_CONTENTS[c.tl[0]]=movedMixed;
   }
-  else if(c.type==='add'){c.tl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});}
+  else if(c.type==='add'){
+    c.tl.forEach(function(l){
+      var prevSku=LOC[l];
+      if(prevSku&&prevSku!==c.sku&&SLOC[prevSku]){
+        SLOC[prevSku]=SLOC[prevSku].filter(function(x){return x!==l;});
+        if(SLOC[prevSku].length===0)delete SLOC[prevSku];
+      }
+      LOC[l]=c.sku;
+    });
+    if(!SLOC[c.sku])SLOC[c.sku]=[];
+    c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});
+  }
   else if(c.type==='count'){QTY[c.loc]=c.qty;}
   else if(c.type==='mixedset'){MIXED_CONTENTS[c.loc]=c.contents||[];}
   else if(c.type==='receive'){RECEIVED.push({id:c.id,sku:c.sku,qty:c.qty,note:c.note||'',ts:c.ts||Date.now(),user:c.user||''});}
