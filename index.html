@@ -741,7 +741,9 @@ function renderWalkMapOnRealGrid(picks,user){
   wwEl.style.transformOrigin='top left';
   wwEl.style.outline='4px solid #2980B9';
   wwEl.style.outlineOffset='4px';
-  window.scrollTo({top:0,left:0,behavior:'smooth'});
+  window.scrollTo(0,0); // instant, not smooth -- a smooth scroll's duration is
+                        // unpredictable and could still be moving when we
+                        // measure cell positions below, misplacing every dot
 
   // Wait for the shrink transition + scroll to actually finish before measuring
   // positions -- measuring mid-animation would misplace every dot.
