@@ -1539,14 +1539,18 @@ var INTER_BLOCK_AISLE_WIDTH_M=8;
 function getCrossingBay(locA,locB){
   var pa=locA.split('-'),pb=locB.split('-');
   var bayA=parseInt(pa[1],10),bayB=parseInt(pb[1],10);
-  var viaEndStart=(bayA-1)+(bayB-1);
-  var viaEndFar=(42-bayA)+(42-bayB);
-  var best=Math.min(viaEndStart,viaEndFar);
-  var bestBay=viaEndStart<=viaEndFar?1:42;
+  var best=Infinity,bestBay=BRIDGE_CROSSING_BAYS[0];
   BRIDGE_CROSSING_BAYS.forEach(function(bx){
     var d=Math.abs(bayA-bx)+Math.abs(bayB-bx);
     if(d<best){best=d;bestBay=bx;}
   });
+  // Row-ends are also a real crossing option -- but only preferred if
+  // strictly shorter than every bridge bay. On a tie, the bridge bay wins,
+  // since that's the purpose-built, marked crossing point.
+  var viaEndStart=(bayA-1)+(bayB-1);
+  var viaEndFar=(42-bayA)+(42-bayB);
+  if(viaEndStart<best){best=viaEndStart;bestBay=1;}
+  if(viaEndFar<best){best=viaEndFar;bestBay=42;}
   return bestBay;
 }
 
