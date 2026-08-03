@@ -2054,7 +2054,7 @@ function previewPickList(){
     if(!parsed)return;
     var v=DATA.d[parsed.sku];
     if(!v){items.push({sku:parsed.sku,qty:parsed.qty,error:'SKU not found'});return;}
-    var locs=(SLOC[parsed.sku]||[]).filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
+    var locs=getSkuLocations(parsed.sku).filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
     if(!locs.length){items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],error:'Not currently placed (or only in oversize rows E/F/G)'});return;}
     items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],loc:sortLocationsByWalkPath(locs)[0]});
   });
@@ -2366,31 +2366,53 @@ function sendStockAlertEmail(){
   });
 }
 
+// A SKU sitting inside a shared mixed pallet is only tracked in
+// MIXED_CONTENTS, not SLOC (SLOC only knows about the 'MIXED' placeholder at
+// that spot) -- so a plain SLOC[sku] lookup always misses it, showing "not
+// placed" even though it's genuinely somewhere. These helpers check both.
+function getMixedPalletLocationsFor(sku){
+  return (SLOC['MIXED']||[]).filter(function(loc){
+    return (MIXED_CONTENTS[loc]||[]).indexOf(sku)>=0;
+  });
+}
+function getSkuLocations(sku){
+  return (SLOC[sku]||[]).concat(getMixedPalletLocationsFor(sku));
+}
+
 function showR(sku){
   var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
   if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;}
   if(key==='MIXED'){showMixedCard();return;}
-  var placed=SLOC[key]&&SLOC[key].length>0;
-  var locs=placed?sortLocationsByWalkPath(SLOC[key]):[];
+  var directLocs=SLOC[key]||[];
+  var mixedLocs=getMixedPalletLocationsFor(key);
+  var placed=directLocs.length>0;
+  var onlyInMixed=!placed&&mixedLocs.length>0;
+  var locs=placed?sortLocationsByWalkPath(directLocs):[];
   var abcBg={'A':'#E2EFDA','A-HV':'#D9EAD3','B':'#FFF2CC','C':'#FCE4E4','C-HV':'#FBE5D6'}[v[6]]||'#EEE';
   var abcFg={'A':'#375623','A-HV':'#1C4587','B':'#7F6000','C':'#9C0006','C-HV':'#833C00'}[v[6]]||'#444';
   var palBg=v[8]===3?'#FFC000':v[8]===2?'#FFE066':'#E8E8E8';
   var mp=v[13]||0;
   var uniqLocCodes=placed?locs.map(fl).filter(function(c,i,a){return a.indexOf(c)===i;}):[];
-  var locStr=placed?uniqLocCodes.join(' + '):'NOT YET PLACED';
+  var locStr=placed?uniqLocCodes.join(' + '):(onlyInMixed?'Part of a mixed pallet at '+mixedLocs.map(fl).join(' + '):'NOT YET PLACED');
   var mNote=placed&&locs.length>1?' <span style="background:#FFE066;padding:1px 6px;border-radius:4px;font-size:11px">'+locs.length+' pallet space'+(locs.length>1?'s':'')+'</span>':'';
   var cardH=placed?getBayHeight(locs[0]):null;
-  var rowInfo=placed?('Row '+locs[0][0]+' | Bay '+parseInt(locs[0].split('-')[1],10)+' | Level '+locs[0].split('-')[2]+(cardH?' | Height '+cardH:'')):'Waiting to be placed on the racking';
+  var rowInfo=placed?('Row '+locs[0][0]+' | Bay '+parseInt(locs[0].split('-')[1],10)+' | Level '+locs[0].split('-')[2]+(cardH?' | Height '+cardH:'')):
+    (onlyInMixed?('Row '+mixedLocs[0][0]+' | Bay '+parseInt(mixedLocs[0].split('-')[1],10)+' | Level '+mixedLocs[0].split('-')[2]+' -- shares this pallet with other SKUs'):'Waiting to be placed on the racking');
   var countHtml='';
   if(placed){
     var withCounts=locs.filter(function(l){return QTY[l]!=null;});
     if(withCounts.length){
       countHtml='<div style="font-size:11px;color:#555;margin-top:3px">Stock count: '+withCounts.map(function(l){return fl(l)+'='+QTY[l];}).join(', ')+'</div>';
     }
+  } else if(onlyInMixed){
+    countHtml=mixedLocs.map(function(l){
+      var others=(MIXED_CONTENTS[l]||[]).filter(function(s){return s!==key;});
+      return '<div style="font-size:11px;color:#555;margin-top:3px">At '+fl(l)+', shared with: '+(others.length?others.join(', '):'(no other SKUs currently listed)')+'</div>';
+    }).join('');
   }
   var photoUrl=bestPhotoUrl(key,v[4],v[5]);
   var suggHtml='';
-  if(!placed){
+  if(!placed&&!onlyInMixed){
     var sugg=suggestLocationFor(key,v[8]);
     if(sugg){
       suggHtml='<div style="background:#FFF3CD;border:1.5px solid #F39C12;border-radius:6px;padding:6px 10px;margin:6px 0;font-size:12px;color:#7A4E00"><strong>Suggested:</strong> <strong>'+sugg.code+'</strong> (Row '+sugg.row+', Bay '+sugg.bay+', Level '+sugg.level+' -- '+sugg.reason+')</div>';
