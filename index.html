@@ -2683,6 +2683,20 @@ function markPickListProgress(sku,loc){
 // log on every call, so anything stored ON an item would be lost between taps.
 var guidedPickState=null; // {listId, index, phase:'arrive'|'pick', confirmingMismatch}
 
+// Runs periodically while a picker is logged in, so a newly assigned list (or
+// a list becoming complete) is noticed even if the picker's screen has been
+// sitting idle -- previously, nothing re-checked this, so an old "list
+// complete" screen could stay frozen even after a brand new list was
+// assigned. Only re-renders when the active list ID has actually changed, so
+// it never disrupts a picker who's mid-typing on their current step.
+function checkForPickListUpdate(){
+  if(!currentPicker)return;
+  var pl=getActivePickListFor(currentPicker);
+  var currentListId=guidedPickState?guidedPickState.listId:null;
+  var newListId=pl?pl.id:null;
+  if(currentListId!==newListId)renderPickerAssignedList();
+}
+
 var guidedShowingFullList=false;
 
 function togglePickerFullList(){
@@ -3134,6 +3148,7 @@ async function pollSync(manual){
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
+  setInterval(checkForPickListUpdate,5000);
 })();
 
 </script>
