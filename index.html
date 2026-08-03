@@ -1766,6 +1766,34 @@ function pickRowForGroup(group){
   rows.sort(function(a,b){return emptyCountInRow(b)-emptyCountInRow(a);});
   return rows[0];
 }
+
+// Finds which row an existing member of this subtype is already placed in,
+// if any -- used to keep color/size variants of the same product type
+// together, instead of scattering them based on transient empty-space
+// balancing each time a new one gets placed.
+function findExistingSubtypeRow(group,subtype){
+  var members=Object.keys(DATA.d).filter(function(k){
+    var v=DATA.d[k];if(!v)return false;
+    return v[5]===group&&detectSubtype(v[4])===subtype;
+  });
+  for(var i=0;i<members.length;i++){
+    var locs=SLOC[members[i]]||[];
+    if(locs.length)return locs[0].split('-')[0];
+  }
+  return null;
+}
+
+// Wraps pickRowForGroup with subtype-stickiness: if this exact product type
+// (e.g. "table", "shed") already has ANY variant placed somewhere, stay in
+// that same row rather than re-balancing across the group's candidate rows.
+function pickRowForGroupAndSubtype(group,subtype){
+  if(group==='GREENHOUSES'||group==='Canopia')return pickRowForGroup(group);
+  if(subtype){
+    var existingRow=findExistingSubtypeRow(group,subtype);
+    if(existingRow)return existingRow;
+  }
+  return pickRowForGroup(group);
+}
 function velocityPercentile(sku){
   var v=DATA.d[sku];if(!v)return 0.5;
   var group=v[5];var myRate=v[7]||0;var faster=0,total=0;
@@ -1904,10 +1932,11 @@ function findNearestEmpty(row,targetBay,spaces,pct,sku,isFG){
 
 function suggestLocationFor(sku,spaces){
   var v=DATA.d[sku];if(!v)return null;
-  var group=v[5];var row=pickRowForGroup(group);
+  var group=v[5];
+  var subtype=detectSubtype(v[4]);
+  var row=pickRowForGroupAndSubtype(group,subtype);
   if(!row)return null;
   var pct=velocityPercentile(sku);
-  var subtype=detectSubtype(v[4]);
   var clusterBay=subtype?findSubtypeClusterBay(row,subtype,group,sku):null;
   var targetBay=clusterBay!=null?clusterBay:suggestBay(row,pct);
   var isFG=(row==='F'||row==='G');
