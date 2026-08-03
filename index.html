@@ -2301,10 +2301,12 @@ function sendStockAlertEmail(){
     });
   }
   var url=SHEET_API+'?sendalert=1&to='+encodeURIComponent('gmazor@mazeproducts.com.au')+'&subject='+encodeURIComponent('Maze Warehouse Stock Alerts')+'&body='+encodeURIComponent(body);
-  var img=new Image();
-  img.onload=function(){si2('Alert email sent.');};
-  img.onerror=function(){si2('Alert email request sent (could not confirm delivery).');};
-  img.src=url;
+  si2('Sending alert email...');
+  fetch(url,{mode:'no-cors'}).then(function(){
+    si2('Alert email request sent to the backend -- check your inbox in a moment.');
+  }).catch(function(e){
+    si2('Could not reach the backend to send the email: '+(e&&e.message?e.message:'unknown error'));
+  });
 }
 
 function showR(sku){
