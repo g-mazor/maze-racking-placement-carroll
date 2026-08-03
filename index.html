@@ -169,6 +169,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn fk-hide public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();enterCreatePickListMode()">📋 Create Pick List</button>
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -205,6 +206,10 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
   <button class="btn btn-red" style="display:block;width:100%;margin-bottom:6px;box-sizing:border-box" onclick="doResetAll()">⚠️ Clear everything</button>
   <div style="text-align:center;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('mgrPanel').style.display='none'">Close</div>
+</div>
+<div id="stockAlertsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #B9770E;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div id="stockAlertsBody"></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('stockAlertsPanel').style.display='none'">Close</div>
 </div>
 <div id="pickerStatsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
@@ -2163,6 +2168,145 @@ document.addEventListener('contextmenu',function(e){
   if(loc&&sku){requirePin(function(){var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});});}}
 });
 
+// ---------- Stock alerts: lead time (per SKU, for reorder alerts) ----------
+function getLeadTime(sku){
+  var val=null;
+  CHANGES.forEach(function(c){
+    if(c.type==='set_leadtime'&&c.sku===sku&&c.qty!=null)val=c.qty;
+  });
+  return val;
+}
+function setLeadTimeForSku(sku){
+  requirePin(function(){
+    var current=getLeadTime(sku);
+    var entered=prompt('Lead time for '+sku+' (days from order to arrival):',current!=null?String(current):'');
+    if(entered===null)return;
+    var days=parseInt(entered.trim(),10);
+    if(isNaN(days)||days<=0){alert('Enter a valid number of days.');return;}
+    applyC({type:'set_leadtime',sku:sku,qty:days,ts:Date.now()},true);
+    si2('Lead time for '+sku+' set to '+days+' days');
+    showR(sku);
+  });
+}
+
+// Replenish alert: this SKU's GROUND LEVEL specifically is running low --
+// distinct from total warehouse stock. Flags whether there's reserve stock
+// elsewhere (upper levels, other locations) that can simply be moved down,
+// versus a genuine shortage with nothing left anywhere.
+function computeReplenishAlerts(threshold){
+  threshold=threshold||5;
+  var alerts=[];
+  Object.keys(SLOC).forEach(function(sku){
+    if(sku==='MIXED')return;
+    var locs=SLOC[sku]||[];
+    var level1Locs=locs.filter(function(l){return l.split('-')[2]==='1';});
+    if(!level1Locs.length)return;
+    var level1Qty=level1Locs.reduce(function(a,l){return a+(QTY[l]||0);},0);
+    if(level1Qty>threshold)return;
+    var totalQty=locs.reduce(function(a,l){return a+(QTY[l]||0);},0);
+    var reserveQty=Math.max(0,totalQty-level1Qty);
+    var v=DATA.d[sku];
+    alerts.push({sku:sku,desc:v?v[4]:'',level1Qty:level1Qty,reserveQty:reserveQty,hasReserve:reserveQty>0});
+  });
+  return alerts.sort(function(a,b){return a.level1Qty-b.level1Qty;});
+}
+
+// Reorder alert: based on the SKU's own lead time (only checked for SKUs that
+// have one set) -- flags anything where days-of-stock-left is closing in on
+// how long a fresh order actually takes to arrive.
+function computeReorderAlerts(bufferDays){
+  bufferDays=bufferDays!=null?bufferDays:14;
+  var alerts=[];
+  Object.keys(DATA.d).forEach(function(sku){
+    var leadTime=getLeadTime(sku);
+    if(leadTime==null)return;
+    var v=DATA.d[sku];
+    var totalQty=(SLOC[sku]||[]).reduce(function(a,l){return a+(QTY[l]||0);},0);
+    var dailyRate=v[7]||0;
+    if(dailyRate<=0)return;
+    var daysLeft=totalQty/dailyRate;
+    if(daysLeft<leadTime+bufferDays){
+      alerts.push({sku:sku,desc:v[4],totalQty:totalQty,dailyRate:dailyRate,daysLeft:Math.round(daysLeft),leadTime:leadTime});
+    }
+  });
+  return alerts.sort(function(a,b){return a.daysLeft-b.daysLeft;});
+}
+
+// Acknowledging an alert snapshots the qty at the time -- it stays quiet only
+// until that qty actually changes, then resurfaces automatically.
+function getAckedQty(sku,ackType){
+  var val;
+  CHANGES.forEach(function(c){
+    if(c.type===ackType&&c.sku===sku&&c.qty!=null)val=c.qty;
+  });
+  return val;
+}
+function ackReplenishAlert(sku,currentQty){
+  applyC({type:'ack_replenish',sku:sku,qty:currentQty,ts:Date.now()},true);
+  showStockAlerts();
+}
+function ackReorderAlert(sku,currentQty){
+  applyC({type:'ack_reorder',sku:sku,qty:currentQty,ts:Date.now()},true);
+  showStockAlerts();
+}
+
+function showStockAlerts(){
+  var replenish=computeReplenishAlerts(5).filter(function(a){
+    var acked=getAckedQty(a.sku,'ack_replenish');
+    return acked===undefined||acked!==a.level1Qty;
+  });
+  var reorder=computeReorderAlerts(14).filter(function(a){
+    var acked=getAckedQty(a.sku,'ack_reorder');
+    return acked===undefined||acked!==a.totalQty;
+  });
+
+  var html='<div style="font-weight:700;color:#B9770E;margin-bottom:6px">\ud83d\udce6 Replenish (ground level low)</div>';
+  html+=replenish.length?replenish.map(function(a){
+    return '<div style="background:#FFF3CD;border:1px solid #F39C12;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<strong>'+a.sku+'</strong> -- '+a.desc+'<br>Ground level: '+a.level1Qty+' left'+
+      (a.hasReserve?' -- <span style="color:#1E8449;font-weight:700">'+a.reserveQty+' in reserve, move down</span>':' -- <span style="color:#A32D2D;font-weight:700">no reserve stock -- needs reorder</span>')+
+      '<div style="text-align:right;margin-top:4px"><button class="btn" style="font-size:10px;padding:4px 8px" onclick="ackReplenishAlert(\''+a.sku+'\','+a.level1Qty+')">Acknowledge</button></div>'+
+      '</div>';
+  }).join(''):'<div style="font-size:12px;color:#777;margin-bottom:10px">Nothing needs replenishing right now.</div>';
+
+  html+='<div style="font-weight:700;color:#A32D2D;margin-bottom:6px;margin-top:14px">\u23f1 Reorder soon (lead time)</div>';
+  html+=reorder.length?reorder.map(function(a){
+    return '<div style="background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<strong>'+a.sku+'</strong> -- '+a.desc+'<br>'+a.totalQty+' left, using '+a.dailyRate.toFixed(1)+'/day -- <strong>'+a.daysLeft+' days of stock</strong> (lead time '+a.leadTime+' days)'+
+      '<div style="text-align:right;margin-top:4px"><button class="btn" style="font-size:10px;padding:4px 8px" onclick="ackReorderAlert(\''+a.sku+'\','+a.totalQty+')">Acknowledge</button></div>'+
+      '</div>';
+  }).join(''):'<div style="font-size:12px;color:#777">Nothing needs reordering right now (only SKUs with a lead time set are checked).</div>';
+
+  html+='<div style="text-align:center;margin-top:12px"><button class="btn btn-blue" onclick="sendStockAlertEmail()">\ud83d\udce7 Send alert email now</button></div>';
+  document.getElementById('stockAlertsBody').innerHTML=html;
+  document.getElementById('stockAlertsPanel').style.display='block';
+}
+
+function sendStockAlertEmail(){
+  var replenish=computeReplenishAlerts(5);
+  var reorder=computeReorderAlerts(14);
+  if(!replenish.length&&!reorder.length){alert('No active alerts to send.');return;}
+  var body='MAZE WAREHOUSE STOCK ALERTS\n\n';
+  if(replenish.length){
+    body+='REPLENISH (ground level low):\n';
+    replenish.forEach(function(a){
+      body+='- '+a.sku+' ('+a.desc+'): '+a.level1Qty+' left on ground level'+(a.hasReserve?', '+a.reserveQty+' in reserve to move down':', NO reserve -- needs reorder')+'\n';
+    });
+    body+='\n';
+  }
+  if(reorder.length){
+    body+='REORDER SOON (lead time):\n';
+    reorder.forEach(function(a){
+      body+='- '+a.sku+' ('+a.desc+'): '+a.totalQty+' left, '+a.daysLeft+' days of stock, lead time '+a.leadTime+' days\n';
+    });
+  }
+  var url=SHEET_API+'?sendalert=1&to='+encodeURIComponent('gmazor@mazeproducts.com.au')+'&subject='+encodeURIComponent('Maze Warehouse Stock Alerts')+'&body='+encodeURIComponent(body);
+  var img=new Image();
+  img.onload=function(){si2('Alert email sent.');};
+  img.onerror=function(){si2('Alert email request sent (could not confirm delivery).');};
+  img.src=url;
+}
+
 function showR(sku){
   var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
   if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;}
@@ -2207,6 +2351,7 @@ function showR(sku){
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
     '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>'+v[11].toLocaleString()+'</strong> on hand</div><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
+    '<div style="font-size:11px;color:#555;margin-top:4px">Lead time: <strong>'+(getLeadTime(key)!=null?getLeadTime(key)+' days':'not set')+'</strong> &nbsp; <a href="javascript:void(0)" onclick="setLeadTimeForSku(\''+key+'\')" style="color:#B9770E">\u23f1 Set lead time</a></div>'+
     (placed?
       '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
       :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Place multiple</button></div>')+
