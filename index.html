@@ -2382,7 +2382,7 @@ function getSkuLocations(sku){
 function showR(sku){
   var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
   if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;}
-  if(key==='MIXED'){showMixedCard();return;}
+  if(key==='MIXED'){showMixedEntryCard();return;}
   var directLocs=SLOC[key]||[];
   var mixedLocs=getMixedPalletLocationsFor(key);
   var placed=directLocs.length>0;
@@ -2440,6 +2440,27 @@ function showR(sku){
   el.style.display='block';hlSKU(key);
   ttSticky=false;tt.style.display='none';
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},150);
+}
+
+// Entry point for searching "MIXED" -- always offers both starting a brand
+// new mixed pallet AND viewing/editing existing ones, since the old flow
+// could only ever show what already existed with no way back to add another.
+function showMixedEntryCard(){
+  var locs=SLOC['MIXED']||[];
+  var el=document.getElementById('rc');el.className='';
+  var existingHtml=locs.length?
+    '<div style="margin-top:10px;font-size:12px;font-weight:700;color:#555">Existing mixed pallets:</div>'+
+    locs.map(function(loc){
+      var count=(MIXED_CONTENTS[loc]||[]).length;
+      return '<div style="padding:5px 0;border-bottom:1px solid #EEE"><a href="javascript:void(0)" onclick="showMixedCard(\''+loc+'\')" style="color:#D63384;font-weight:600">'+fl(loc)+'</a> -- '+count+' SKU'+(count!==1?'s':'')+'</div>';
+    }).join('')
+    :'<div style="font-size:12px;color:#777;margin-top:10px">No mixed pallets placed yet.</div>';
+  el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
+    '<div><div class="rl" style="color:#D63384">MIXED PALLET</div>'+
+    '<div class="rca" style="margin-top:8px"><button class="btn btn-amber" onclick="enterAddModeCard(\'MIXED\')">+ Start a new mixed pallet</button></div>'+
+    existingHtml+
+    '</div>';
+  el.style.display='block';
 }
 
 function showMixedCard(loc){
