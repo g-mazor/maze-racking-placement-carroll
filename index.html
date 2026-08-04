@@ -203,6 +203,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
@@ -381,22 +382,27 @@ function repairLocationIndex(){
 // location -- used to determine whether contents data is genuinely lost, or
 // just not being displayed correctly. Safe to remove once resolved.
 function debugMixedPalletHistory(){
-  var mixedsetEvents=CHANGES.filter(function(c){return c.type==='mixedset';});
   var allMixedLocs=getAllMixedLocations();
-  var html='<div style="max-height:80vh;overflow-y:auto;font-size:12px;font-family:monospace">';
-  html+='<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1F3864">CURRENT STATE ('+allMixedLocs.length+' mixed locations)</div>';
+  var report='CURRENT STATE -- '+allMixedLocs.length+' mixed location'+(allMixedLocs.length!==1?'s':'')+':\n\n';
+  if(!allMixedLocs.length)report+='(none found)\n';
   allMixedLocs.forEach(function(loc){
     var contents=MIXED_CONTENTS[loc]||[];
     var ok=contents.length>0;
-    html+='<div style="padding:4px 0;border-bottom:1px solid #EEE;color:'+(ok?'#1E8449':'#A32D2D')+'">'+loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(contents)+'</div>';
+    report+=(ok?'\u2705 ':'\u274c ')+loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(contents)+'\n';
   });
-  html+='<div style="font-weight:700;font-size:14px;margin:14px 0 8px;color:#1F3864">mixedset HISTORY ('+mixedsetEvents.length+' events)</div>';
+  alert(report);
+}
+
+function debugMixedPalletFullHistory(){
+  var mixedsetEvents=CHANGES.filter(function(c){return c.type==='mixedset';});
+  var html='<div style="max-height:80vh;overflow-y:auto;font-size:12px;font-family:monospace">';
+  html+='<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1F3864">mixedset HISTORY ('+mixedsetEvents.length+' events)</div>';
   mixedsetEvents.forEach(function(c,i){
     var when=c.ts?new Date(c.ts).toLocaleString():'(no ts)';
     html+='<div style="padding:3px 0">'+(i+1)+'. '+c.loc+' -&gt; '+JSON.stringify(c.contents)+' ('+when+')</div>';
   });
   html+='</div>';
-  oM('Mixed Pallet Diagnostic',' ',function(){});
+  oM('Mixed Pallet Full History',' ',function(){});
   document.getElementById('mm').innerHTML=html;
 }
 
