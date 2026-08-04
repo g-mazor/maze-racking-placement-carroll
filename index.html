@@ -1725,7 +1725,7 @@ function estimateWalkSeconds(locA,locB){
 
 function hlSKU(sku){
   clrHL();if(!sku)return;
-  var locs=sortLocationsByWalkPath(SLOC[sku]||[]);hi=locs;
+  var locs=sortLocationsByWalkPath(getSkuLocations(sku));hi=locs;
   locs.forEach(function(loc,i){
     var cell=document.getElementById('c_'+loc);if(!cell)return;
     cell.classList.remove('occ','be');cell.style.background='#E24B4A';
@@ -3208,7 +3208,7 @@ si.addEventListener('input',function(){
   var all=sm.concat(dm).slice(0,10);if(!all.length){al.style.display='none';return;}
   al.innerHTML=all.map(function(s){
     var v=DATA.d[s];
-    var placed=(SLOC[s]||[]).length;
+    var placed=getSkuLocations(s).length;
     var pend=RECEIVED.filter(function(r){return r.sku===s;});
     var status='';
     if(placed>0)status+='<span style="color:#1E8449;font-weight:600">\u2713 Placed ('+placed+' space'+(placed>1?'s':'')+')</span>';
