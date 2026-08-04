@@ -383,16 +383,21 @@ function repairLocationIndex(){
 function debugMixedPalletHistory(){
   var mixedsetEvents=CHANGES.filter(function(c){return c.type==='mixedset';});
   var allMixedLocs=getAllMixedLocations();
-  var report='mixedset EVENTS IN HISTORY: '+mixedsetEvents.length+'\n\n';
+  var html='<div style="max-height:80vh;overflow-y:auto;font-size:12px;font-family:monospace">';
+  html+='<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1F3864">CURRENT STATE ('+allMixedLocs.length+' mixed locations)</div>';
+  allMixedLocs.forEach(function(loc){
+    var contents=MIXED_CONTENTS[loc]||[];
+    var ok=contents.length>0;
+    html+='<div style="padding:4px 0;border-bottom:1px solid #EEE;color:'+(ok?'#1E8449':'#A32D2D')+'">'+loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(contents)+'</div>';
+  });
+  html+='<div style="font-weight:700;font-size:14px;margin:14px 0 8px;color:#1F3864">mixedset HISTORY ('+mixedsetEvents.length+' events)</div>';
   mixedsetEvents.forEach(function(c,i){
     var when=c.ts?new Date(c.ts).toLocaleString():'(no ts)';
-    report+=(i+1)+'. '+c.loc+' -> '+JSON.stringify(c.contents)+' ('+when+')\n';
+    html+='<div style="padding:3px 0">'+(i+1)+'. '+c.loc+' -&gt; '+JSON.stringify(c.contents)+' ('+when+')</div>';
   });
-  report+='\nCURRENT MIXED LOCATIONS: '+allMixedLocs.length+'\n\n';
-  allMixedLocs.forEach(function(loc){
-    report+=loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(MIXED_CONTENTS[loc]||[])+'\n';
-  });
-  alert(report);
+  html+='</div>';
+  oM('Mixed Pallet Diagnostic',' ',function(){});
+  document.getElementById('mm').innerHTML=html;
 }
 
 function migrateLegacyMixedPallets(){
