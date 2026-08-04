@@ -2723,9 +2723,19 @@ function showMixedCard(loc){
     }
   }
   var el=document.getElementById('rc');el.className='';
-  var contents=MIXED_CONTENTS[loc]||[];
   var identity=LOC[loc];
   var isLegacyShared=(identity==='MIXED');
+  // A mixed pallet spanning multiple spaces only has its contents stored at
+  // one of those locations -- find ALL locations sharing this same identity,
+  // and whichever one actually holds the contents, so tapping any cell that's
+  // part of this pallet shows the exact same unified view.
+  var allLocsForPallet=isLegacyShared?[loc]:(SLOC[identity]||[loc]);
+  var primaryLoc=loc;
+  for(var pi=0;pi<allLocsForPallet.length;pi++){
+    if((MIXED_CONTENTS[allLocsForPallet[pi]]||[]).length){primaryLoc=allLocsForPallet[pi];break;}
+  }
+  var contents=MIXED_CONTENTS[primaryLoc]||[];
+  var spanLabel=allLocsForPallet.length>1?allLocsForPallet.map(fl).join(' + '):fl(loc);
   var itemsHtml=contents.length
     ?contents.map(function(entry,i){
       var sk=mixedEntrySku(entry);var qty=mixedEntryQty(entry);
@@ -2734,19 +2744,19 @@ function showMixedCard(loc){
         '<a href="javascript:void(0)" onclick="showR(\''+sk+'\')" style="color:#2980B9;font-weight:600">'+sk+'</a>'+
         '<span style="flex:1;padding:0 8px;color:#555;font-size:12px">'+desc+'</span>'+
         '<span style="font-size:12px;color:#555;margin-right:8px">Qty: '+(qty!=null?qty:'not set')+'</span>'+
-        '<a href="javascript:void(0)" onclick="changeMixedSkuCount(\''+loc+'\','+i+')" style="font-size:11px;color:#B9770E;margin-right:8px">Change count</a>'+
-        '<span class="rcc" style="position:static" onclick="removeFromMixed(\''+loc+'\','+i+')">x</span></div>';
+        '<a href="javascript:void(0)" onclick="changeMixedSkuCount(\''+primaryLoc+'\','+i+')" style="font-size:11px;color:#B9770E;margin-right:8px">Change count</a>'+
+        '<span class="rcc" style="position:static" onclick="removeFromMixed(\''+primaryLoc+'\','+i+')">x</span></div>';
     }).join('')
     :'<div style="color:#888;padding:6px 0">No SKUs recorded in this pallet yet.</div>';
   var palletActions=isLegacyShared?
     '<div style="font-size:11px;color:#A32D2D;background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:6px 10px;margin-top:8px">This pallet still shares its identity with other legacy mixed pallets -- Move/Delete/Count/Change spaces would affect all of them until migrated. Use "🔧 Make mixed pallets individually addressable" (hidden manager panel) first.</div>'
-    :'<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+identity+'\')">Move this pallet</button><button class="btn" style="background:#BA7517;color:#FFF" onclick="changeMixedPalletSpace(\''+loc+'\')">\ud83d\udce6 Change pallet space</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+identity+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+identity+'\')">Delete this pallet</button></div>';
+    :'<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+identity+'\')">Move this pallet</button><button class="btn" style="background:#BA7517;color:#FFF" onclick="changeMixedPalletSpace(\''+allLocsForPallet[0]+'\')">\ud83d\udce6 Change pallet space</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+identity+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+identity+'\')">Delete this pallet</button></div>';
   el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
     '<div><div class="rl" style="color:#D63384">MIXED PALLET</div>'+
-    '<div class="rd">'+fl(loc)+'</div>'+
+    '<div class="rd">'+spanLabel+'</div>'+
     '<div style="margin-top:8px;font-size:12px;font-weight:700;color:#555">Contents:</div>'+
     itemsHtml+
-    '<div class="rca"><button class="btn" style="background:#D63384;color:#FFF" onclick="addToMixed(\''+loc+'\')">+ Add SKU to this pallet</button></div>'+
+    '<div class="rca"><button class="btn" style="background:#D63384;color:#FFF" onclick="addToMixed(\''+primaryLoc+'\')">+ Add SKU to this pallet</button></div>'+
     palletActions+
     '</div>';
   el.style.display='block';
