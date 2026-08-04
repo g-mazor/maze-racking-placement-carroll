@@ -1493,6 +1493,35 @@ function changePalletSpace(loc,sku){
   });
 }
 
+// Changes how many pallet spaces a mixed pallet occupies. Built as its own
+// dedicated function rather than reusing the generic move logic, because
+// that only reliably preserves mixed contents for a simple 1-space move --
+// resizing to multiple spaces would otherwise risk losing contents again,
+// so this explicitly re-applies them as a separate, deliberate step after
+// the resize regardless of what the move handler itself does.
+function changeMixedPalletSpace(loc){
+  requirePin(function(){
+    var identity=LOC[loc];
+    if(!identity||!isMixedSku(identity)){alert('This location is not a mixed pallet.');return;}
+    var savedContents=(MIXED_CONTENTS[loc]||[]).slice();
+    var current=(SLOC[identity]||[loc]).length;
+    var answer=prompt('How many pallet spaces should this mixed pallet take up? (currently '+current+')',String(current));
+    if(answer===null)return;
+    var n=parseInt(answer.trim(),10);
+    if(isNaN(n)||n<1){alert('Enter a whole number of 1 or more.');return;}
+    if(n===current)return;
+    var tl=findSeqResize(loc,n,identity);
+    if(!tl){alert('Not enough consecutive space starting at '+fl(loc)+' for '+n+' pallet space'+(n>1?'s':'')+'. Try moving it first, or free up the neighbouring cell.');return;}
+    applyC({type:'move',sku:identity,fl:SLOC[identity]||[loc],tl:tl},true);
+    // Explicitly restore contents at the new primary location, regardless of
+    // whether the move itself preserved them -- this is the safety net.
+    applyC({type:'mixedset',loc:tl[0],contents:savedContents},true);
+    rebuildMap();hlSKU(identity);
+    si2('Mixed pallet spaces set to '+n);
+    showMixedCard(tl[0]);
+  });
+}
+
 function onOcc(loc,sku,e){
   if(mode==='movetarget'){
     var fromLocs=SLOC[sku]||[loc];
@@ -2710,8 +2739,8 @@ function showMixedCard(loc){
     }).join('')
     :'<div style="color:#888;padding:6px 0">No SKUs recorded in this pallet yet.</div>';
   var palletActions=isLegacyShared?
-    '<div style="font-size:11px;color:#A32D2D;background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:6px 10px;margin-top:8px">This pallet still shares its identity with other legacy mixed pallets -- Move/Delete/Count would affect all of them until migrated. Use "🔧 Make mixed pallets individually addressable" (hidden manager panel) first.</div>'
-    :'<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+identity+'\')">Move this pallet</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+identity+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+identity+'\')">Delete this pallet</button></div>';
+    '<div style="font-size:11px;color:#A32D2D;background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:6px 10px;margin-top:8px">This pallet still shares its identity with other legacy mixed pallets -- Move/Delete/Count/Change spaces would affect all of them until migrated. Use "🔧 Make mixed pallets individually addressable" (hidden manager panel) first.</div>'
+    :'<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+identity+'\')">Move this pallet</button><button class="btn" style="background:#BA7517;color:#FFF" onclick="changeMixedPalletSpace(\''+loc+'\')">\ud83d\udce6 Change pallet space</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+identity+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+identity+'\')">Delete this pallet</button></div>';
   el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
     '<div><div class="rl" style="color:#D63384">MIXED PALLET</div>'+
     '<div class="rd">'+fl(loc)+'</div>'+
