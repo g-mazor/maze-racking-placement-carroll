@@ -1611,30 +1611,67 @@ function showEmptyInfo(loc,e){
 
 function startPlaceAtLocation(loc){
   requirePin(function(){
-    var sku=prompt('Enter the SKU code to place at '+fl(loc)+':','');
-    if(sku===null||!sku.trim())return;
-    var key=sku.trim().toUpperCase();
-    var v=DATA.d[key];
-    if(!v){alert('SKU not found in catalog: '+key);return;}
     if(LOC[loc]){alert('That spot is already occupied.');return;}
-    var spacesAns=prompt('How many pallet spaces does this take?',String(v[8]||1));
-    if(spacesAns===null)return;
-    var spaces=parseInt(spacesAns.trim(),10);
-    if(isNaN(spaces)||spaces<1){alert('Enter a whole number of 1 or more.');return;}
-    var tl;
-    if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces starting here.');return;}}
-    else{tl=[loc];}
-    var countAns=prompt('Stock count for this pallet? Leave blank to skip.','');
-    var qty=null;
-    if(countAns!==null&&countAns.trim()!==''){
-      var q=parseInt(countAns.trim(),10);
-      if(!isNaN(q)&&q>=0)qty=q;
-    }
-    applyC({type:'add',sku:key,tl:tl},true);
-    if(qty!=null)applyC({type:'count',sku:key,loc:tl[0],qty:qty},true);
-    rebuildMap();hlSKU(key);si2('Placed '+key+' at '+fl(loc));
     ttSticky=false;ttPinnedLoc=null;tt.style.display='none';
+    mode='placeatloc';
+    mb.style.display='block';mb.className='am';mb.onclick=null;
+    mb.innerHTML='<div style="max-width:420px;margin:0 auto;text-align:left">'+
+      '<div style="text-align:center;margin-bottom:6px">Search for a SKU to place at <strong>'+fl(loc)+'</strong></div>'+
+      '<input id="placeAtLocSearchInput" type="text" placeholder="Search SKU or description..." autocomplete="off" style="width:100%;padding:9px;border-radius:6px;border:1.5px solid #8CD98C;font-size:13px;box-sizing:border-box"/>'+
+      '<div id="placeAtLocSearchResults" style="margin-top:8px;max-height:280px;overflow-y:auto"></div>'+
+      '<div style="text-align:center;margin-top:8px"><span style="text-decoration:underline;cursor:pointer" onclick="setNorm()">Cancel</span></div>'+
+      '</div>';
+    var inp=document.getElementById('placeAtLocSearchInput');
+    inp.oninput=function(){renderPlaceAtLocResults(loc,inp.value);};
+    setTimeout(function(){inp.focus();},50);
   });
+}
+
+function renderPlaceAtLocResults(loc,query){
+  var resultsEl=document.getElementById('placeAtLocSearchResults');
+  var q=query.trim().toUpperCase();
+  if(q.length<2){resultsEl.innerHTML='';return;}
+  var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+  var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
+  var all=sm.concat(dm).slice(0,10);
+  if(!all.length){resultsEl.innerHTML='<div style="color:#777;font-size:12px;padding:6px 0">No matches.</div>';return;}
+  resultsEl.innerHTML=all.map(function(s){
+    var v=DATA.d[s];
+    var placed=getSkuLocations(s).length;
+    var pend=RECEIVED.filter(function(r){return r.sku===s;});
+    var status='';
+    if(placed>0)status+='<span style="color:#1E8449;font-weight:600">\u2713 Placed ('+placed+' space'+(placed>1?'s':'')+')</span>';
+    if(pend.length){
+      var pendQty=pend.reduce(function(a,r){return a+(r.qty||0);},0);
+      status+=(status?' &nbsp;|&nbsp; ':'')+'<span style="color:#B9770E;font-weight:600">\ud83d\udce6 Pending ('+pend.length+', qty '+pendQty+')</span>';
+    }
+    return '<div style="padding:8px 10px;border-bottom:1px solid #EEE;font-size:12px;cursor:pointer" onclick="confirmPlaceAtLocationSku(\''+loc+'\',\''+s+'\')">'+
+      '<strong>'+s+'</strong> -- '+(v?v[4].slice(0,50):'')+(status?'<div style="font-size:10px;margin-top:2px">'+status+'</div>':'')+
+      '</div>';
+  }).join('');
+}
+
+function confirmPlaceAtLocationSku(loc,key){
+  var v=DATA.d[key];
+  if(!v){alert('SKU not found in catalog: '+key);return;}
+  if(LOC[loc]){alert('That spot is already occupied.');return;}
+  var spacesAns=prompt('How many pallet spaces does this take?',String(v[8]||1));
+  if(spacesAns===null)return;
+  var spaces=parseInt(spacesAns.trim(),10);
+  if(isNaN(spaces)||spaces<1){alert('Enter a whole number of 1 or more.');return;}
+  var tl;
+  if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces starting here.');return;}}
+  else{tl=[loc];}
+  var countAns=prompt('Stock count for this pallet? Leave blank to skip.','');
+  var qty=null;
+  if(countAns!==null&&countAns.trim()!==''){
+    var q=parseInt(countAns.trim(),10);
+    if(!isNaN(q)&&q>=0)qty=q;
+  }
+  applyC({type:'add',sku:key,tl:tl},true);
+  if(qty!=null)applyC({type:'count',sku:key,loc:tl[0],qty:qty},true);
+  setNorm();
+  rebuildMap();hlSKU(key);si2('Placed '+key+' at '+fl(loc));
 }
 
 function startMoveToLocation(loc){
