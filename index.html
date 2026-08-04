@@ -2370,9 +2370,21 @@ function sendStockAlertEmail(){
 // MIXED_CONTENTS, not SLOC (SLOC only knows about the 'MIXED' placeholder at
 // that spot) -- so a plain SLOC[sku] lookup always misses it, showing "not
 // placed" even though it's genuinely somewhere. These helpers check both.
+// Mixed pallet contents used to be plain SKU-code strings with no per-SKU
+// quantity -- entries are now {sku,qty} objects instead, so a specific SKU's
+// count within a shared pallet can be tracked and changed individually.
+// These helpers read either format safely, so pallets created before this
+// change keep working without needing to be touched.
+function mixedEntrySku(entry){
+  return typeof entry==='string'?entry:entry.sku;
+}
+function mixedEntryQty(entry){
+  return typeof entry==='string'?null:(entry.qty!=null?entry.qty:null);
+}
+
 function getMixedPalletLocationsFor(sku){
   return (SLOC['MIXED']||[]).filter(function(loc){
-    return (MIXED_CONTENTS[loc]||[]).indexOf(sku)>=0;
+    return (MIXED_CONTENTS[loc]||[]).some(function(e){return mixedEntrySku(e)===sku;});
   });
 }
 function getSkuLocations(sku){
@@ -2406,7 +2418,7 @@ function showR(sku){
     }
   } else if(onlyInMixed){
     countHtml=mixedLocs.map(function(l){
-      var others=(MIXED_CONTENTS[l]||[]).filter(function(s){return s!==key;});
+      var others=(MIXED_CONTENTS[l]||[]).filter(function(e){return mixedEntrySku(e)!==key;}).map(mixedEntrySku);
       return '<div style="font-size:11px;color:#555;margin-top:3px">At '+fl(l)+', shared with: '+(others.length?others.join(', '):'(no other SKUs currently listed)')+'</div>';
     }).join('');
   }
@@ -2480,9 +2492,15 @@ function showMixedCard(loc){
   var el=document.getElementById('rc');el.className='';
   var contents=MIXED_CONTENTS[loc]||[];
   var itemsHtml=contents.length
-    ?contents.map(function(sk,i){
+    ?contents.map(function(entry,i){
+      var sk=mixedEntrySku(entry);var qty=mixedEntryQty(entry);
       var cv=DATA.d[sk];var desc=cv?cv[4]:'(unknown SKU)';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #EEE"><span>'+sk+' -- '+desc+'</span><span class="rcc" style="position:static" onclick="removeFromMixed(\''+loc+'\','+i+')">x</span></div>';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #EEE">'+
+        '<a href="javascript:void(0)" onclick="showR(\''+sk+'\')" style="color:#2980B9;font-weight:600">'+sk+'</a>'+
+        '<span style="flex:1;padding:0 8px;color:#555;font-size:12px">'+desc+'</span>'+
+        '<span style="font-size:12px;color:#555;margin-right:8px">Qty: '+(qty!=null?qty:'not set')+'</span>'+
+        '<a href="javascript:void(0)" onclick="changeMixedSkuCount(\''+loc+'\','+i+')" style="font-size:11px;color:#B9770E;margin-right:8px">Change count</a>'+
+        '<span class="rcc" style="position:static" onclick="removeFromMixed(\''+loc+'\','+i+')">x</span></div>';
     }).join('')
     :'<div style="color:#888;padding:6px 0">No SKUs recorded in this pallet yet.</div>';
   el.innerHTML='<span class="rcc" onclick="cRC()">x</span>'+
@@ -2502,11 +2520,33 @@ function addToMixed(loc){
     var key=sku.trim().toUpperCase();
     if(!DATA.d[key]){alert('SKU not found in catalog: '+key);return;}
     var contents=(MIXED_CONTENTS[loc]||[]).slice();
-    if(contents.indexOf(key)>=0){alert('That SKU is already listed in this pallet.');return;}
-    contents.push(key);
+    if(contents.some(function(e){return mixedEntrySku(e)===key;})){alert('That SKU is already listed in this pallet.');return;}
+    var qtyAns=prompt('Quantity of '+key+' in this pallet? Leave blank if unknown.','');
+    var qty=(qtyAns!==null&&qtyAns.trim()!=='')?parseInt(qtyAns.trim(),10):null;
+    if(qty!=null&&isNaN(qty))qty=null;
+    contents.push({sku:key,qty:qty});
     applyC({type:'mixedset',loc:loc,contents:contents},true);
     showMixedCard(loc);
     si2('Added '+key+' to mixed pallet at '+fl(loc));
+  });
+}
+
+// Changes just one SKU's own count within a shared mixed pallet, without
+// touching the others sharing that same location.
+function changeMixedSkuCount(loc,idx){
+  requirePin(function(){
+    var contents=(MIXED_CONTENTS[loc]||[]).slice();
+    var entry=contents[idx];
+    if(!entry)return;
+    var sk=mixedEntrySku(entry);var currentQty=mixedEntryQty(entry);
+    var ans=prompt('New quantity for '+sk+' in this pallet:',currentQty!=null?String(currentQty):'');
+    if(ans===null)return;
+    var qty=parseInt(ans.trim(),10);
+    if(isNaN(qty)||qty<0){alert('Enter a valid quantity.');return;}
+    contents[idx]={sku:sk,qty:qty};
+    applyC({type:'mixedset',loc:loc,contents:contents},true);
+    showMixedCard(loc);
+    si2('Updated '+sk+' to qty '+qty+' in mixed pallet at '+fl(loc));
   });
 }
 
@@ -2516,7 +2556,7 @@ function removeFromMixed(loc,idx){
     var removed=contents.splice(idx,1);
     applyC({type:'mixedset',loc:loc,contents:contents},true);
     showMixedCard(loc);
-    si2('Removed '+(removed[0]||'item')+' from mixed pallet at '+fl(loc));
+    si2('Removed '+(removed[0]?mixedEntrySku(removed[0]):'item')+' from mixed pallet at '+fl(loc));
   });
 }
 
@@ -2589,7 +2629,7 @@ async function autoPlaceAllPending(){
         var mixedLoc=findOrCreateMixedBay(row,3);
         if(!mixedLoc){failedList.push(items[j].sku+' (no mixed bay space)');continue;}
         var contents=(MIXED_CONTENTS[mixedLoc]||[]).slice();
-        if(contents.indexOf(items[j].sku)<0)contents.push(items[j].sku);
+        if(!contents.some(function(e){return mixedEntrySku(e)===items[j].sku;}))contents.push({sku:items[j].sku,qty:items[j].qty});
         await applyC({type:'mixedset',loc:mixedLoc,contents:contents},true);
         await applyC({type:'receiveresolve',id:items[j].id},true);
         mixedCount++;
