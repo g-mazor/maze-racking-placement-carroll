@@ -202,6 +202,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
@@ -375,6 +376,25 @@ function repairLocationIndex(){
 // their own individually-addressable identity (MIXED@<location>) -- needed
 // for pallets created before this change, so they can finally be moved,
 // deleted, or edited one at a time like every other pallet.
+// TEMPORARY diagnostic: shows every mixedset event still present in the
+// change history, and what MIXED_CONTENTS currently holds for each mixed
+// location -- used to determine whether contents data is genuinely lost, or
+// just not being displayed correctly. Safe to remove once resolved.
+function debugMixedPalletHistory(){
+  var mixedsetEvents=CHANGES.filter(function(c){return c.type==='mixedset';});
+  var allMixedLocs=getAllMixedLocations();
+  var report='mixedset EVENTS IN HISTORY: '+mixedsetEvents.length+'\n\n';
+  mixedsetEvents.forEach(function(c,i){
+    var when=c.ts?new Date(c.ts).toLocaleString():'(no ts)';
+    report+=(i+1)+'. '+c.loc+' -> '+JSON.stringify(c.contents)+' ('+when+')\n';
+  });
+  report+='\nCURRENT MIXED LOCATIONS: '+allMixedLocs.length+'\n\n';
+  allMixedLocs.forEach(function(loc){
+    report+=loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(MIXED_CONTENTS[loc]||[])+'\n';
+  });
+  alert(report);
+}
+
 function migrateLegacyMixedPallets(){
   requirePin(function(){
     var legacyLocs=(SLOC['MIXED']||[]).slice();
