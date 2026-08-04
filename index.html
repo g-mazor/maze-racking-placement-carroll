@@ -204,6 +204,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#1E8449;color:#FFF;font-size:10px" onclick="recoverEmptyMixedPalletContents()">\u267b\ufe0f Recover empty mixed pallets from history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#A32D2D;color:#FFF;font-size:10px" onclick="debugEmptyMixedLocationsHistory()">🔍 Find why empty locations lost contents</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
@@ -413,6 +414,35 @@ function debugLocationHistory(loc){
 // Automatically finds every mixed location currently showing empty contents,
 // and shows the FULL event history (not just mixedset) for each one -- so we
 // can see exactly when/why each one's contents got wiped, in one pass.
+// Recovery: restores each currently-empty mixed location's contents from its
+// own most recent mixedset event in history (from before the shared-identity
+// move bug wiped them). Shows exactly what it's about to restore and asks
+// for confirmation before touching anything.
+function recoverEmptyMixedPalletContents(){
+  requirePin(function(){
+    var allMixedLocs=getAllMixedLocations();
+    var emptyLocs=allMixedLocs.filter(function(loc){return !(MIXED_CONTENTS[loc]||[]).length;});
+    if(!emptyLocs.length){alert('No empty mixed locations found -- nothing to recover.');return;}
+    var toRestore=[];
+    emptyLocs.forEach(function(loc){
+      var lastGood=null;
+      CHANGES.forEach(function(c){
+        if(c.type==='mixedset'&&c.loc===loc&&c.contents&&c.contents.length)lastGood=c.contents;
+      });
+      if(lastGood)toRestore.push({loc:loc,contents:lastGood});
+    });
+    if(!toRestore.length){alert('No recoverable history found for any empty location.');return;}
+    var preview=toRestore.map(function(r){return r.loc+' -> '+JSON.stringify(r.contents);}).join('\n');
+    if(!confirm('This will restore '+toRestore.length+' mixed location'+(toRestore.length!==1?'s':'')+' from their last known-good contents:\n\n'+preview+'\n\nContinue?'))return;
+    toRestore.forEach(function(r){
+      applyC({type:'mixedset',loc:r.loc,contents:r.contents},true);
+    });
+    rebuildMap();
+    si2('Restored '+toRestore.length+' mixed pallet'+(toRestore.length!==1?'s':'')+' from history.');
+    alert('Restored '+toRestore.length+' location'+(toRestore.length!==1?'s':'')+'. Please verify each one looks correct.');
+  });
+}
+
 function debugEmptyMixedLocationsHistory(){
   var allMixedLocs=getAllMixedLocations();
   var emptyLocs=allMixedLocs.filter(function(loc){return !(MIXED_CONTENTS[loc]||[]).length;});
