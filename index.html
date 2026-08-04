@@ -2686,22 +2686,54 @@ function showMixedCard(loc){
   el.style.display='block';
 }
 
+// Search-as-you-type flow for adding a SKU to a mixed pallet -- matches by
+// SKU code or description, same as the main search bar, instead of requiring
+// the exact SKU code to be typed blind.
 function addToMixed(loc){
   requirePin(function(){
-    var sku=prompt('Enter the SKU code to add to this mixed pallet:','');
-    if(sku===null||!sku.trim())return;
-    var key=sku.trim().toUpperCase();
-    if(!DATA.d[key]){alert('SKU not found in catalog: '+key);return;}
-    var contents=(MIXED_CONTENTS[loc]||[]).slice();
-    if(contents.some(function(e){return mixedEntrySku(e)===key;})){alert('That SKU is already listed in this pallet.');return;}
-    var qtyAns=prompt('Quantity of '+key+' in this pallet? Leave blank if unknown.','');
-    var qty=(qtyAns!==null&&qtyAns.trim()!=='')?parseInt(qtyAns.trim(),10):null;
-    if(qty!=null&&isNaN(qty))qty=null;
-    contents.push({sku:key,qty:qty});
-    applyC({type:'mixedset',loc:loc,contents:contents},true);
-    showMixedCard(loc);
-    si2('Added '+key+' to mixed pallet at '+fl(loc));
+    mode='addtomixed';
+    mb.style.display='block';mb.className='am';mb.onclick=null;
+    mb.innerHTML='<div style="max-width:420px;margin:0 auto;text-align:left">'+
+      '<div style="text-align:center;margin-bottom:6px">Search for a SKU to add to the mixed pallet at <strong>'+fl(loc)+'</strong></div>'+
+      '<input id="addToMixedSearchInput" type="text" placeholder="Search SKU or description..." autocomplete="off" style="width:100%;padding:9px;border-radius:6px;border:1.5px solid #D63384;font-size:13px;box-sizing:border-box"/>'+
+      '<div id="addToMixedSearchResults" style="margin-top:8px;max-height:260px;overflow-y:auto"></div>'+
+      '<div style="text-align:center;margin-top:8px"><span style="text-decoration:underline;cursor:pointer" onclick="showMixedCard(\''+loc+'\')">Cancel, back to pallet</span></div>'+
+      '</div>';
+    var inp=document.getElementById('addToMixedSearchInput');
+    inp.oninput=function(){renderAddToMixedResults(loc,inp.value);};
+    setTimeout(function(){inp.focus();},50);
   });
+}
+
+function renderAddToMixedResults(loc,query){
+  var resultsEl=document.getElementById('addToMixedSearchResults');
+  var q=query.trim().toUpperCase();
+  if(q.length<2){resultsEl.innerHTML='';return;}
+  var existing=(MIXED_CONTENTS[loc]||[]).map(mixedEntrySku);
+  var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+  var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
+  var all=sm.concat(dm).slice(0,10);
+  if(!all.length){resultsEl.innerHTML='<div style="color:#777;font-size:12px;padding:6px 0">No matches.</div>';return;}
+  resultsEl.innerHTML=all.map(function(s){
+    var v=DATA.d[s];
+    var alreadyIn=existing.indexOf(s)>=0;
+    return '<div style="padding:8px 10px;border-bottom:1px solid #EEE;font-size:12px;'+(alreadyIn?'opacity:.5':'cursor:pointer')+'" '+(alreadyIn?'':'onclick="confirmAddToMixed(\''+loc+'\',\''+s+'\')"')+'>'+
+      '<strong>'+s+'</strong> -- '+(v?v[4]:'')+(alreadyIn?' <span style="color:#888;font-size:11px">(already in this pallet)</span>':'')+
+      '</div>';
+  }).join('');
+}
+
+function confirmAddToMixed(loc,sku){
+  var contents=(MIXED_CONTENTS[loc]||[]).slice();
+  if(contents.some(function(e){return mixedEntrySku(e)===sku;})){alert('That SKU is already in this pallet.');return;}
+  var qtyAns=prompt('Quantity of '+sku+' in this pallet? Leave blank if unknown.','');
+  var qty=(qtyAns!==null&&qtyAns.trim()!=='')?parseInt(qtyAns.trim(),10):null;
+  if(qty!=null&&isNaN(qty))qty=null;
+  contents.push({sku:sku,qty:qty});
+  applyC({type:'mixedset',loc:loc,contents:contents},true);
+  setNorm();
+  showMixedCard(loc);
+  si2('Added '+sku+' to mixed pallet at '+fl(loc));
 }
 
 // Changes just one SKU's own count within a shared mixed pallet, without
