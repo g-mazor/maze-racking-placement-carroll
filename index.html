@@ -204,6 +204,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#A32D2D;color:#FFF;font-size:10px" onclick="debugEmptyMixedLocationsHistory()">🔍 Find why empty locations lost contents</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPendingOnly()">⚠️ Clear pending</button>
@@ -391,6 +392,48 @@ function debugMixedPalletHistory(){
     report+=(ok?'\u2705 ':'\u274c ')+loc+' [id: '+LOC[loc]+'] -> '+JSON.stringify(contents)+'\n';
   });
   alert(report);
+}
+
+// Shows EVERY event (not just mixedset) affecting a specific location, in
+// order -- used to find exactly when/why a location's mixed contents were
+// cleared (e.g. by a delete event), which the mixedset-only view can't show.
+function debugLocationHistory(loc){
+  var relevant=CHANGES.filter(function(c){
+    var locs=(c.fl||[]).concat(c.tl||[]).concat(c.loc?[c.loc]:[]);
+    return locs.indexOf(loc)>=0;
+  });
+  var report='FULL EVENT HISTORY FOR '+loc+' ('+relevant.length+' events):\n\n';
+  relevant.forEach(function(c,i){
+    var when=c.ts?new Date(c.ts).toLocaleString():'(no ts)';
+    report+=(i+1)+'. type='+c.type+' sku='+(c.sku||'')+' contents='+(c.contents?JSON.stringify(c.contents):'')+' ('+when+')\n';
+  });
+  alert(report);
+}
+
+// Automatically finds every mixed location currently showing empty contents,
+// and shows the FULL event history (not just mixedset) for each one -- so we
+// can see exactly when/why each one's contents got wiped, in one pass.
+function debugEmptyMixedLocationsHistory(){
+  var allMixedLocs=getAllMixedLocations();
+  var emptyLocs=allMixedLocs.filter(function(loc){return !(MIXED_CONTENTS[loc]||[]).length;});
+  if(!emptyLocs.length){alert('No empty mixed locations found -- everything currently shows contents.');return;}
+  var html='<div style="max-height:80vh;overflow-y:auto;font-size:11px;font-family:monospace">';
+  html+='<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#A32D2D">'+emptyLocs.length+' EMPTY MIXED LOCATIONS -- FULL HISTORY EACH</div>';
+  emptyLocs.forEach(function(loc){
+    var relevant=CHANGES.filter(function(c){
+      var locs=(c.fl||[]).concat(c.tl||[]).concat(c.loc?[c.loc]:[]);
+      return locs.indexOf(loc)>=0;
+    });
+    html+='<div style="font-weight:700;margin-top:12px;color:#1F3864">'+loc+' ('+relevant.length+' events):</div>';
+    relevant.forEach(function(c,i){
+      var when=c.ts?new Date(c.ts).toLocaleString():'(no ts)';
+      var isDelete=c.type==='delete';
+      html+='<div style="padding:2px 0;'+(isDelete?'background:#FDEDEC;color:#A32D2D;font-weight:700':'')+'">'+(i+1)+'. type='+c.type+' sku='+(c.sku||'')+' contents='+(c.contents?JSON.stringify(c.contents):'')+' ('+when+')</div>';
+    });
+  });
+  html+='</div>';
+  oM('Empty Mixed Locations -- Full History',' ',function(){});
+  document.getElementById('mm').innerHTML=html;
 }
 
 function debugMixedPalletFullHistory(){
