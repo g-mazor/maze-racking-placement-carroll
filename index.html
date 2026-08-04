@@ -2447,6 +2447,11 @@ function showR(sku){
     '<div style="font-size:11px;color:#555;margin-top:4px">Lead time: <strong>'+(getLeadTime(key)!=null?getLeadTime(key)+' days':'not set')+'</strong> &nbsp; <a href="javascript:void(0)" onclick="setLeadTimeForSku(\''+key+'\')" style="color:#B9770E">\u23f1 Set lead time</a></div>'+
     (placed?
       '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
+      :onlyInMixed?
+      '<div class="rca">'+mixedLocs.map(function(l){
+        var idx=(MIXED_CONTENTS[l]||[]).findIndex(function(e){return mixedEntrySku(e)===key;});
+        return '<button class="btn" style="background:#8E44AD;color:#FFF" onclick="changeMixedSkuCount(\''+l+'\','+idx+')">\ud83d\udd22 Change count</button><button class="btn" style="background:#D63384;color:#FFF" onclick="showMixedCard(\''+l+'\')">View mixed pallet</button><button class="btn btn-red" onclick="removeFromMixed(\''+l+'\','+idx+')">Remove from pallet</button>';
+      }).join('')+'</div>'
       :'<div class="rca"><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Place this pallet (choose spaces)</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Place multiple</button></div>')+
     '</div></div>';
   el.style.display='block';hlSKU(key);
