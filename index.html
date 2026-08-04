@@ -483,11 +483,22 @@ function migrateLegacyMixedPallets(){
   requirePin(function(){
     var legacyLocs=(SLOC['MIXED']||[]).slice();
     if(!legacyLocs.length){alert('No legacy mixed pallets to migrate -- everything is already individually addressable.');return;}
-    if(!confirm('This will convert '+legacyLocs.length+' existing mixed pallet'+(legacyLocs.length!==1?'s':'')+' so each one can be moved/deleted/edited individually, like any other pallet. Continue?'))return;
+    // Capture contents BEFORE, so we can prove afterward whether anything
+    // actually changed -- this migration should never touch MIXED_CONTENTS,
+    // but showing the evidence directly removes any doubt.
+    var before={};
+    legacyLocs.forEach(function(loc){before[loc]=(MIXED_CONTENTS[loc]||[]).slice();});
+    if(!confirm('This will convert '+legacyLocs.length+' existing mixed pallet'+(legacyLocs.length!==1?'s':'')+' so each one can be moved/deleted/edited individually, like any other pallet.\n\nCurrent contents (for your records):\n'+legacyLocs.map(function(l){return l+' -> '+JSON.stringify(before[l]);}).join('\n')+'\n\nContinue?'))return;
     legacyLocs.forEach(function(loc){
       applyC({type:'add',sku:mixedIdentityFor(loc),tl:[loc]},true);
     });
     rebuildMap();
+    var report=legacyLocs.map(function(loc){
+      var after=MIXED_CONTENTS[loc]||[];
+      var same=JSON.stringify(before[loc])===JSON.stringify(after);
+      return (same?'\u2705 ':'\u26a0\ufe0f CHANGED ')+loc+': before='+JSON.stringify(before[loc])+' after='+JSON.stringify(after);
+    }).join('\n');
+    alert('Migrated '+legacyLocs.length+' mixed pallet'+(legacyLocs.length!==1?'s':'')+'.\n\nBefore/after contents for each (please verify):\n\n'+report);
     si2('Migrated '+legacyLocs.length+' mixed pallet'+(legacyLocs.length!==1?'s':'')+' -- each is now individually addressable.');
   });
 }
@@ -1122,11 +1133,21 @@ function buildStats(){
   grid.innerHTML=h;
 }
 
+// Returns the correct cell background color for a given SKU -- mixed
+// pallets get their own distinct color (GRPC['MIXED']), since they aren't
+// real catalog entries and would otherwise fall through to the generic
+// default grey via gc(v[5]).
+function cellColorFor(sku){
+  if(isMixedSku(sku))return GRPC['MIXED'];
+  var v=DATA.d[sku];
+  return gc(v?v[5]:'');
+}
+
 function mkCell(loc){
   var sku=LOC[loc];var cell=document.createElement('div');cell.id='c_'+loc;
   if(sku){
     var v=DATA.d[sku];var locs=SLOC[sku]||[loc];
-    cell.className='bc occ';cell.style.background=gc(v?v[5]:'');
+    cell.className='bc occ';cell.style.background=cellColorFor(sku);
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
     // draggable removed entirely -- it caused unreliable taps on some tablets/phones
@@ -1717,7 +1738,7 @@ function clrHL(){
   hi.forEach(function(loc){
     var cell=document.getElementById('c_'+loc);if(!cell)return;
     var sku=LOC[loc];cell.classList.remove('hi','hi2');
-    if(sku){var v=DATA.d[sku];cell.className='bc occ';cell.style.background=gc(v?v[5]:'');}
+    if(sku){var v=DATA.d[sku];cell.className='bc occ';cell.style.background=cellColorFor(sku);}
     else{cell.className='be';cell.style.background='';}
   });
   hi=[];
