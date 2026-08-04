@@ -205,6 +205,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#1E8449;color:#FFF;font-size:10px" onclick="recoverEmptyMixedPalletContents()">\u267b\ufe0f Recover empty mixed pallets from history</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#8E44AD;color:#FFF;font-size:10px" onclick="(function(){var r=prompt('Which row? (e.g. G)');if(r)consolidateMixedPalletsInRow(r.trim().toUpperCase());})()">\ud83d\udd00 Consolidate scattered mixed pallets in a row</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#A32D2D;color:#FFF;font-size:10px" onclick="debugEmptyMixedLocationsHistory()">🔍 Find why empty locations lost contents</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:8px;box-sizing:border-box;background:#E67E22;color:#FFF" onclick="undoLast()">Undo</button>
   <button class="btn btn-red" style="opacity:.75;display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="doClearPlacementsOnly()">⚠️ Clear placements</button>
@@ -2854,6 +2855,40 @@ function findOrCreateMixedBay(row,maxSkusPerPallet){
   if(!loc)return null;
   applyC({type:'add',sku:mixedIdentityFor(loc),tl:[loc]},true);
   return loc;
+}
+
+// Merges separate mixed pallets sitting in the same row into fewer, fuller
+// ones (up to 3 SKUs each) -- for pallets that ended up scattered as
+// individual 1-SKU pallets instead of properly sharing space, typically from
+// before the mixed-pallet fixes. Shows a preview and asks for confirmation.
+function consolidateMixedPalletsInRow(row){
+  requirePin(function(){
+    var locs=getAllMixedLocations().filter(function(l){return l[0]===row;});
+    if(locs.length<2){alert('Fewer than 2 mixed pallets found in row '+row+' -- nothing to consolidate.');return;}
+    // Gather every individual SKU entry across all pallets in this row.
+    var allEntries=[];
+    locs.forEach(function(l){(MIXED_CONTENTS[l]||[]).forEach(function(e){allEntries.push(e);});});
+    if(!allEntries.length){alert('No SKU contents found across these pallets -- nothing to consolidate.');return;}
+    // Group into batches of at most 3 SKUs each -- one pallet survives per
+    // batch, contents merged in; the rest are freed up.
+    var batches=[];
+    for(var i=0;i<allEntries.length;i+=3)batches.push(allEntries.slice(i,i+3));
+    var survivors=locs.slice(0,batches.length);
+    var freed=locs.slice(batches.length);
+    var preview='This will merge '+locs.length+' separate mixed pallets in row '+row+' into '+survivors.length+':\n\n'+
+      survivors.map(function(l,i){return fl(l)+' -> '+JSON.stringify(batches[i]);}).join('\n')+
+      (freed.length?'\n\nFreed up (emptied): '+freed.map(fl).join(', '):'')+
+      '\n\nContinue?';
+    if(!confirm(preview))return;
+    survivors.forEach(function(l,i){
+      applyC({type:'mixedset',loc:l,contents:batches[i]},true);
+    });
+    freed.forEach(function(l){
+      applyC({type:'delete',sku:LOC[l],fl:[l]},true);
+    });
+    rebuildMap();
+    si2('Consolidated '+locs.length+' mixed pallets into '+survivors.length+' in row '+row+'.');
+  });
 }
 
 async function autoPlaceAllPending(){
