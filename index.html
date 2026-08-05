@@ -1437,16 +1437,17 @@ function showTT(e,loc,sku,v){
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
-    '<a href="javascript:void(0)" onclick="quickMove(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move to new location</a>';
+    '<a href="javascript:void(0)" onclick="quickMove(\''+sku+'\',\''+loc+'\')" style="color:#5DADE2">\ud83d\udd04 Move to new location</a>'+
+    '<a href="javascript:void(0)" onclick="deleteThisPallet(\''+loc+'\',\''+sku+'\')" style="color:#FF6B6B">\ud83d\uddd1\ufe0f Delete this pallet</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
 }
 function posTT(e){/* position is now fixed via CSS -- no longer follows the cursor */}
 
-function quickMove(sku){
+function quickMove(sku,loc){
   requirePin(function(){
     ttSticky=false;tt.style.display='none';
-    enterMoveModeCard(sku);
+    enterMoveModeCard(sku,loc);
   });
 }
 
@@ -1574,7 +1575,9 @@ function changeMixedPalletSpace(loc){
 
 function onOcc(loc,sku,e){
   if(mode==='movetarget'){
-    var fromLocs=SLOC[sku]||[loc];
+    var allLocsMT=SLOC[sku]||[loc];
+    var palletsMT=groupLocationsByPallet(allLocsMT);
+    var fromLocs=palletsMT.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc];
     var spaces3=fromLocs.length||1;
     var tl3;
     if(spaces3>1){tl3=findSeq(moveTargetLoc,spaces3);if(!tl3){alert('Need '+spaces3+' consecutive empty spaces starting at '+fl(moveTargetLoc)+'. Try a different target.');setNorm();return;}}
@@ -1584,8 +1587,11 @@ function onOcc(loc,sku,e){
     return;
   }
   if(mode==='delete'){
-    var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';
-    oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});
+    var allLocsD=SLOC[sku]||[loc];
+    var palletsD=groupLocationsByPallet(allLocsD);
+    var groupD=palletsD.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc];
+    var extra=palletsD.length>1?' ('+(palletsD.length-1)+' other pallet'+(palletsD.length-1>1?'s':'')+' of this SKU will stay)':'';
+    oM('Delete this pallet?','Remove '+sku+' from '+groupD.map(fl).join(' + ')+'.'+extra,function(){applyC({type:'delete',sku:sku,fl:groupD},true);rebuildMap();si2('Deleted from '+fl(groupD[0]));});
     return;
   }
   if(mode==='count'){
@@ -1631,7 +1637,8 @@ function showOccInfo(loc,sku,e){
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
     '<a href="javascript:void(0)" onclick="changePalletSpace(\''+loc+'\',\''+sku+'\')" style="color:#BA7517">\ud83d\udce6 Change pallet space</a>'+
-    '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\')" style="color:#5DADE2">\ud83d\udd04 Move</a>'+
+    '<a href="javascript:void(0)" onclick="enterMoveModeCard(\''+sku+'\',\''+loc+'\')" style="color:#5DADE2">\ud83d\udd04 Move</a>'+
+    '<a href="javascript:void(0)" onclick="deleteThisPallet(\''+loc+'\',\''+sku+'\')" style="color:#FF6B6B">\ud83d\uddd1\ufe0f Delete this pallet</a>'+
     '<a href="javascript:void(0)" onclick="movePlacedToReceived(\''+loc+'\',\''+sku+'\')" style="color:#FF9F9F">\u21a9\ufe0f Move to Received</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
@@ -1865,12 +1872,31 @@ function clrHL(){
 var mb=document.getElementById('mb');
 function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;moveSourceLoc=null;moveSourceGroup=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;moveTargetLoc=null;pendingReceiveId=null;pendingReceiveQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';document.getElementById('btn-rv').style.cssText='';}
 
-function enterMoveModeCard(sku){
+// Deletes the specific pallet at this tapped location (and its other spaces
+// if multi-space) directly, with no "which one" prompt -- used from the map
+// tap tooltip, where the tap itself already specifies which pallet.
+function deleteThisPallet(loc,sku){
+  requirePin(function(){
+    var allLocs=SLOC[sku]||[loc];
+    var pallets=groupLocationsByPallet(allLocs);
+    var group=pallets.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc];
+    var otherNote=pallets.length>1?' The other '+(pallets.length-1)+' pallet'+(pallets.length-1!==1?'s':'')+' of this SKU elsewhere will be unaffected.':'';
+    oM('Delete this pallet?','Remove '+sku+' from '+group.map(fl).join(' + ')+'.'+otherNote,function(){
+      applyC({type:'delete',sku:sku,fl:group},true);
+      rebuildMap();si2('Deleted '+sku+' from '+fl(group[0]));
+      tt.style.display='none';ttSticky=false;
+    });
+  });
+}
+
+function enterMoveModeCard(sku,fromLoc){
   requirePin(function(){
   var locs=SLOC[sku]||[];
   var pallets=groupLocationsByPallet(locs);
   var sourceGroup=null;
-  if(pallets.length>1){
+  if(fromLoc){
+    sourceGroup=pallets.filter(function(p){return p.indexOf(fromLoc)>=0;})[0]||[fromLoc];
+  } else if(pallets.length>1){
     var codes=pallets.map(function(p){return fl(p[0]);});
     var pick=prompt('This SKU is in '+pallets.length+' spots. Which one do you want to move? Type one of:\n'+codes.join(', '),codes[0]);
     if(pick===null)return;
