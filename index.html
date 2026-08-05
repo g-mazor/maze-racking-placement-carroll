@@ -258,7 +258,7 @@ function flSmart(loc){
   var base=fl(loc);
   var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10),lv=p[2],sid=p[3];
   var thisSku=LOC[loc];
-  var sides=getSidesForBay(row,bay);
+  var sides=getSidesForBay(row,bay,lv);
   var labels=sides===3?['1','2','3']:['L','R'];
   var shared=labels.some(function(otherSid){
     if(otherSid===sid)return false;
@@ -1135,10 +1135,10 @@ function buildStats(){
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
     for(var bay=1;bay<=sp.b;bay++){
-      var levels=getLevelsForBay(r,bay);var sides=getSidesForBay(r,bay);
+      var levels=getLevelsForBay(r,bay);
       for(var lvl=1;lvl<=levels;lvl++){
         if(isBridgeBay(r,bay)&&isBridgeEmptyLevel(r,bay,lvl))continue;
-        cap+=sides;
+        cap+=getSidesForBay(r,bay,lvl);
       }
     }
     rStats[r].cap=cap;rStats[r].occ=0;rStats[r].skus=0;
@@ -1230,9 +1230,9 @@ function isBridgeEmptyLevel(row,bay,lv){
 // more (smaller) or fewer (larger) pallets than the row's default, without
 // changing every other bay in the row.
 var CUSTOM_BAY_SLOTS={};
-function getBaySlotKey(row,bay){return row+'-'+bay;}
-function getSidesForBay(row,bay){
-  var key=getBaySlotKey(row,bay);
+function getBaySlotKey(row,bay,level){return row+'-'+bay+'-'+level;}
+function getSidesForBay(row,bay,level){
+  var key=getBaySlotKey(row,bay,level);
   if(CUSTOM_BAY_SLOTS[key]!=null)return CUSTOM_BAY_SLOTS[key];
   if(isBridgeBay(row,bay))return 3;
   return RS[row].s;
@@ -1252,7 +1252,7 @@ function buildRow(r,container){
     var ll=document.createElement('div');ll.className='ll';ll.textContent=lv;lr.appendChild(ll);
     var cellInfos=[];
     for(var bay=1;bay<=sp.b;bay++){
-      var baySides=getSidesForBay(r,bay);
+      var baySides=getSidesForBay(r,bay,lv);
       var isBridge=isBridgeBay(r,bay);
       if(isBridge&&isBridgeEmptyLevel(r,bay,lv)){
         for(var nb=0;nb<baySides;nb++){
@@ -1476,7 +1476,7 @@ function findSeq(startLoc,n){
   for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
     if(lv>getLevelsForBay(r,b))break;
     if(isBridgeBay(r,b)&&isBridgeEmptyLevel(r,b,lv))break;
-    var sides=getSidesForBay(r,b);
+    var sides=getSidesForBay(r,b,lv);
     for(var sl=0;sl<sides;sl++){var sid=sides===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
@@ -1495,7 +1495,7 @@ function findSeqResize(startLoc,n,sku){
   for(var b=bay;b<=Math.min(sp.b,bay+n);b++){
     if(lv>getLevelsForBay(r,b))break;
     if(isBridgeBay(r,b)&&isBridgeEmptyLevel(r,b,lv))break;
-    var sides=getSidesForBay(r,b);
+    var sides=getSidesForBay(r,b,lv);
     for(var sl=0;sl<sides;sl++){var sid=sides===3?String(sl+1):(sl===0?'L':'R');all.push(r+'-'+String(b).padStart(2,'0')+'-'+lv+'-'+sid);}
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
@@ -1658,13 +1658,13 @@ function onEmp(loc,e){
 
 function showEmptyInfo(loc,e){
   var h=getBayHeight(loc);
-  var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10);
+  var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10),lvl=parseInt(p[2],10);
   clearTimeout(ttHideTimer);
   tt.style.pointerEvents='auto';
   tt.innerHTML=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet')+'<br>'+
     '<a href="javascript:void(0)" onclick="startPlaceAtLocation(\''+loc+'\')" style="color:#8CD98C">\ud83d\udce6 Place new SKU here</a>'+
     '<a href="javascript:void(0)" onclick="startMoveToLocation(\''+loc+'\')" style="color:#F5D76E">\ud83d\udd04 Move existing SKU here</a>'+
-    '<a href="javascript:void(0)" onclick="setBaySlotCount(\''+row+'\','+bay+')" style="color:#BA7517">\ud83d\udd27 Change slots in this bay</a>';
+    '<a href="javascript:void(0)" onclick="setBaySlotCount(\''+row+'\','+bay+','+lvl+')" style="color:#BA7517">\ud83d\udd27 Change slots at this level</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
 }
@@ -2137,7 +2137,7 @@ function searchBaysAtLevel(row,targetBay,lvl,spaces){
       var bay=cands[ci];
       if(lvl>getLevelsForBay(row,bay))continue;
       if(isBridgeBay(row,bay)&&isBridgeEmptyLevel(row,bay,lvl))continue;
-      var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
+      var sides=getSidesForBay(row,bay,lvl)===3?['1','2','3']:['L','R'];
       for(var si=0;si<sides.length;si++){
         var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lvl+'-'+sides[si];
         if(!LOC[loc]){
@@ -2502,28 +2502,27 @@ document.addEventListener('contextmenu',function(e){
 // completely empty bay, since changing the slot count also changes the
 // side-labeling scheme (L/R vs 1/2/3), which would otherwise orphan any
 // existing placements.
-function setBaySlotCount(row,bay){
+function setBaySlotCount(row,bay,level){
   requirePin(function(){
     var spec=RS[row];if(!spec){alert('Unknown row.');return;}
     if(bay<1||bay>spec.b){alert('Bay out of range for row '+row+'.');return;}
-    for(var lv=1;lv<=spec.l;lv++){
-      var sides=getSidesForBay(row,bay);
-      for(var sl=0;sl<sides;sl++){
-        var sid=sides===3?String(sl+1):(sl===0?'L':'R');
-        var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
-        if(LOC[loc]){alert('This bay has items placed in it -- clear it first before changing its slot count, to avoid orphaning existing placements.');return;}
-      }
+    if(level<1||level>spec.l){alert('Level out of range for row '+row+'.');return;}
+    var sides=getSidesForBay(row,bay,level);
+    for(var sl=0;sl<sides;sl++){
+      var sid=sides===3?String(sl+1):(sl===0?'L':'R');
+      var loc=row+'-'+String(bay).padStart(2,'0')+'-'+level+'-'+sid;
+      if(LOC[loc]){alert('This level has items placed in it -- clear it first before changing its slot count, to avoid orphaning existing placements.');return;}
     }
-    var current=getSidesForBay(row,bay);
-    var ans=prompt('How many pallet slots should '+row+'-B'+bay+' have? (currently '+current+')',String(current));
+    var current=getSidesForBay(row,bay,level);
+    var ans=prompt('How many pallet slots should '+row+'-B'+bay+'-L'+level+' have? (currently '+current+', other levels in this bay are unaffected)',String(current));
     if(ans===null)return;
     var n=parseInt(ans.trim(),10);
     if(isNaN(n)||n<1||n>4){alert('Enter a whole number between 1 and 4.');return;}
-    var key=getBaySlotKey(row,bay);
+    var key=getBaySlotKey(row,bay,level);
     applyC({type:'set_bayslots',sku:key,qty:n,ts:Date.now()},true);
     CUSTOM_BAY_SLOTS[key]=n;
     rebuildMap();
-    si2(row+'-B'+bay+' now has '+n+' pallet slot'+(n!==1?'s':'')+'.');
+    si2(row+'-B'+bay+'-L'+level+' now has '+n+' pallet slot'+(n!==1?'s':'')+'.');
   });
 }
 
@@ -3086,7 +3085,7 @@ function parseHumanLocCode(code){
 }
 
 function locsForBayLevel(row,bay,level){
-  var sides=getSidesForBay(row,bay)===3?['1','2','3']:['L','R'];
+  var sides=getSidesForBay(row,bay,level)===3?['1','2','3']:['L','R'];
   return sides.map(function(s){return row+'-'+String(bay).padStart(2,'0')+'-'+level+'-'+s;});
 }
 
