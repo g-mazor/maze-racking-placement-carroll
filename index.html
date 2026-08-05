@@ -242,7 +242,7 @@ var RCOL={A:'#8AC640',AA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC64
 var RFCOL={A:'#111',AA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
+var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
@@ -250,6 +250,23 @@ var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
 
 function fl(loc){var p=loc.split('-');return p[0]+'-B'+parseInt(p[1],10)+'-L'+p[2];}
+// Groups a flat list of locations into real physical pallets -- locations
+// at the SAME bay+level (different sides, e.g. L and R) are one multi-space
+// pallet, not two separate ones. Locations at different bays/levels are
+// genuinely separate pallets. Used anywhere the user needs to pick "which
+// pallet" for move/delete/count, so a multi-space item is offered as one
+// choice instead of one per side.
+function groupLocationsByPallet(locs){
+  var groups={};
+  var order=[];
+  locs.forEach(function(loc){
+    var p=loc.split('-');
+    var key=p[0]+'-'+p[1]+'-'+p[2];
+    if(!groups[key]){groups[key]=[];order.push(key);}
+    groups[key].push(loc);
+  });
+  return order.map(function(k){return groups[k];});
+}
 // Shows the plain code normally, but adds "(Left)"/"(Right)" specifically
 // when this bay's slots are shared between two DIFFERENT SKUs -- so a
 // single item using both slots (2 pallet spaces) shows as one plain code,
@@ -1411,11 +1428,12 @@ function showTT(e,loc,sku,v){
   if(!v){hideTT();return;}
   clearTimeout(ttHideTimer);
   var mp=v[13]||0;var locs=SLOC[sku]||[loc];
+  var palletCount=groupLocationsByPallet(locs).length;
   var photoUrl=bestPhotoUrl(sku,v[4],v[5]);
   var h=getBayHeight(loc);
   var q=QTY[loc];
   tt.style.pointerEvents='auto';
-  tt.innerHTML=fl(loc)+(locs.length>1?' ('+locs.length+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
+  tt.innerHTML=fl(loc)+(palletCount>1?' ('+palletCount+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
@@ -1506,19 +1524,22 @@ function findSeqResize(startLoc,n,sku){
 
 function changePalletSpace(loc,sku){
   requirePin(function(){
-    var locs=SLOC[sku]||[loc];
-    var current=locs.length;
-    var answer=prompt('How many pallet spaces should '+sku+' take up? (currently '+current+')',String(current));
+    var allLocs=SLOC[sku]||[loc];
+    var pallets=groupLocationsByPallet(allLocs);
+    var group=pallets.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc];
+    var current=group.length;
+    var otherNote=pallets.length>1?' (other pallets of this SKU elsewhere are unaffected)':'';
+    var answer=prompt('How many pallet spaces should '+sku+' take up at '+fl(group[0])+'?'+otherNote+' (currently '+current+')',String(current));
     if(answer===null)return;
     var n=parseInt(answer.trim(),10);
     if(isNaN(n)||n<1){alert('Enter a whole number of 1 or more.');return;}
     if(n===current){return;}
-    var startLoc=locs[0];
+    var startLoc=group[0];
     var tl=findSeqResize(startLoc,n,sku);
     if(!tl){alert('Not enough consecutive space starting at '+fl(startLoc)+' for '+n+' pallet space'+(n>1?'s':'')+'. Try moving it first, or free up the neighbouring cell.');return;}
-    applyC({type:'move',sku:sku,fl:locs,tl:tl},true);
+    applyC({type:'move',sku:sku,fl:group,tl:tl},true);
     rebuildMap();hlSKU(sku);
-    si2('Pallet spaces for '+sku+' set to '+n);
+    si2('Pallet spaces for '+sku+' at '+fl(tl[0])+' set to '+n);
   });
 }
 
@@ -1645,7 +1666,7 @@ function onEmp(loc,e){
       setNorm();
     }
   } else if(mode==='move'&&moveSku){
-    var fromLocs=moveSourceLoc?[moveSourceLoc]:(SLOC[moveSku]||[]);var spaces2=fromLocs.length||1;var tl2;
+    var fromLocs=moveSourceGroup||(moveSourceLoc?[moveSourceLoc]:(SLOC[moveSku]||[]));var spaces2=fromLocs.length||1;var tl2;
     if(spaces2>1){tl2=findSeq(loc,spaces2);if(!tl2){alert('Need '+spaces2+' consecutive empty spaces here. Try another spot.');return;}}
     else{tl2=[loc];}
     var sku=moveSku;
@@ -1842,25 +1863,26 @@ function clrHL(){
 }
 
 var mb=document.getElementById('mb');
-function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;moveSourceLoc=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;moveTargetLoc=null;pendingReceiveId=null;pendingReceiveQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';document.getElementById('btn-rv').style.cssText='';}
+function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;moveSourceLoc=null;moveSourceGroup=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;moveTargetLoc=null;pendingReceiveId=null;pendingReceiveQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';document.getElementById('btn-rv').style.cssText='';}
 
 function enterMoveModeCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
-  var sourceLoc=null;
-  if(locs.length>1){
-    var codes=locs.map(fl);
-    var pick=prompt('This SKU is in '+locs.length+' spots. Which one do you want to move? Type one of:\n'+codes.join(', '),codes[0]);
+  var pallets=groupLocationsByPallet(locs);
+  var sourceGroup=null;
+  if(pallets.length>1){
+    var codes=pallets.map(function(p){return fl(p[0]);});
+    var pick=prompt('This SKU is in '+pallets.length+' spots. Which one do you want to move? Type one of:\n'+codes.join(', '),codes[0]);
     if(pick===null)return;
     var idx=codes.indexOf(pick.trim());
     if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
-    sourceLoc=locs[idx];
-  } else if(locs.length===1){
-    sourceLoc=locs[0];
+    sourceGroup=pallets[idx];
+  } else if(pallets.length===1){
+    sourceGroup=pallets[0];
   }
-  mode='move';moveSku=sku;moveSourceLoc=sourceLoc;var v=DATA.d[sku];
+  mode='move';moveSku=sku;moveSourceLoc=sourceGroup?sourceGroup[0]:null;moveSourceGroup=sourceGroup;var v=DATA.d[sku];
   mb.style.display='block';mb.className='mv';
-  mb.textContent='MOVE MODE: Tap an empty (grey) cell to move '+sku+' ('+(v?v[4]:'')+') from '+(sourceLoc?fl(sourceLoc):'its current spot')+' there | Tap this banner to cancel';
+  mb.textContent='MOVE MODE: Tap an empty (grey) cell to move '+sku+' ('+(v?v[4]:'')+') from '+(sourceGroup?fl(sourceGroup[0]):'its current spot')+' there | Tap this banner to cancel';
   mb.onclick=function(){setNorm();};
   cRC();
   });
@@ -2412,18 +2434,20 @@ function delFromCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
   if(!locs.length){alert('This SKU is not placed anywhere.');return;}
-  if(locs.length===1){
-    oM('Delete this pallet of '+sku+'?','This will free '+fl(locs[0])+'.',function(){
-      applyC({type:'delete',sku:sku,fl:locs.slice()},true);
-      document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(locs[0]));
+  var pallets=groupLocationsByPallet(locs);
+  if(pallets.length===1){
+    var grp=pallets[0];
+    oM('Delete this pallet of '+sku+'?','This will free '+grp.map(fl).join(' + ')+'.',function(){
+      applyC({type:'delete',sku:sku,fl:grp.slice()},true);
+      document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(grp[0]));
     });
     return;
   }
-  var codes=locs.map(fl);
-  var pick=prompt('This SKU is in '+locs.length+' spots. Which one do you want to delete? Type one of:\n'+codes.join(', ')+'\n\n(To delete all of them, type ALL)',codes[0]);
+  var codes=pallets.map(function(p){return fl(p[0]);});
+  var pick=prompt('This SKU is in '+pallets.length+' spots. Which one do you want to delete? Type one of:\n'+codes.join(', ')+'\n\n(To delete all of them, type ALL)',codes[0]);
   if(pick===null)return;
   if(pick.trim().toUpperCase()==='ALL'){
-    oM('Delete ALL '+locs.length+' pallets of '+sku+'?','This will free '+locs.length+' locations in the warehouse.',function(){
+    oM('Delete ALL '+pallets.length+' pallets of '+sku+'?','This will free '+locs.length+' location'+(locs.length!==1?'s':'')+' in the warehouse.',function(){
       applyC({type:'delete',sku:sku,fl:locs.slice()},true);
       document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted all pallets of '+sku);
     });
@@ -2431,10 +2455,10 @@ function delFromCard(sku){
   }
   var idx=codes.indexOf(pick.trim());
   if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
-  var target=locs[idx];
-  oM('Delete this pallet of '+sku+'?','This will free '+fl(target)+' -- the other '+(locs.length-1)+' pallet'+(locs.length-1!==1?'s':'')+' of this SKU elsewhere will be unaffected.',function(){
-    applyC({type:'delete',sku:sku,fl:[target]},true);
-    document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(target));
+  var targetGroup=pallets[idx];
+  oM('Delete this pallet of '+sku+'?','This will free '+targetGroup.map(fl).join(' + ')+' -- the other '+(pallets.length-1)+' pallet'+(pallets.length-1!==1?'s':'')+' of this SKU elsewhere will be unaffected.',function(){
+    applyC({type:'delete',sku:sku,fl:targetGroup.slice()},true);
+    document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(targetGroup[0]));
   });
   });
 }
@@ -2443,14 +2467,15 @@ function countFromCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
   if(!locs.length){alert('This SKU is not placed anywhere yet.');return;}
-  var target=locs[0];
-  if(locs.length>1){
-    var codes=locs.map(fl);
-    var pick=prompt('This SKU is in '+locs.length+' spots. Which one? Type one of:\\n'+codes.join(', '),codes[0]);
+  var pallets=groupLocationsByPallet(locs);
+  var target=pallets[0][0];
+  if(pallets.length>1){
+    var codes=pallets.map(function(p){return fl(p[0]);});
+    var pick=prompt('This SKU is in '+pallets.length+' spots. Which one? Type one of:\n'+codes.join(', '),codes[0]);
     if(pick===null)return;
     var idx=codes.indexOf(pick.trim());
     if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
-    target=locs[idx];
+    target=pallets[idx][0];
   }
   var cur=QTY[target];
   var entered=prompt('Stock count for '+sku+' at '+fl(target)+':',cur!=null?String(cur):'');
@@ -3073,7 +3098,8 @@ function speakSkuInfo(sku){
   var locs=SLOC[sku]||[];
   var total=0;
   locs.forEach(function(l){total+=(QTY[l]||0);});
-  speak(sku+'. '+v[4]+'. '+total+' units in the Carroll Road warehouse, in '+locs.length+' location'+(locs.length!==1?'s':'')+'.');
+  var palletCount=groupLocationsByPallet(locs).length;
+  speak(sku+'. '+v[4]+'. '+total+' units in the Carroll Road warehouse, in '+palletCount+' pallet'+(palletCount!==1?'s':'')+'.');
 }
 
 // ---------- Phase 1: Confirm pick via scan ----------
@@ -3601,12 +3627,15 @@ function dismissReceived(id){
 
 function movePlacedToReceived(loc,sku){
   requirePin(function(){
-    var locs=SLOC[sku]||[loc];
-    var extra=locs.length>1?' (+'+(locs.length-1)+' more space'+(locs.length>2?'s':'')+')':'';
-    oM('Move back to Goods-in?','This will remove '+sku+' from '+fl(locs[0])+extra+' and put it back in the received-but-not-placed list, so you can place it somewhere else later.',function(){
-      var qty=QTY[locs[0]];
-      applyC({type:'delete',sku:sku,fl:locs},true);
-      applyC({type:'receive',id:genId(),sku:sku,qty:qty!=null?qty:0,note:'Un-placed from '+fl(locs[0]),ts:Date.now()},true);
+    var allLocs=SLOC[sku]||[loc];
+    var pallets=groupLocationsByPallet(allLocs);
+    var group=pallets.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc];
+    var extra=group.length>1?' (+'+(group.length-1)+' more space'+(group.length>2?'s':'')+')':'';
+    var otherNote=pallets.length>1?' The other '+(pallets.length-1)+' pallet'+(pallets.length-1!==1?'s':'')+' of this SKU elsewhere will be unaffected.':'';
+    oM('Move back to Goods-in?','This will remove '+sku+' from '+fl(group[0])+extra+' and put it back in the received-but-not-placed list, so you can place it somewhere else later.'+otherNote,function(){
+      var qty=QTY[group[0]];
+      applyC({type:'delete',sku:sku,fl:group},true);
+      applyC({type:'receive',id:genId(),sku:sku,qty:qty!=null?qty:0,note:'Un-placed from '+fl(group[0]),ts:Date.now()},true);
       rebuildMap();renderReceivedList();
       ttSticky=false;tt.style.display='none';
       si2(sku+' moved back to Goods-in');
