@@ -250,6 +250,25 @@ var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
 
 function fl(loc){var p=loc.split('-');return p[0]+'-B'+parseInt(p[1],10)+'-L'+p[2];}
+// Shows the plain code normally, but adds "(Left)"/"(Right)" specifically
+// when this bay's slots are shared between two DIFFERENT SKUs -- so a
+// single item using both slots (2 pallet spaces) shows as one plain code,
+// while two different SKUs sharing a bay stay distinguishable.
+function flSmart(loc){
+  var base=fl(loc);
+  var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10),lv=p[2],sid=p[3];
+  var thisSku=LOC[loc];
+  var sides=getSidesForBay(row,bay);
+  var labels=sides===3?['1','2','3']:['L','R'];
+  var shared=labels.some(function(otherSid){
+    if(otherSid===sid)return false;
+    var otherLoc=row+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+otherSid;
+    return LOC[otherLoc]&&LOC[otherLoc]!==thisSku;
+  });
+  if(!shared)return base;
+  var label=sid==='L'?'Left':sid==='R'?'Right':'Slot '+sid;
+  return base+' ('+label+')';
+}
 function gc(g){return GRPC[g]||'#888';}
 
 var SHEET_API='https://script.google.com/macros/s/AKfycbwQaeYMqlrC6EUYStRFKnEY9eiCSCqSaoadHn2EhbClkXclUWWvaXs3VpbTY3jeGBko/exec';
@@ -516,6 +535,7 @@ async function buildIdx(){
   }
   if(saved&&saved.length){
     saved.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during load:',c,e);}});
+    saved.forEach(function(c){if(c.type==='set_bayslots'&&c.sku&&c.qty!=null)CUSTOM_BAY_SLOTS[c.sku]=c.qty;});
     CHANGES=saved.slice();
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
@@ -1206,7 +1226,14 @@ function isBridgeEmptyLevel(row,bay,lv){
   if(!isBridgeBay(row,bay))return false;
   return lv<=(RS[row].l-2);
 }
+// Per-bay slot count overrides -- lets a specific bay be reconfigured to fit
+// more (smaller) or fewer (larger) pallets than the row's default, without
+// changing every other bay in the row.
+var CUSTOM_BAY_SLOTS={};
+function getBaySlotKey(row,bay){return row+'-'+bay;}
 function getSidesForBay(row,bay){
+  var key=getBaySlotKey(row,bay);
+  if(CUSTOM_BAY_SLOTS[key]!=null)return CUSTOM_BAY_SLOTS[key];
   if(isBridgeBay(row,bay))return 3;
   return RS[row].s;
 }
@@ -1631,11 +1658,13 @@ function onEmp(loc,e){
 
 function showEmptyInfo(loc,e){
   var h=getBayHeight(loc);
+  var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10);
   clearTimeout(ttHideTimer);
   tt.style.pointerEvents='auto';
   tt.innerHTML=fl(loc)+' -- Empty'+(h?' -- Height '+h:' -- Height not set yet')+'<br>'+
     '<a href="javascript:void(0)" onclick="startPlaceAtLocation(\''+loc+'\')" style="color:#8CD98C">\ud83d\udce6 Place new SKU here</a>'+
-    '<a href="javascript:void(0)" onclick="startMoveToLocation(\''+loc+'\')" style="color:#F5D76E">\ud83d\udd04 Move existing SKU here</a>';
+    '<a href="javascript:void(0)" onclick="startMoveToLocation(\''+loc+'\')" style="color:#F5D76E">\ud83d\udd04 Move existing SKU here</a>'+
+    '<a href="javascript:void(0)" onclick="setBaySlotCount(\''+row+'\','+bay+')" style="color:#BA7517">\ud83d\udd27 Change slots in this bay</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
 }
@@ -2468,6 +2497,36 @@ document.addEventListener('contextmenu',function(e){
   if(loc&&sku){requirePin(function(){var allLocs=SLOC[sku]||[loc];var extra=allLocs.length>1?' ('+(allLocs.length-1)+' other location'+(allLocs.length>2?'s':'')+' of this SKU will stay)':'';oM('Delete this pallet?','Remove '+sku+' from '+fl(loc)+' only.'+extra,function(){applyC({type:'delete',sku:sku,fl:[loc]},true);rebuildMap();si2('Deleted from '+fl(loc));});});}}
 });
 
+// Changes how many pallet slots a specific bay has -- e.g. fitting 3 smaller
+// pallets across a bay that normally holds 2 larger ones. Only allowed on a
+// completely empty bay, since changing the slot count also changes the
+// side-labeling scheme (L/R vs 1/2/3), which would otherwise orphan any
+// existing placements.
+function setBaySlotCount(row,bay){
+  requirePin(function(){
+    var spec=RS[row];if(!spec){alert('Unknown row.');return;}
+    if(bay<1||bay>spec.b){alert('Bay out of range for row '+row+'.');return;}
+    for(var lv=1;lv<=spec.l;lv++){
+      var sides=getSidesForBay(row,bay);
+      for(var sl=0;sl<sides;sl++){
+        var sid=sides===3?String(sl+1):(sl===0?'L':'R');
+        var loc=row+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
+        if(LOC[loc]){alert('This bay has items placed in it -- clear it first before changing its slot count, to avoid orphaning existing placements.');return;}
+      }
+    }
+    var current=getSidesForBay(row,bay);
+    var ans=prompt('How many pallet slots should '+row+'-B'+bay+' have? (currently '+current+')',String(current));
+    if(ans===null)return;
+    var n=parseInt(ans.trim(),10);
+    if(isNaN(n)||n<1||n>4){alert('Enter a whole number between 1 and 4.');return;}
+    var key=getBaySlotKey(row,bay);
+    applyC({type:'set_bayslots',sku:key,qty:n,ts:Date.now()},true);
+    CUSTOM_BAY_SLOTS[key]=n;
+    rebuildMap();
+    si2(row+'-B'+bay+' now has '+n+' pallet slot'+(n!==1?'s':'')+'.');
+  });
+}
+
 // ---------- Stock alerts: lead time (per SKU, for reorder alerts) ----------
 function getLeadTime(sku){
   var val=null;
@@ -2667,7 +2726,7 @@ function showR(sku){
   var abcFg={'A':'#375623','A-HV':'#1C4587','B':'#7F6000','C':'#9C0006','C-HV':'#833C00'}[v[6]]||'#444';
   var palBg=v[8]===3?'#FFC000':v[8]===2?'#FFE066':'#E8E8E8';
   var mp=v[13]||0;
-  var uniqLocCodes=placed?locs.map(fl).filter(function(c,i,a){return a.indexOf(c)===i;}):[];
+  var uniqLocCodes=placed?locs.map(flSmart).filter(function(c,i,a){return a.indexOf(c)===i;}):[];
   var locStr=placed?uniqLocCodes.join(' + '):(onlyInMixed?'Part of a mixed pallet at '+mixedLocs.map(fl).join(' + '):'NOT YET PLACED');
   var mNote=placed&&locs.length>1?' <span style="background:#FFE066;padding:1px 6px;border-radius:4px;font-size:11px">'+locs.length+' pallet space'+(locs.length>1?'s':'')+'</span>':'';
   var cardH=placed?getBayHeight(locs[0]):null;
