@@ -242,7 +242,7 @@ var RCOL={A:'#8AC640',AA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC64
 var RFCOL={A:'#111',AA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 42 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (42 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 42 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 42 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 42 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 42 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)'};
 
-var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
+var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
@@ -539,7 +539,8 @@ function applyC(c,rec){
     var movedMixed=c.fl.length===1?MIXED_CONTENTS[c.fl[0]]:null;
     c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];});
     c.tl.forEach(function(l){LOC[l]=c.sku;});
-    SLOC[c.sku]=c.tl;
+    var remainingAfterMove=(SLOC[c.sku]||[]).filter(function(l){return c.fl.indexOf(l)<0;});
+    SLOC[c.sku]=remainingAfterMove.concat(c.tl);
     if(movedMixed&&c.tl.length===1)MIXED_CONTENTS[c.tl[0]]=movedMixed;
   }
   else if(c.type==='add'){
@@ -768,7 +769,7 @@ function undoLast(){
   var c=CHANGES.pop();
   var inverse=null;
   if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.fl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
-  else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});SLOC[c.sku]=c.fl;inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
+  else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});var remainingAfterUndo=(SLOC[c.sku]||[]).filter(function(l){return c.tl.indexOf(l)<0;});SLOC[c.sku]=remainingAfterUndo.concat(c.fl);inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
   else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl,user:currentUser};}
   LOG.shift();updLog();rebuildMap();si2('Undone');
   lastSyncJSON=JSON.stringify(CHANGES);
@@ -1617,7 +1618,7 @@ function onEmp(loc,e){
       setNorm();
     }
   } else if(mode==='move'&&moveSku){
-    var fromLocs=SLOC[moveSku]||[];var spaces2=fromLocs.length||1;var tl2;
+    var fromLocs=moveSourceLoc?[moveSourceLoc]:(SLOC[moveSku]||[]);var spaces2=fromLocs.length||1;var tl2;
     if(spaces2>1){tl2=findSeq(loc,spaces2);if(!tl2){alert('Need '+spaces2+' consecutive empty spaces here. Try another spot.');return;}}
     else{tl2=[loc];}
     var sku=moveSku;
@@ -1812,13 +1813,25 @@ function clrHL(){
 }
 
 var mb=document.getElementById('mb');
-function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;moveTargetLoc=null;pendingReceiveId=null;pendingReceiveQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';document.getElementById('btn-rv').style.cssText='';}
+function setNorm(){mode='normal';addTgt=null;addSpaces=null;currentSuggestion=null;moveSku=null;moveSourceLoc=null;dupQueueRemaining=0;dupQueueQty=null;singleAddQty=null;moveTargetLoc=null;pendingReceiveId=null;pendingReceiveQty=null;clrSugg();mb.style.display='none';mb.className='';mb.onclick=null;document.getElementById('btn-am').style.cssText='';document.getElementById('btn-dm').style.cssText='';document.getElementById('btn-cm').style.cssText='';document.getElementById('btn-rv').style.cssText='';}
 
 function enterMoveModeCard(sku){
   requirePin(function(){
-  mode='move';moveSku=sku;var v=DATA.d[sku];
+  var locs=SLOC[sku]||[];
+  var sourceLoc=null;
+  if(locs.length>1){
+    var codes=locs.map(fl);
+    var pick=prompt('This SKU is in '+locs.length+' spots. Which one do you want to move? Type one of:\n'+codes.join(', '),codes[0]);
+    if(pick===null)return;
+    var idx=codes.indexOf(pick.trim());
+    if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
+    sourceLoc=locs[idx];
+  } else if(locs.length===1){
+    sourceLoc=locs[0];
+  }
+  mode='move';moveSku=sku;moveSourceLoc=sourceLoc;var v=DATA.d[sku];
   mb.style.display='block';mb.className='mv';
-  mb.textContent='MOVE MODE: Tap an empty (grey) cell to move '+sku+' ('+(v?v[4]:'')+') there | Tap this banner to cancel';
+  mb.textContent='MOVE MODE: Tap an empty (grey) cell to move '+sku+' ('+(v?v[4]:'')+') from '+(sourceLoc?fl(sourceLoc):'its current spot')+' there | Tap this banner to cancel';
   mb.onclick=function(){setNorm();};
   cRC();
   });
@@ -2369,9 +2382,30 @@ function enterCountMode(){
 function delFromCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
-  oM('Delete all pallets of '+sku+'?','This will free '+locs.length+' location'+(locs.length!==1?'s':'')+' in the warehouse.',function(){
-    applyC({type:'delete',sku:sku,fl:locs.slice()},true);
-    document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted all pallets of '+sku);
+  if(!locs.length){alert('This SKU is not placed anywhere.');return;}
+  if(locs.length===1){
+    oM('Delete this pallet of '+sku+'?','This will free '+fl(locs[0])+'.',function(){
+      applyC({type:'delete',sku:sku,fl:locs.slice()},true);
+      document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(locs[0]));
+    });
+    return;
+  }
+  var codes=locs.map(fl);
+  var pick=prompt('This SKU is in '+locs.length+' spots. Which one do you want to delete? Type one of:\n'+codes.join(', ')+'\n\n(To delete all of them, type ALL)',codes[0]);
+  if(pick===null)return;
+  if(pick.trim().toUpperCase()==='ALL'){
+    oM('Delete ALL '+locs.length+' pallets of '+sku+'?','This will free '+locs.length+' locations in the warehouse.',function(){
+      applyC({type:'delete',sku:sku,fl:locs.slice()},true);
+      document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted all pallets of '+sku);
+    });
+    return;
+  }
+  var idx=codes.indexOf(pick.trim());
+  if(idx<0){alert('Didn\'t match any of the listed locations.');return;}
+  var target=locs[idx];
+  oM('Delete this pallet of '+sku+'?','This will free '+fl(target)+' -- the other '+(locs.length-1)+' pallet'+(locs.length-1!==1?'s':'')+' of this SKU elsewhere will be unaffected.',function(){
+    applyC({type:'delete',sku:sku,fl:[target]},true);
+    document.getElementById('rc').style.display='none';clrHL();rebuildMap();si2('Deleted '+sku+' at '+fl(target));
   });
   });
 }
