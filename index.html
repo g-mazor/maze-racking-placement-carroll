@@ -237,8 +237,8 @@ const DATA={"d": {"MC-PB7-10": ["A", 1, 1, "L", "Paper Bags 7L x 10", "COMPOST",
 
 var GRPC={'COMPOST':'#1D9E75','KETER GROUP':'#2980B9','KETER SHEDS':'#C0561A','GREENHOUSES':'#27AE60','Canopia':'#8E44AD','TANKS':'#BA7517','WATERING':'#1F4E79','LECHUZA':'#7F3F00','PLANTERS':'#374A5C','GARDEN':'#375623','HOME':'#595959','MIXED':'#D63384'};
 var RS={A:{b:39,s:2,l:3},AA:{b:39,s:2,l:3},B:{b:38,s:2,l:4},C:{b:38,s:2,l:4},D:{b:38,s:2,l:4},E:{b:38,s:2,l:3},F:{b:4,s:3,l:4},G:{b:13,s:3,l:4},H:{b:14,s:2,l:3}};
-var RCOL={A:'#8AC640',AA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC640',F:'#8AC640',G:'#8AC640'};
-var RFCOL={A:'#111',AA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111'};
+var RCOL={A:'#8AC640',AA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC640',F:'#8AC640',G:'#8AC640',H:'#8AC640'};
+var RFCOL={A:'#111',AA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111',H:'#111'};
 var RI={A:'Row A - Compost + Keter Group (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (14 bays, 2 slots, 3 levels)'};
 
 var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
@@ -1301,7 +1301,7 @@ function buildRow(r,container){
         continue;
       }
       if(lv>getLevelsForBay(r,bay)){
-        for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf';ph.title='No shelf at this level';cellInfos.push({el:ph,sku:null,bay:bay});}
+        for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf-blank';cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
       }
       for(var sl=0;sl<baySides;sl++){
@@ -1369,7 +1369,7 @@ function bFG(){
   var gb=document.createElement('div');gb.className='fb';gb.style.flex='1';
   var gt=document.createElement('div');gt.className='ft';gt.textContent='Row G - GH overflow + Canopia (13 bays x 3 slots x 4 levels)';gb.appendChild(gt);
   buildRow('G',gb);z.appendChild(gb);
-  var hb=document.createElement('div');hb.className='fb';hb.style.flex='0 0 auto';
+  var hb=document.createElement('div');hb.className='fb';hb.style.flex='1';
   var ht=document.createElement('div');ht.className='ft';ht.textContent='Row H - Storage Boxes (14 bays x 2 slots x 3 levels)';hb.appendChild(ht);
   buildRow('H',hb);z.appendChild(hb);
 }
