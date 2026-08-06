@@ -224,7 +224,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerStatsPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
-<div class="wl"><span>Bay 01 (packing end)</span><span>Bay 42 (offices end)</span></div>
+<div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
 <div class="zt" id="fgz"></div>
 <div class="mr" id="mr"></div>
 </div></div>
@@ -1185,7 +1185,7 @@ function buildStats(){
   var empty=totalCap-totalOcc;
   var totalSkusPlaced=Object.keys(SLOC).length;
   var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
-  ['A','AA','B','C','D','E','F','G'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
+  ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
 }
 
