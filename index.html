@@ -239,7 +239,7 @@ var GRPC={'COMPOST':'#1D9E75','KETER GROUP':'#2980B9','KETER SHEDS':'#C0561A','G
 var RS={A:{b:39,s:2,l:3},AA:{b:39,s:2,l:3},B:{b:38,s:2,l:4},C:{b:38,s:2,l:4},D:{b:38,s:2,l:4},E:{b:38,s:2,l:3},F:{b:4,s:3,l:4},G:{b:13,s:3,l:4},H:{b:14,s:2,l:3}};
 var RCOL={A:'#8AC640',AA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC640',F:'#8AC640',G:'#8AC640',H:'#8AC640'};
 var RFCOL={A:'#111',AA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111',H:'#111'};
-var RI={A:'Row A - Compost + Keter Group (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',B:'Row B - Keter Group + Tanks (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Greenhouses (4 bays, 3 slots, 4 levels)',G:'Row G - GH overflow + Canopia (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (14 bays, 2 slots, 3 levels)'};
+var RI={A:'Row A - Compost (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',B:'Row B - Keter Group (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Empty (4 bays, 3 slots, 4 levels)',G:'Row G - Canopia + Greenhouses (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (14 bays, 2 slots, 3 levels)'};
 
 var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
@@ -1165,7 +1165,7 @@ function saveDL(){
 
 function buildStats(){
   var grid=document.getElementById('sg');
-  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost + KG'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - KG + Tanks'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Greenhouses'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - GH + Canopia'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
+  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
     for(var bay=1;bay<=sp.b;bay++){
@@ -1361,13 +1361,13 @@ function rebuildMap(){
 function bFG(){
   var z=document.getElementById('fgz');
   var fb=document.createElement('div');fb.className='fb';fb.style.flex='0 0 auto';
-  var ft=document.createElement('div');ft.className='ft';ft.textContent='Row F - Greenhouses (4 bays x 3 slots x 4 levels)';fb.appendChild(ft);
+  var ft=document.createElement('div');ft.className='ft';ft.textContent='Row F - Empty (4 bays x 3 slots x 4 levels)';fb.appendChild(ft);
   buildRow('F',fb);z.appendChild(fb);
   var rd=document.createElement('div');rd.className='roller-door';
   var rdLbl=document.createElement('span');rdLbl.textContent='ROLLER DOOR';rd.appendChild(rdLbl);
   z.appendChild(rd);
   var gb=document.createElement('div');gb.className='fb';gb.style.flex='1';
-  var gt=document.createElement('div');gt.className='ft';gt.textContent='Row G - GH overflow + Canopia (13 bays x 3 slots x 4 levels)';gb.appendChild(gt);
+  var gt=document.createElement('div');gt.className='ft';gt.textContent='Row G - Canopia + Greenhouses (13 bays x 3 slots x 4 levels)';gb.appendChild(gt);
   buildRow('G',gb);z.appendChild(gb);
   var hb=document.createElement('div');hb.className='fb';hb.style.flex='1';
   var ht=document.createElement('div');ht.className='ft';ht.textContent='Row H - Storage Boxes (14 bays x 2 slots x 3 levels)';hb.appendChild(ht);
@@ -2073,9 +2073,7 @@ function detectGroupMismatch(sku){
 
 function pickRowForGroup(group){
   if(group==='GREENHOUSES'||group==='Canopia'){
-    var fg=['F','G'];
-    fg.sort(function(a,b){return emptyCountInRow(b)-emptyCountInRow(a);});
-    return fg[0];
+    return 'G';
   }
   // F and G are reserved exclusively for Canopia/Greenhouses -- excluded here
   // regardless of what any legacy catalog row data might say, so nothing else
