@@ -202,6 +202,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="backfillPendingDescriptions()">Backfill pending descriptions</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="reMergeSplitMixedPallets()">🛠️ Fix mixed pallets split by migration bug</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="checkOrphanedPlacements()">⚠️ Check for orphaned placements (row resize)</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
@@ -415,6 +416,47 @@ function repairLocationIndex(){
 // after the row reconfiguration (B/C/D/E shrank from 42 to 38 bays, A/AA
 // from 42 to 39) -- run this once after deploying to confirm nothing was
 // orphaned, even if you're confident those bays were empty.
+// Recovery: finds mixed pallets that got incorrectly split into separate
+// identities by the earlier migration bug (one identity per space instead of
+// per physical pallet), and re-merges each group back under one shared
+// identity, combining whatever contents are found across the group.
+function reMergeSplitMixedPallets(){
+  requirePin(function(){
+    var allMixedLocs=getAllMixedLocations();
+    var byBayLevel={};
+    allMixedLocs.forEach(function(loc){
+      var p=loc.split('-');var key=p[0]+'-'+p[1]+'-'+p[2];
+      if(!byBayLevel[key])byBayLevel[key]=[];
+      byBayLevel[key].push(loc);
+    });
+    var toFix=[];
+    Object.keys(byBayLevel).forEach(function(key){
+      var locs=byBayLevel[key];
+      if(locs.length<2)return;
+      var identities=locs.map(function(l){return LOC[l];});
+      var allSame=identities.every(function(id){return id===identities[0];});
+      if(!allSame)toFix.push(locs);
+    });
+    if(!toFix.length){alert('No incorrectly split mixed pallets found -- everything looks correctly unified.');return;}
+    var preview=toFix.map(function(locs){
+      var contentsFound=locs.map(function(l){return fl(l)+': '+JSON.stringify(MIXED_CONTENTS[l]||[]);}).join('\n  ');
+      return locs.map(fl).join(' + ')+':\n  '+contentsFound;
+    }).join('\n\n');
+    if(!confirm('Found '+toFix.length+' mixed pallet'+(toFix.length!==1?'s':'')+' incorrectly split into separate identities by the earlier migration bug. This will re-merge each group under one shared identity, combining their contents:\n\n'+preview+'\n\nContinue?'))return;
+    toFix.forEach(function(locs){
+      var contents=[];
+      locs.forEach(function(l){
+        var c=MIXED_CONTENTS[l]||[];
+        if(c.length)contents=contents.concat(c);
+      });
+      applyC({type:'add',sku:mixedIdentityFor(locs[0]),tl:locs},true);
+      applyC({type:'mixedset',loc:locs[0],contents:contents},true);
+    });
+    rebuildMap();
+    alert('Re-merged '+toFix.length+' mixed pallet'+(toFix.length!==1?'s':'')+'. Please open each one and verify it looks correct.');
+  });
+}
+
 function checkOrphanedPlacements(){
   var removedRanges={A:[40,42],AA:[40,42],B:[39,42],C:[39,42],D:[39,42],E:[39,42],H:[13,14]};
   var found=[];
@@ -537,23 +579,26 @@ function migrateLegacyMixedPallets(){
   requirePin(function(){
     var legacyLocs=(SLOC['MIXED']||[]).slice();
     if(!legacyLocs.length){alert('No legacy mixed pallets to migrate -- everything is already individually addressable.');return;}
-    // Capture contents BEFORE, so we can prove afterward whether anything
-    // actually changed -- this migration should never touch MIXED_CONTENTS,
-    // but showing the evidence directly removes any doubt.
+    // Group by physical pallet FIRST (same bay+level = one multi-space pallet)
+    // -- migrating location-by-location instead of pallet-by-pallet was the
+    // actual bug: it gave each space of a multi-space pallet its own separate
+    // identity, splitting one pallet into several disconnected ones.
+    var pallets=groupLocationsByPallet(legacyLocs);
     var before={};
     legacyLocs.forEach(function(loc){before[loc]=(MIXED_CONTENTS[loc]||[]).slice();});
-    if(!confirm('This will convert '+legacyLocs.length+' existing mixed pallet'+(legacyLocs.length!==1?'s':'')+' so each one can be moved/deleted/edited individually, like any other pallet.\n\nCurrent contents (for your records):\n'+legacyLocs.map(function(l){return l+' -> '+JSON.stringify(before[l]);}).join('\n')+'\n\nContinue?'))return;
-    legacyLocs.forEach(function(loc){
-      applyC({type:'add',sku:mixedIdentityFor(loc),tl:[loc]},true);
+    var preview=pallets.map(function(grp){return grp.map(fl).join(' + ')+' -> '+JSON.stringify(before[grp[0]]);}).join('\n');
+    if(!confirm('This will convert '+pallets.length+' existing mixed pallet'+(pallets.length!==1?'s':'')+' (across '+legacyLocs.length+' total spaces) so each one can be moved/deleted/edited individually, like any other pallet.\n\nCurrent contents (for your records):\n'+preview+'\n\nContinue?'))return;
+    pallets.forEach(function(grp){
+      applyC({type:'add',sku:mixedIdentityFor(grp[0]),tl:grp},true);
     });
     rebuildMap();
-    var report=legacyLocs.map(function(loc){
-      var after=MIXED_CONTENTS[loc]||[];
-      var same=JSON.stringify(before[loc])===JSON.stringify(after);
-      return (same?'\u2705 ':'\u26a0\ufe0f CHANGED ')+loc+': before='+JSON.stringify(before[loc])+' after='+JSON.stringify(after);
+    var report=pallets.map(function(grp){
+      var after=MIXED_CONTENTS[grp[0]]||[];
+      var same=JSON.stringify(before[grp[0]])===JSON.stringify(after);
+      return (same?'\u2705 ':'\u26a0\ufe0f CHANGED ')+grp.map(fl).join(' + ')+': before='+JSON.stringify(before[grp[0]])+' after='+JSON.stringify(after);
     }).join('\n');
-    alert('Migrated '+legacyLocs.length+' mixed pallet'+(legacyLocs.length!==1?'s':'')+'.\n\nBefore/after contents for each (please verify):\n\n'+report);
-    si2('Migrated '+legacyLocs.length+' mixed pallet'+(legacyLocs.length!==1?'s':'')+' -- each is now individually addressable.');
+    alert('Migrated '+pallets.length+' mixed pallet'+(pallets.length!==1?'s':'')+' ('+legacyLocs.length+' total spaces).\n\nBefore/after contents for each (please verify):\n\n'+report);
+    si2('Migrated '+pallets.length+' mixed pallet'+(pallets.length!==1?'s':'')+' -- each is now individually addressable.');
   });
 }
 
