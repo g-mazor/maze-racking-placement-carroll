@@ -1717,14 +1717,19 @@ function onEmp(loc,e){
     if(LOC[loc])return;
     var v=DATA.d[addTgt];var spaces=addSpaces||(v?v[8]:1);var tl;
     if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}else{tl=[loc];}
-    applyC({type:'add',sku:addTgt,tl:tl},true);rebuildMap();hlSKU(addTgt);si2('Added at '+fl(loc));
-    speakSkuInfo(addTgt);
-    if(dupQueueQty!=null)applyC({type:'count',sku:addTgt,loc:tl[0],qty:dupQueueQty},true);
-    else if(singleAddQty!=null){applyC({type:'count',sku:addTgt,loc:tl[0],qty:singleAddQty},true);singleAddQty=null;}
+    // A brand new mixed pallet must get its own unique identity right away,
+    // not the old shared 'MIXED' string -- otherwise every new mixed pallet
+    // would incorrectly start out "legacy shared" instead of individually
+    // addressable from creation.
+    var placedSku=(addTgt==='MIXED')?mixedIdentityFor(tl[0]):addTgt;
+    applyC({type:'add',sku:placedSku,tl:tl},true);rebuildMap();hlSKU(placedSku);si2('Added at '+fl(loc));
+    speakSkuInfo(placedSku);
+    if(dupQueueQty!=null)applyC({type:'count',sku:placedSku,loc:tl[0],qty:dupQueueQty},true);
+    else if(singleAddQty!=null){applyC({type:'count',sku:placedSku,loc:tl[0],qty:singleAddQty},true);singleAddQty=null;}
     if(pendingReceiveId!=null){
       applyC({type:'receiveresolve',id:pendingReceiveId},true);pendingReceiveId=null;renderReceivedList();
     } else {
-      var pendMatches=RECEIVED.filter(function(r){return r.sku===addTgt;}).sort(function(a,b){return a.ts-b.ts;});
+      var pendMatches=RECEIVED.filter(function(r){return r.sku===placedSku;}).sort(function(a,b){return a.ts-b.ts;});
       if(pendMatches.length){
         applyC({type:'receiveresolve',id:pendMatches[0].id},true);
         renderReceivedList();
