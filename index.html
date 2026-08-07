@@ -203,6 +203,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="reMergeSplitMixedPallets()">🛠️ Fix mixed pallets split by migration bug</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#922B21;color:#FFF;font-size:10px" onclick="auditMixedPalletIntegrity()">🔍 Audit mixed pallet identity collisions</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="checkOrphanedPlacements()">⚠️ Check for orphaned placements (row resize)</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletFullHistory()">🔍 Full mixedset history (long list)</button>
@@ -455,6 +456,47 @@ function reMergeSplitMixedPallets(){
     rebuildMap();
     alert('Re-merged '+toFix.length+' mixed pallet'+(toFix.length!==1?'s':'')+'. Please open each one and verify it looks correct.');
   });
+}
+
+// Audits the LIVE app state for the exact issues found in a manual data
+// export: two different physical pallets accidentally sharing the same
+// identity (so one is overwriting the other), and locations claimed by more
+// than one entry (a mixed pallet overlapping a regular SKU, or a stale
+// legacy 'MIXED' reference to an already-migrated location).
+function auditMixedPalletIntegrity(){
+  var report='';
+  // Check 1: identity collisions -- SLOC keys should be 1:1 with physical
+  // pallets, so any 'MIXED@...' key whose locations don't form a single
+  // contiguous same-bay-level group is suspicious.
+  Object.keys(SLOC).forEach(function(identity){
+    if(!isMixedSku(identity)||identity==='MIXED')return;
+    var locs=SLOC[identity];
+    var groups=groupLocationsByPallet(locs);
+    if(groups.length>1){
+      report+='\ud83d\udd34 IDENTITY COLLISION: "'+identity+'" is shared by '+groups.length+' separate physical spots: '+groups.map(function(g){return g.map(fl).join('+');}).join(' AND ')+'\n\n';
+    }
+  });
+  // Check 2: every location should have exactly one owner (LOC is the
+  // source of truth here, so this specifically looks for any location
+  // appearing in more than one SLOC array -- a sign of leftover stale
+  // references, most often the legacy 'MIXED' list not being cleaned up.
+  var locOwners={};
+  Object.keys(SLOC).forEach(function(sku){
+    SLOC[sku].forEach(function(loc){
+      if(!locOwners[loc])locOwners[loc]=[];
+      locOwners[loc].push(sku);
+    });
+  });
+  Object.keys(locOwners).forEach(function(loc){
+    var owners=locOwners[loc];
+    if(owners.length>1){
+      var actual=LOC[loc];
+      report+='\ud83d\udd34 '+fl(loc)+' appears in '+owners.length+' different SLOC lists: '+owners.join(', ')+' -- actual owner (LOC) is: '+actual+'\n\n';
+    }
+  });
+  if(!report){alert('No identity collisions or stale references found -- mixed pallet data looks internally consistent.');return;}
+  oM('Mixed Pallet Integrity Audit',' ',function(){});
+  document.getElementById('mm').innerHTML='<div style="max-height:80vh;overflow-y:auto;font-size:12px;white-space:pre-wrap">'+report+'</div>';
 }
 
 function checkOrphanedPlacements(){
