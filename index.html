@@ -204,6 +204,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="repairLocationIndex()">🔧 Repair location index</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#D63384;color:#FFF;font-size:10px" onclick="migrateLegacyMixedPallets()">🔧 Make mixed pallets individually addressable</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="reMergeSplitMixedPallets()">🛠️ Fix mixed pallets split by migration bug</button>
+  <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#1E8449;color:#FFF;font-size:10px;font-weight:700" onclick="fullSystemHealthCheck()">🩺 Full system health check</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#922B21;color:#FFF;font-size:10px" onclick="auditMixedPalletIntegrity()">🔍 Audit mixed pallet identity collisions</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#E74C3C;color:#FFF;font-size:10px" onclick="debugMixedPalletHistory()">🔍 Diagnose mixed pallet history</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#C0392B;color:#FFF;font-size:10px" onclick="checkOrphanedPlacements()">⚠️ Check for orphaned placements (row resize)</button>
@@ -484,6 +485,52 @@ function reMergeSplitMixedPallets(){
 // identity (so one is overwriting the other), and locations claimed by more
 // than one entry (a mixed pallet overlapping a regular SKU, or a stale
 // legacy 'MIXED' reference to an already-migrated location).
+// Comprehensive health check -- verifies a genuinely clean slate after a
+// full reset (no leftover placements, no stale mixed pallet references,
+// correct row configuration) before starting to rebuild the map fresh.
+function fullSystemHealthCheck(){
+  var report='';
+  var allGood=true;
+
+  var totalLocs=Object.keys(LOC).length;
+  if(totalLocs===0){
+    report+='\u2705 Empty state confirmed -- no placements found anywhere.\n\n';
+  } else {
+    allGood=false;
+    report+='\u26a0\ufe0f Found '+totalLocs+' occupied location(s) -- NOT a clean slate:\n';
+    Object.keys(LOC).slice(0,10).forEach(function(loc){report+='   '+loc+': '+LOC[loc]+'\n';});
+    if(totalLocs>10)report+='   ...and '+(totalLocs-10)+' more\n';
+    report+='\n';
+  }
+
+  var mixedLocs=getAllMixedLocations();
+  if(mixedLocs.length===0){
+    report+='\u2705 No leftover mixed pallet references.\n\n';
+  } else {
+    allGood=false;
+    report+='\u26a0\ufe0f Found '+mixedLocs.length+' leftover mixed pallet location(s): '+mixedLocs.map(fl).join(', ')+'\n\n';
+  }
+
+  report+='\ud83d\udccb Current row configuration:\n';
+  Object.keys(RS).forEach(function(r){
+    var spec=RS[r];
+    report+='   '+r+': '+spec.b+' bays x '+spec.s+' sides x '+spec.l+' levels\n';
+  });
+  report+='\n';
+
+  if(RECEIVED.length===0){
+    report+='\u2705 No pending goods-in items.\n\n';
+  } else {
+    report+='\u2139\ufe0f '+RECEIVED.length+' item(s) in Pending Goods-in (not necessarily a problem, just noting).\n\n';
+  }
+
+  report+='\ud83d\udcca Total change events in history: '+CHANGES.length+'\n\n';
+  report+= allGood ? '\ud83c\udf89 Everything looks clean -- ready for a fresh start!' : '\u26a0\ufe0f Some items need attention before you consider this a clean slate.';
+
+  oM('Full System Health Check',' ',function(){});
+  document.getElementById('mm').innerHTML='<div style="max-height:80vh;overflow-y:auto;font-size:12px;white-space:pre-wrap">'+report+'</div>';
+}
+
 function auditMixedPalletIntegrity(){
   var report='';
   // Check 1: identity collisions -- SLOC keys should be 1:1 with physical
