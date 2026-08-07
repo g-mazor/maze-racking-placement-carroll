@@ -151,6 +151,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
+<div style="text-align:center;margin-top:4px"><span style="font-size:11px;color:#888;text-decoration:underline;cursor:pointer" onclick="promptAccessCode()">🔒 Enter/update access code</span></div>
 <button class="btn public-hide" id="settingsBtn" style="background:#1F3864;color:#FFF" onclick="toggleSettingsPanel()">⚙️ Settings</button>
 <button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button>
 <button class="btn" style="background:#7D3C98;color:#FFF;font-size:11px" onclick="enterManagerLogin()">👔 Manager Login</button>
@@ -291,6 +292,26 @@ function gc(g){return GRPC[g]||'#888';}
 
 var SHEET_API='https://script.google.com/macros/s/AKfycbwQaeYMqlrC6EUYStRFKnEY9eiCSCqSaoadHn2EhbClkXclUWWvaXs3VpbTY3jeGBko/exec';
 
+// Access control: the code is entered once per browser session (never
+// hardcoded in this source file) and included with every backend request.
+// The backend rejects anything without a matching code once one has been
+// activated server-side via Script Properties.
+var ACCESS_CODE=sessionStorage.getItem('mazeAccessCode')||'';
+function apiUrl(params){
+  var base=SHEET_API+'?';
+  if(ACCESS_CODE)base+='ac='+encodeURIComponent(ACCESS_CODE)+'&';
+  return base+(params||'');
+}
+
+function promptAccessCode(){
+  var current=sessionStorage.getItem('mazeAccessCode')||'';
+  var entered=prompt('Enter the access code for this warehouse map:',current);
+  if(entered===null)return;
+  sessionStorage.setItem('mazeAccessCode',entered.trim());
+  alert('Access code saved for this browser session. Reloading now...');
+  location.reload();
+}
+
 function jsonpFetch(url){
   return new Promise(function(resolve,reject){
     var cbName='jsonpCb'+Date.now()+Math.floor(Math.random()*100000);
@@ -305,7 +326,7 @@ function jsonpFetch(url){
   });
 }
 async function fetchRemoteChanges(){
-  return await jsonpFetch(SHEET_API);
+  return await jsonpFetch(apiUrl(''));
 }
 function postRemoteChange(change){
   return new Promise(function(resolve){
@@ -329,7 +350,7 @@ function postRemoteChange(change){
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
     img.onerror=function(){clearTimeout(timer);resolve(false);};
-    img.src=SHEET_API+'?'+params;
+    img.src=apiUrl(params);
   });
 }
 
@@ -340,7 +361,7 @@ function sendDescOnly(loc,desc){
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
     img.onerror=function(){clearTimeout(timer);resolve(false);};
-    img.src=SHEET_API+'?'+params;
+    img.src=apiUrl(params);
   });
 }
 
@@ -351,7 +372,7 @@ function sendPendingDescOnly(id,desc){
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
     img.onerror=function(){clearTimeout(timer);resolve(false);};
-    img.src=SHEET_API+'?'+params;
+    img.src=apiUrl(params);
   });
 }
 
@@ -2823,7 +2844,7 @@ function sendStockAlertEmail(){
       body+='- '+a.sku+' ('+a.desc+'): '+a.totalQty+' left, '+a.daysLeft+' days of stock, lead time '+a.leadTime+' days\n';
     });
   }
-  var url=SHEET_API+'?sendalert=1&to='+encodeURIComponent('gmazor@mazeproducts.com.au')+'&subject='+encodeURIComponent('Maze Warehouse Stock Alerts')+'&body='+encodeURIComponent(body);
+  var url=apiUrl('sendalert=1&to='+encodeURIComponent('gmazor@mazeproducts.com.au')+'&subject='+encodeURIComponent('Maze Warehouse Stock Alerts')+'&body='+encodeURIComponent(body));
   si2('Sending alert email...');
   fetch(url,{mode:'no-cors'}).then(function(){
     si2('Alert email request sent to the backend -- check your inbox in a moment.');
