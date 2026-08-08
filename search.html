@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Maze Warehouse - SKU Search</title>
+<title>Maze Carroll WMS</title>
 <style>
   body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#F5F6F8;color:#222}
   .hdr{background:#1F3864;color:#FFF;padding:14px 16px;font-size:18px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
@@ -34,7 +34,7 @@
 </style>
 </head>
 <body>
-<div class="hdr"><span>📦 Maze Warehouse</span><span id="pickerNameTag" class="picker-name"></span></div>
+<div class="hdr"><span>📦 Maze Carroll WMS</span><span id="pickerNameTag" class="picker-name"></span></div>
 <div class="wrap">
   <div class="tabs">
     <div class="tab-btn active" id="tabSearchBtn" onclick="switchTab('search')">🔍 Search</div>
@@ -282,6 +282,25 @@ function pickerLogout() {
   renderPicklistTab();
 }
 
+// Parses a typed location code in either "A-B12-L1" or raw "A-12-1" form,
+// returning {row, bay} for comparison -- level is intentionally ignored,
+// matching the main app's arrival check (which only confirms row+bay).
+function parseLocInput(raw) {
+  if (!raw) return null;
+  var s = raw.trim().toUpperCase().replace(/\s+/g, '');
+  var m = s.match(/^([A-Z]+)-?B?(\d+)/);
+  if (!m) return null;
+  return {row: m[1], bay: parseInt(m[2], 10)};
+}
+
+var guidedPickState = null; // {listId, index, phase:'arrive'|'pick', confirmingMismatch}
+
+function togglePickerFullList() {
+  guidedShowingFullList = !guidedShowingFullList;
+  renderPicklistTab();
+}
+var guidedShowingFullList = false;
+
 function renderPicklistTab() {
   var el = document.getElementById('picklistContent');
   if (!currentPicker) {
@@ -299,37 +318,130 @@ function renderPicklistTab() {
       '<div style="text-align:center;margin-top:10px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
     return;
   }
-  var itemsHtml = pl.items.map(function(it, idx) {
-    var v = DATA.d[it.sku];
-    var desc = v ? v[4] : '';
-    return '<div class="pick-item' + (it.picked ? ' done' : '') + '">' +
-      '<div class="pick-item-info"><div class="sku">' + it.sku + '</div><div class="desc">' + desc + '</div><div class="pick-item-qty">' + fl(it.loc) + ' -- Qty ' + it.qty + '</div></div>' +
-      (it.picked ? '<span style="color:#1E8449;font-weight:700">\u2713 Done</span>' : '<button class="mark-btn" onclick="markPicked(\'' + pl.id + '\',' + idx + ')">Mark picked</button>') +
-      '</div>';
-  }).join('');
+
+  if (guidedShowingFullList) {
+    var doneCount2 = pl.items.filter(function(it) { return it.picked; }).length;
+    el.innerHTML = '<div class="card"><div style="font-weight:700;color:#16A085;margin-bottom:8px">\ud83d\udccb Full pick list -- ' + doneCount2 + ' of ' + pl.items.length + ' done</div>' +
+      pl.items.map(function(it, i) {
+        return '<div style="padding:5px 0;font-size:12px;' + (it.picked ? 'color:#AAA;text-decoration:line-through' : 'color:#222;font-weight:600') + '">' +
+          (it.picked ? '\u2705' : (i + 1) + '.') + ' ' + it.sku + ' -- qty ' + it.qty + ' at ' + fl(it.loc) + '</div>';
+      }).join('') +
+      '<div style="text-align:center;margin-top:10px"><button class="login-btn" onclick="togglePickerFullList()">Back to current pick</button></div></div>';
+    return;
+  }
+
+  var nextIdx = pl.items.findIndex(function(it) { return !it.picked; });
+  if (nextIdx < 0) {
+    el.innerHTML = '<div style="background:#EAF3DE;border:2px solid #27AE60;border-radius:8px;padding:16px;text-align:center;font-weight:700;color:#1E8449;font-size:15px">\ud83c\udf89 Pick list complete!</div>' +
+      '<div style="text-align:center;margin-top:14px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
+    guidedPickState = null;
+    return;
+  }
+
+  if (!guidedPickState || guidedPickState.listId !== pl.id || guidedPickState.index !== nextIdx) {
+    guidedPickState = {listId: pl.id, index: nextIdx, phase: 'arrive', confirmingMismatch: false};
+  }
+
+  var item = pl.items[nextIdx];
+  var v = DATA.d[item.sku];
+  var desc = v ? v[4] : '';
   var doneCount = pl.items.filter(function(it) { return it.picked; }).length;
-  el.innerHTML = '<div style="margin-bottom:10px;font-weight:600">' + doneCount + ' of ' + pl.items.length + ' picked</div>' + itemsHtml +
-    '<div style="text-align:center;margin-top:14px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
+  var html = '<div style="background:#FFF;border:2px solid #2980B9;border-radius:10px;padding:16px;text-align:center">' +
+    '<div style="font-size:11px;color:#888;margin-bottom:10px">Step ' + (nextIdx + 1) + ' of ' + pl.items.length + ' -- ' + doneCount + ' done so far &nbsp; ' +
+    '<span style="text-decoration:underline;cursor:pointer;color:#2980B9" onclick="togglePickerFullList()">View full list</span></div>';
+
+  if (guidedPickState.phase === 'arrive') {
+    html += '<div style="font-size:13px;color:#555;margin-bottom:6px">Go to this location:</div>' +
+      '<div style="font-size:28px;font-weight:700;color:#1F3864;margin-bottom:14px">' + fl(item.loc) + '</div>' +
+      '<input id="guidedArriveInput" type="text" placeholder="Type the location code" autocomplete="off" ' +
+      'style="width:100%;padding:12px;border-radius:6px;border:2px solid #2980B9;font-size:16px;box-sizing:border-box;text-align:center"/>' +
+      '<button class="login-btn" style="width:100%;margin-top:10px;padding:12px;font-size:15px" onclick="confirmGuidedArrival(document.getElementById(\'guidedArriveInput\').value)">Confirm arrival</button>' +
+      '<div id="guidedMsg" style="margin-top:10px;font-size:13px;font-weight:600"></div>';
+  } else {
+    html += '<div style="font-size:13px;color:#555;margin-bottom:2px">At ' + fl(item.loc) + ' -- now pick:</div>' +
+      '<div style="font-size:20px;font-weight:700;color:#1F3864">' + item.sku + '</div>' +
+      '<div style="font-size:14px;color:#555;margin-bottom:8px">' + desc + '</div>' +
+      '<div style="font-size:16px;font-weight:700;color:#16A085;margin-bottom:10px">Quantity needed: ' + item.qty + '</div>' +
+      '<input id="guidedQtyInput" type="number" placeholder="Qty you picked" autocomplete="off" value="' + item.qty + '" ' +
+      'style="width:100%;padding:12px;border-radius:6px;border:2px solid #27AE60;font-size:18px;box-sizing:border-box;text-align:center"/>' +
+      '<div id="guidedMsg" style="margin-top:10px;font-size:13px;font-weight:600"></div>' +
+      '<button class="mark-btn" style="width:100%;margin-top:10px;padding:12px;font-size:15px" onclick="confirmGuidedPick()">Confirm pick</button>';
+  }
+  html += '</div><div style="text-align:center;margin-top:14px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
+  el.innerHTML = html;
+
+  if (guidedPickState.phase === 'arrive') {
+    var inp = document.getElementById('guidedArriveInput');
+    inp.onkeydown = function(e) { if (e.key === 'Enter') confirmGuidedArrival(inp.value); };
+    setTimeout(function() { inp.focus(); }, 50);
+  } else {
+    var qi = document.getElementById('guidedQtyInput');
+    qi.onkeydown = function(e) { if (e.key === 'Enter') confirmGuidedPick(); };
+    setTimeout(function() { qi.focus(); qi.select(); }, 50);
+  }
 }
 
-// Marks one item picked: sends the matching 'pick' event (so stock counts
-// decrement exactly as they would from the main app) and re-saves the
-// picklist with that item's progress -- mirrors the main app's
-// confirmPick() + markPickListProgress() combined.
-function markPicked(listId, idx) {
-  var lists = getPickLists();
-  var pl = lists.find(function(p) { return p.id === listId; });
+// Step 1: confirm the picker is actually at the right bay before revealing
+// what to pick there -- mirrors the main app's confirmGuidedArrival().
+function confirmGuidedArrival(raw) {
+  if (!guidedPickState) return;
+  var pl = getActivePickListFor(currentPicker);
   if (!pl) return;
-  var item = pl.items[idx];
-  if (!item || item.picked) return;
-  var currentQty = QTY[item.loc] != null ? QTY[item.loc] : item.qty;
-  var remaining = Math.max(0, currentQty - item.qty);
-  postRemoteChange({type: 'pick', sku: item.sku, loc: item.loc, qty: item.qty, remainingQty: remaining, ts: Date.now()});
+  var item = pl.items[guidedPickState.index];
+  var parsed = parseLocInput(raw);
+  var expected = parseLocInput(fl(item.loc));
+  var msg = document.getElementById('guidedMsg');
+  if (!parsed || !expected || parsed.row !== expected.row || parsed.bay !== expected.bay) {
+    msg.innerHTML = '<span style="color:#A32D2D">\u274c That doesn\'t match -- you need to be at ' + fl(item.loc) + '</span>';
+    return;
+  }
+  msg.innerHTML = '<span style="color:#1E8449">\u2705 Correct location!</span>';
+  guidedPickState.phase = 'pick';
+  setTimeout(renderPicklistTab, 400);
+}
+
+// Step 2: confirm the quantity actually picked, sends the matching 'pick'
+// event so stock counts decrement exactly as they would from the main app,
+// and re-saves the picklist with progress -- mirrors the main app's
+// confirmGuidedPick() including the mismatch-requires-second-tap safety.
+function confirmGuidedPick() {
+  if (!guidedPickState) return;
+  var pl = getActivePickListFor(currentPicker);
+  if (!pl) return;
+  var item = pl.items[guidedPickState.index];
+  var qi = document.getElementById('guidedQtyInput');
+  var entered = parseInt(qi.value, 10);
+  var msg = document.getElementById('guidedMsg');
+  if (isNaN(entered) || entered < 0) {
+    msg.innerHTML = '<span style="color:#A32D2D">Please enter a valid quantity.</span>';
+    return;
+  }
+  var currentQty = QTY[item.loc] != null ? QTY[item.loc] : 0;
+  if (entered > currentQty) {
+    msg.innerHTML = '<span style="color:#A32D2D">\u26a0\ufe0f Only ' + currentQty + ' available here -- check your count.</span>';
+    return;
+  }
+  var mismatch = entered !== item.qty;
+  if (mismatch && !guidedPickState.confirmingMismatch) {
+    guidedPickState.confirmingMismatch = true;
+    msg.innerHTML = '<span style="color:#A32D2D">\u26a0\ufe0f Expected ' + item.qty + ', you entered ' + entered + '. Tap Confirm pick again if that\'s correct, or fix the number.</span>';
+    return;
+  }
+  var remaining = Math.max(0, currentQty - entered);
+  postRemoteChange({type: 'pick', sku: item.sku, loc: item.loc, qty: entered, remainingQty: remaining, user: currentPicker, ts: Date.now()});
+  QTY[item.loc] = remaining;
   item.picked = true;
+  item.pickedQty = entered;
+  item.mistake = mismatch;
   var allDone = pl.items.every(function(it) { return it.picked; });
   postRemoteChange({type: 'picklist_save', id: pl.id, contents: {items: pl.items, assignedTo: pl.assignedTo, status: allDone ? 'complete' : 'open'}, ts: Date.now()});
-  QTY[item.loc] = remaining;
-  renderPicklistTab();
+  if (mismatch) {
+    msg.innerHTML = '<span style="color:#A32D2D;font-weight:700">\u26a0\ufe0f Recorded with a mismatch -- moving on.</span>';
+  } else {
+    msg.innerHTML = '<span style="color:#1E8449;font-weight:700">\u2705 Correct! Moving on...</span>';
+  }
+  guidedPickState = null;
+  setTimeout(renderPicklistTab, 700);
 }
 
 loadData();

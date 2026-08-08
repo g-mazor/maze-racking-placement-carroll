@@ -2570,8 +2570,8 @@ function previewPickList(){
     if(!parsed)return;
     var v=DATA.d[parsed.sku];
     if(!v){items.push({sku:parsed.sku,qty:parsed.qty,error:'SKU not found'});return;}
-    var locs=getSkuLocations(parsed.sku).filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
-    if(!locs.length){items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],error:'Not currently placed (or only in oversize rows E/F/G)'});return;}
+    var locs=getSkuLocations(parsed.sku);
+    if(!locs.length){items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],error:'Not currently placed'});return;}
     items.push({sku:parsed.sku,qty:parsed.qty,desc:v[4],loc:sortLocationsByWalkPath(locs)[0]});
   });
 
@@ -3394,11 +3394,6 @@ function handleScanForPickInPanel(rawCode,resultId){
     speak('Could not read that location code.');
     return;
   }
-  if(parsed.row==='E'||parsed.row==='F'||parsed.row==='G'){
-    result.innerHTML='<div style="color:#A32D2D;font-size:12px">Row '+parsed.row+' is oversize stock -- not for regular picking. This needs an oversize pick, handled separately.</div>';
-    speak('This is an oversize pick. Not for regular picking.');
-    return;
-  }
   var candidateLocs=locsForBayLevel(parsed.row,parsed.bay,parsed.level);
   var occupied=candidateLocs.filter(function(l){return LOC[l];});
   if(!occupied.length){
@@ -3425,7 +3420,7 @@ function handleScanForPickInPanel(rawCode,resultId){
 }
 
 // Lets a picker confirm a pick by typing the SKU code directly, since there are
-// no physical scanners/labels in place yet. Same oversize exclusion applies.
+// no physical scanners/labels in place yet.
 function handleSkuLookupForPick(rawSku,resultId){
   var result=document.getElementById(resultId);
   if(!rawSku)return;
@@ -3442,13 +3437,7 @@ function handleSkuLookupForPick(rawSku,resultId){
     speak(sku+' is not currently placed anywhere.');
     return;
   }
-  var oversizeLocs=locs.filter(function(l){return l[0]==='E'||l[0]==='F'||l[0]==='G';});
-  var regularLocs=locs.filter(function(l){var row=l.split('-')[0];return row!=='E'&&row!=='F'&&row!=='G'&&row!=='AA';});
-  var html='';
-  if(oversizeLocs.length){
-    html+='<div style="color:#A32D2D;font-size:12px;margin-bottom:6px">'+oversizeLocs.length+' location'+(oversizeLocs.length>1?'s are':' is')+' oversize (Row '+oversizeLocs.map(function(l){return l[0];}).join(', ')+') -- not for regular picking, handled separately.</div>';
-  }
-  html+=regularLocs.map(function(loc){
+  var html=locs.map(function(loc){
     var currentQty=QTY[loc]!=null?QTY[loc]:0;
     return '<div style="background:#FFF;border:1px solid #DDD;border-radius:6px;padding:10px;font-size:12px;margin-bottom:6px">'+
       '<strong>'+sku+'</strong> -- '+v[4]+'<br>'+
@@ -3458,12 +3447,10 @@ function handleSkuLookupForPick(rawSku,resultId){
       '</div>';
   }).join('');
   result.innerHTML=html;
-  if(regularLocs.length===1){
-    speak(sku+'. '+v[4]+'. At '+fl(regularLocs[0])+'. Currently '+(QTY[regularLocs[0]]||0)+' units.');
-  } else if(regularLocs.length>1){
-    speak('Found '+regularLocs.length+' locations for '+sku+'.');
-  } else if(oversizeLocs.length){
-    speak('This is an oversize pick. Not for regular picking.');
+  if(locs.length===1){
+    speak(sku+'. '+v[4]+'. At '+fl(locs[0])+'. Currently '+(QTY[locs[0]]||0)+' units.');
+  } else if(locs.length>1){
+    speak('Found '+locs.length+' locations for '+sku+'.');
   }
 }
 
