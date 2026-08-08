@@ -237,8 +237,9 @@ function renderResults(query) {
   el.innerHTML = all.map(function(sku) {
     var v = DATA.d[sku];
     var locs = getSkuLocations(sku);
-    var locsHtml = locs.length
-      ? '<div class="locs">' + locs.map(function(l) { return '<span class="loc-pill">' + fl(l) + '</span>'; }).join('') + '</div>'
+    var displayLocs = locs.map(fl).filter(function(d, idx, arr) { return arr.indexOf(d) === idx; });
+    var locsHtml = displayLocs.length
+      ? '<div class="locs">' + displayLocs.map(function(d) { return '<span class="loc-pill">' + d + '</span>'; }).join('') + '</div>'
       : '<div class="not-placed">Not currently placed</div>';
     return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + '</div>';
   }).join('');
