@@ -323,8 +323,13 @@ function renderPicklistTab() {
     var doneCount2 = pl.items.filter(function(it) { return it.picked; }).length;
     el.innerHTML = '<div class="card"><div style="font-weight:700;color:#16A085;margin-bottom:8px">\ud83d\udccb Full pick list -- ' + doneCount2 + ' of ' + pl.items.length + ' done</div>' +
       pl.items.map(function(it, i) {
-        return '<div style="padding:5px 0;font-size:12px;' + (it.picked ? 'color:#AAA;text-decoration:line-through' : 'color:#222;font-weight:600') + '">' +
-          (it.picked ? '\u2705' : (i + 1) + '.') + ' ' + it.sku + ' -- qty ' + it.qty + ' at ' + fl(it.loc) + '</div>';
+        var v = DATA.d[it.sku];
+        var itDesc = v ? v[4] : '';
+        return '<div style="padding:6px 0;border-bottom:1px solid #EEE;font-size:12px;' + (it.picked ? 'color:#AAA;text-decoration:line-through' : 'color:#222') + '">' +
+          '<div style="font-weight:700">' + (it.picked ? '\u2705' : (i + 1) + '.') + ' ' + it.sku + '</div>' +
+          '<div style="margin-top:1px">' + itDesc + '</div>' +
+          '<div style="margin-top:1px;font-weight:600">qty ' + it.qty + ' at ' + fl(it.loc) + '</div>' +
+          '</div>';
       }).join('') +
       '<div style="text-align:center;margin-top:10px"><button class="login-btn" onclick="togglePickerFullList()">Back to current pick</button></div></div>';
     return;
