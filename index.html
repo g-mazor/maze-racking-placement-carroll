@@ -308,9 +308,19 @@ function promptAccessCode(){
   var current=sessionStorage.getItem('mazeAccessCode')||'';
   var entered=prompt('Enter the access code for this warehouse map:',current);
   if(entered===null)return;
-  sessionStorage.setItem('mazeAccessCode',entered.trim());
-  alert('Access code saved for this browser session. Reloading now...');
-  location.reload();
+  var code=entered.trim();
+  si2('Checking code...');
+  jsonpFetch(SHEET_API+'?ac='+encodeURIComponent(code)).then(function(data){
+    if(data&&data.accessDenied){
+      alert('\u274c That code was not accepted. Please check it and try again.');
+      return;
+    }
+    sessionStorage.setItem('mazeAccessCode',code);
+    alert('\u2705 Code accepted. Reloading now...');
+    location.reload();
+  }).catch(function(){
+    alert('Could not reach the server to check the code -- check your connection and try again.');
+  });
 }
 
 function jsonpFetch(url){
@@ -721,6 +731,11 @@ async function buildIdx(){
     saved=await fetchRemoteChanges();
   }catch(e){
     try{var raw=localStorage.getItem(LS);if(raw)saved=JSON.parse(raw);}catch(e2){}
+  }
+  if(saved&&saved.accessDenied){
+    document.getElementById('rc').className='';document.getElementById('rc').style.display='block';
+    document.getElementById('rc').innerHTML='<div style="background:#FDEDEC;border:2px solid #E74C3C;border-radius:8px;padding:16px;text-align:center"><strong style="color:#A32D2D;font-size:15px">\ud83d\udd12 Access code missing or incorrect</strong><div style="margin-top:8px;font-size:13px;color:#555">This map cannot load any data until a valid access code is entered.</div><button class="btn btn-red" style="margin-top:10px" onclick="promptAccessCode()">Enter access code</button></div>';
+    saved=null;
   }
   if(saved&&saved.length){
     saved.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during load:',c,e);}});
