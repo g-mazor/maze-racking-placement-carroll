@@ -151,7 +151,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="stats" id="sg"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
-<div style="text-align:center;margin-top:4px"><span style="font-size:11px;color:#888;text-decoration:underline;cursor:pointer" onclick="promptAccessCode()">🔒 Enter/update access code</span></div>
+<div style="text-align:center;margin-top:4px"><span id="acStatusDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#999;margin-right:5px"></span><span style="font-size:11px;color:#888;text-decoration:underline;cursor:pointer" onclick="promptAccessCode()">🔒 Enter/update access code</span></div>
 <button class="btn public-hide" id="settingsBtn" style="background:#1F3864;color:#FFF" onclick="toggleSettingsPanel()">⚙️ Settings</button>
 <button class="btn" style="background:#374A5C;color:#FFF;font-size:11px" onclick="enterPickerLogin()">👷 Picker Login</button>
 <button class="btn" style="background:#7D3C98;color:#FFF;font-size:11px" onclick="enterManagerLogin()">👔 Manager Login</button>
@@ -302,6 +302,21 @@ function apiUrl(params){
   var base=SHEET_API+'?';
   if(ACCESS_CODE)base+='ac='+encodeURIComponent(ACCESS_CODE)+'&';
   return base+(params||'');
+}
+
+// Persistent, always-visible indicator of whether the access code is
+// currently valid -- green while working correctly, red if it stops being
+// accepted (e.g. changed by an admin, or never entered), grey until the
+// first check completes. Updated on every fetch, not just on initial load,
+// so it stays accurate the whole time the app is open.
+var accessCodeStatus='unknown';
+function updateAccessCodeIndicator(status){
+  accessCodeStatus=status;
+  var dot=document.getElementById('acStatusDot');
+  if(!dot)return;
+  if(status==='valid')dot.style.background='#1E8449';
+  else if(status==='invalid')dot.style.background='#E74C3C';
+  else dot.style.background='#999';
 }
 
 function promptAccessCode(){
@@ -727,15 +742,20 @@ async function buildIdx(){
   // Racking starts empty for the move-in -- DATA.d stays as the full SKU catalog
   // (description, group, pallet count, etc.) used by the Add-pallet search below.
   var saved=null;
+  var fetchedLive=false;
   try{
     saved=await fetchRemoteChanges();
+    fetchedLive=true;
   }catch(e){
     try{var raw=localStorage.getItem(LS);if(raw)saved=JSON.parse(raw);}catch(e2){}
   }
   if(saved&&saved.accessDenied){
+    updateAccessCodeIndicator('invalid');
     document.getElementById('rc').className='';document.getElementById('rc').style.display='block';
     document.getElementById('rc').innerHTML='<div style="background:#FDEDEC;border:2px solid #E74C3C;border-radius:8px;padding:16px;text-align:center"><strong style="color:#A32D2D;font-size:15px">\ud83d\udd12 Access code missing or incorrect</strong><div style="margin-top:8px;font-size:13px;color:#555">This map cannot load any data until a valid access code is entered.</div><button class="btn btn-red" style="margin-top:10px" onclick="promptAccessCode()">Enter access code</button></div>';
     saved=null;
+  } else if(fetchedLive&&Array.isArray(saved)){
+    updateAccessCodeIndicator('valid');
   }
   if(saved&&saved.length){
     saved.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during load:',c,e);}});
@@ -3936,6 +3956,12 @@ async function pollSync(manual){
   }
   try{
     var saved=await fetchRemoteChanges();
+    if(saved&&saved.accessDenied){
+      updateAccessCodeIndicator('invalid');
+      if(manual)si2('Access code is no longer valid -- tap the lock link to fix it');
+      return;
+    }
+    updateAccessCodeIndicator('valid');
     var json=JSON.stringify(saved);
     if(json===lastSyncJSON){
       if(manual)si2('Already up to date ('+CHANGES.length+' change'+(CHANGES.length!==1?'s':'')+' on record)');
