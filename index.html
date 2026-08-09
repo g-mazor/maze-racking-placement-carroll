@@ -104,6 +104,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bridge-path-label{position:absolute;top:-14px;left:0;font-size:8px;font-weight:700;color:#8A6D00;white-space:nowrap;background:#FFF3CD;padding:0 3px;border-radius:2px}
 .noshelf{height:21px;border-radius:0;border-top:2px solid #999;border-bottom:2px solid #999;flex:1;min-width:3px;background:repeating-linear-gradient(45deg,#DDD,#DDD 3px,#EEE 3px,#EEE 6px);cursor:default;opacity:.5}
 .noshelf-blank{height:21px;flex:1;min-width:3px;background:transparent;cursor:default;visibility:hidden}
+.blocked-safety{background:repeating-linear-gradient(45deg,#A32D2D,#A32D2D 4px,#F5D700 4px,#F5D700 8px);cursor:not-allowed;display:flex;align-items:center;justify-content:center;font-size:11px;border:1px solid #7A1F1F}
 .bc.merge-r{margin-right:0!important;border-top-right-radius:0;border-bottom-right-radius:0}
 .bc.merge-l{border-top-left-radius:0;border-bottom-left-radius:0}
 .bc.merge-r.bay-end{margin-right:4px!important;border-top-right-radius:3px;border-bottom-right-radius:3px}
@@ -232,7 +233,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div class="zt" id="fgz"></div>
 <div class="mr" id="mr"></div>
 </div></div>
-<div class="leg"><div class="li"><div class="ld" style="background:#1D9E75"></div>Compost</div><div class="li"><div class="ld" style="background:#2980B9"></div>Keter Group</div><div class="li"><div class="ld" style="background:#C0561A"></div>Sheds</div><div class="li"><div class="ld" style="background:#8E44AD"></div>Canopia</div><div class="li"><div class="ld" style="background:#27AE60"></div>Greenhouses</div><div class="li"><div class="ld" style="background:#BA7517"></div>Tanks</div><div class="li"><div class="ld" style="background:#1F4E79"></div>Watering</div><div class="li"><div class="ld" style="background:#7F3F00"></div>Lechuza</div><div class="li"><div class="ld" style="background:#374A5C"></div>Planters</div><div class="li"><div class="ld" style="background:#375623"></div>Garden</div><div class="li"><div class="ld" style="background:#595959"></div>Home</div><div class="li"><div class="ld" style="background:#D63384"></div>Mixed Pallet</div><div class="li"><div class="ld" style="background:#FFE699;border:1px solid #DDD"></div>Forklift Aisle</div><div class="li"><div class="ld" style="background:#A9DFBF;border:1px solid #DDD"></div>Picker Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(90deg,#2980B9,#2980B9 5px,#FFF 5px,#FFF 6px);border:1px solid #CCC"></div>Pedestrian Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(45deg,#111,#111 3px,#F5D700 3px,#F5D700 6px);border:1px solid #000"></div>Roller Door</div><div class="li"><div class="ld" style="background:#E8E8E8;border:1px solid #CCC"></div>Empty</div><div class="li"><div class="ld" style="background:#E24B4A;border:1px solid #A32D2D"></div>Selected</div><div class="li"><div class="ld" style="background:#A8D8FF;border:1px solid 1px dashed #2980B9"></div>Drop target</div></div>
+<div class="leg"><div class="li"><div class="ld" style="background:#1D9E75"></div>Compost</div><div class="li"><div class="ld" style="background:#2980B9"></div>Keter Group</div><div class="li"><div class="ld" style="background:#C0561A"></div>Sheds</div><div class="li"><div class="ld" style="background:#8E44AD"></div>Canopia</div><div class="li"><div class="ld" style="background:#27AE60"></div>Greenhouses</div><div class="li"><div class="ld" style="background:#BA7517"></div>Tanks</div><div class="li"><div class="ld" style="background:#1F4E79"></div>Watering</div><div class="li"><div class="ld" style="background:#7F3F00"></div>Lechuza</div><div class="li"><div class="ld" style="background:#374A5C"></div>Planters</div><div class="li"><div class="ld" style="background:#375623"></div>Garden</div><div class="li"><div class="ld" style="background:#595959"></div>Home</div><div class="li"><div class="ld" style="background:#D63384"></div>Mixed Pallet</div><div class="li"><div class="ld" style="background:#FFE699;border:1px solid #DDD"></div>Forklift Aisle</div><div class="li"><div class="ld" style="background:#A9DFBF;border:1px solid #DDD"></div>Picker Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(90deg,#2980B9,#2980B9 5px,#FFF 5px,#FFF 6px);border:1px solid #CCC"></div>Pedestrian Aisle</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(45deg,#111,#111 3px,#F5D700 3px,#F5D700 6px);border:1px solid #000"></div>Roller Door</div><div class="li"><div class="ld" style="background:#E8E8E8;border:1px solid #CCC"></div>Empty</div><div class="li"><div class="ld" style="background:#E24B4A;border:1px solid #A32D2D"></div>Selected</div><div class="li"><div class="ld" style="background:repeating-linear-gradient(45deg,#A32D2D,#A32D2D 4px,#F5D700 4px,#F5D700 8px);border:1px solid #7A1F1F"></div>Blocked (safety)</div><div class="li"><div class="ld" style="background:#A8D8FF;border:1px solid 1px dashed #2980B9"></div>Drop target</div></div>
 <div class="tt" id="tt"></div>
 <div id="sind">Saved!</div>
 <div class="mbg" id="mbg"><div class="mdl"><h3 id="mt"></h3><p id="mm"></p><div class="mdb"><button class="btn" onclick="cM()">Cancel</button><button class="btn btn-red" onclick="cfM()">OK</button></div></div></div>
@@ -1391,6 +1392,15 @@ function cellColorFor(sku){
 }
 
 function mkCell(loc){
+  if(BLOCKED_LOCATIONS[loc]){
+    var bcell=document.createElement('div');bcell.id='c_'+loc;
+    bcell.className='bc blocked-safety';bcell.setAttribute('data-loc',loc);
+    bcell.textContent='\ud83d\udea8';
+    bcell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- '+BLOCKED_LOCATIONS[loc]+' -- do not place pallets here';tt.style.display='block';posTT(e);});
+    bcell.addEventListener('mouseleave',hideTT);
+    bcell.addEventListener('click',function(){alert('\ud83d\udea8 '+fl(loc)+' is blocked: '+BLOCKED_LOCATIONS[loc]+'. Pallets cannot be placed here.');});
+    return bcell;
+  }
   var sku=LOC[loc];var cell=document.createElement('div');cell.id='c_'+loc;
   if(sku){
     var v=DATA.d[sku];var locs=SLOC[sku]||[loc];
@@ -1444,6 +1454,14 @@ function getLevelsForBay(row,bay){
   return RS[row].l;
 }
 var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+// Locations that must never have a pallet placed -- fixed physical obstructions
+// (emergency exits, fire safety equipment). Blocks the full bay width at that
+// level, since access needs to stay completely clear, not just one slot.
+var BLOCKED_LOCATIONS={
+  'G-03-1-1':'Emergency exit / fire hose reel',
+  'G-03-1-2':'Emergency exit / fire hose reel',
+  'G-03-1-3':'Emergency exit / fire hose reel'
+};
 function isBridgeBay(row,bay){
   return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
 }
@@ -1714,7 +1732,7 @@ function findSeq(startLoc,n){
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
-  for(var i=0;i<cands.length;i++){if(LOC[cands[i]])return null;}
+  for(var i=0;i<cands.length;i++){if(LOC[cands[i]]||BLOCKED_LOCATIONS[cands[i]])return null;}
   return cands;
 }
 
@@ -1733,7 +1751,7 @@ function findSeqResize(startLoc,n,sku){
   }
   var si3=all.indexOf(startLoc);if(si3<0)return null;
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
-  for(var i=0;i<cands.length;i++){if(LOC[cands[i]]&&LOC[cands[i]]!==sku)return null;}
+  for(var i=0;i<cands.length;i++){if((LOC[cands[i]]&&LOC[cands[i]]!==sku)||BLOCKED_LOCATIONS[cands[i]])return null;}
   return cands;
 }
 
@@ -1859,6 +1877,7 @@ function showOccInfo(loc,sku,e){
 }
 
 function onEmp(loc,e){
+  if(BLOCKED_LOCATIONS[loc]){alert('\ud83d\udea8 '+fl(loc)+' is blocked: '+BLOCKED_LOCATIONS[loc]+'. Pallets cannot be placed here.');return;}
   if(mode==='add'&&addTgt){
     if(LOC[loc])return;
     var v=DATA.d[addTgt];var spaces=addSpaces||(v?v[8]:1);var tl;
