@@ -1064,7 +1064,7 @@ function computePickerStats(){
 // each login/logout pair (or a still-open login) is one session, with its own
 // picks and stats, so a picker's daily numbers reset each shift while managers
 // keep a permanent log of every session.
-function getPickerSessions(){
+function getPickerSessions(fromTs,toTs){
   var events={};
   CHANGES.forEach(function(c){
     if((c.type==='login'||c.type==='logout')&&c.user&&c.ts){
@@ -1092,6 +1092,13 @@ function getPickerSessions(){
     });
     if(openLogin!=null)sessions.push({user:user,loginTs:openLogin,logoutTs:null,ongoing:true});
   });
+  if(fromTs!=null||toTs!=null){
+    sessions=sessions.filter(function(s){
+      if(fromTs!=null&&s.loginTs<fromTs)return false;
+      if(toTs!=null&&s.loginTs>toTs)return false;
+      return true;
+    });
+  }
   sessions.forEach(function(s){
     var picks=(byUserPicks[s.user]||[]).filter(function(p){
       return p.ts>=s.loginTs&&(s.logoutTs==null||p.ts<=s.logoutTs);
@@ -1116,15 +1123,42 @@ function formatMinSec(totalSeconds){
   return mins>0?(mins+'m '+secs+'s'):(secs+'s');
 }
 
+var pickerStatsRangeDays=null; // null = all time; otherwise number of days back
+function setPickerStatsRange(days){
+  pickerStatsRangeDays=days;
+  showPickerStats();
+}
 function showPickerStats(){
-  var sessions=getPickerSessions();
+  var fromTs=null;
+  if(pickerStatsRangeDays!=null){
+    fromTs=Date.now()-pickerStatsRangeDays*24*60*60*1000;
+  }
+  var sessions=getPickerSessions(fromTs,null);
   var body=document.getElementById('pickerStatsBody');
   var liveBtn='<button class="btn btn-blue" style="width:100%;box-sizing:border-box;margin-bottom:10px" onclick="showLiveOrTodayMap()">🔴 Show live / today\'s map</button>';
+
+  var ranges=[{label:'Today',days:1},{label:'7 days',days:7},{label:'30 days',days:30},{label:'All time',days:null}];
+  var rangeBtns='<div style="display:flex;gap:6px;margin-bottom:10px">'+ranges.map(function(r){
+    var active=(pickerStatsRangeDays===r.days);
+    return '<button class="btn" style="flex:1;font-size:11px;padding:6px;background:'+(active?'#1F3864':'#EEE')+';color:'+(active?'#FFF':'#333')+'" onclick="setPickerStatsRange('+(r.days===null?'null':r.days)+')">'+r.label+'</button>';
+  }).join('')+'</div>';
+
   var explainer='<div style="font-size:10px;color:#888;margin-bottom:8px">Each session below is one login-to-logout shift. "Estimated" = expected time for that pick, based on the walking distance between the two locations (using bridge shortcuts where available) plus ~20s to grab the item. "Slower than estimate" means the actual gap was notably longer than that prediction.</div>';
+
+  // Aggregate summary across every session in the selected period
+  var totalPicks=sessions.reduce(function(sum,s){return sum+s.picks.length;},0);
+  var sessionsWithPace=sessions.filter(function(s){return s.avgActual!=null;});
+  var overallAvgActual=sessionsWithPace.length?sessionsWithPace.reduce(function(sum,s){return sum+s.avgActual;},0)/sessionsWithPace.length:null;
+  var overallAvgEstimated=sessionsWithPace.length?sessionsWithPace.reduce(function(sum,s){return sum+s.avgEstimated;},0)/sessionsWithPace.length:null;
+  var summaryHtml='<div style="background:#EAF3DE;border:1px solid #A9D18E;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:12px">'+
+    '<strong>'+sessions.length+'</strong> session'+(sessions.length!==1?'s':'')+' &nbsp; | &nbsp; <strong>'+totalPicks+'</strong> total picks'+
+    (overallAvgActual!=null?' &nbsp; | &nbsp; avg <strong>'+formatMinSec(overallAvgActual)+'</strong>/pick (est. '+formatMinSec(overallAvgEstimated)+')':'')+
+    '</div>';
+
   if(!sessions.length){
-    body.innerHTML=liveBtn+explainer+'<div style="font-size:12px;color:#777">No picker sessions recorded yet.</div>';
+    body.innerHTML=liveBtn+rangeBtns+explainer+summaryHtml+'<div style="font-size:12px;color:#777">No picker sessions in this period.</div>';
   } else {
-    body.innerHTML=liveBtn+explainer+sessions.map(function(s){
+    body.innerHTML=liveBtn+rangeBtns+explainer+summaryHtml+sessions.map(function(s){
       var ratio=(s.avgActual!=null&&s.avgEstimated)?(s.avgActual/s.avgEstimated):null;
       var speedLabel=ratio==null?'Not enough consecutive picks yet to estimate pace.':(ratio<0.85?'Faster than estimate':ratio>1.15?'Slower than estimate':'About as expected');
       var speedColor=ratio==null?'#777':(ratio<0.85?'#1E8449':ratio>1.15?'#A32D2D':'#7A4E00');
