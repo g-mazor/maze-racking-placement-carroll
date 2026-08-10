@@ -32,6 +32,7 @@
   .login-box select{width:100%;padding:10px;font-size:15px;border-radius:8px;border:1.5px solid #CCC;margin-bottom:10px}
   .login-btn{background:#1F3864;color:#FFF;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 <div class="hdr"><span>📦 Maze Carroll WMS</span><span id="pickerNameTag" class="picker-name"></span></div>
@@ -252,6 +253,7 @@ document.getElementById('si').addEventListener('input', function() {
 
 var currentTab = 'search';
 function switchTab(tab) {
+  stopArriveScan();
   currentTab = tab;
   document.getElementById('tabSearchBtn').className = 'tab-btn' + (tab === 'search' ? ' active' : '');
   document.getElementById('tabPicklistBtn').className = 'tab-btn' + (tab === 'picklist' ? ' active' : '');
@@ -303,6 +305,7 @@ function togglePickerFullList() {
 var guidedShowingFullList = false;
 
 function renderPicklistTab() {
+  stopArriveScan();
   var el = document.getElementById('picklistContent');
   if (!currentPicker) {
     var options = Object.keys(PICKERS).map(function(code) {
@@ -359,6 +362,9 @@ function renderPicklistTab() {
   if (guidedPickState.phase === 'arrive') {
     html += '<div style="font-size:13px;color:#555;margin-bottom:6px">Go to this location:</div>' +
       '<div style="font-size:28px;font-weight:700;color:#1F3864;margin-bottom:14px">' + fl(item.loc) + '</div>' +
+      '<button class="mark-btn" style="width:100%;padding:12px;font-size:15px;margin-bottom:8px" onclick="startArriveScan()">\ud83d\udcf7 Scan location QR code</button>' +
+      '<div id="arriveScanBox" style="display:none;margin-bottom:8px"></div>' +
+      '<div style="text-align:center;font-size:11px;color:#999;margin:6px 0">or type it manually</div>' +
       '<input id="guidedArriveInput" type="text" placeholder="Type the location code" autocomplete="off" ' +
       'style="width:100%;padding:12px;border-radius:6px;border:2px solid #2980B9;font-size:16px;box-sizing:border-box;text-align:center"/>' +
       '<button class="login-btn" style="width:100%;margin-top:10px;padding:12px;font-size:15px" onclick="confirmGuidedArrival(document.getElementById(\'guidedArriveInput\').value)">Confirm arrival</button>' +
@@ -389,6 +395,52 @@ function renderPicklistTab() {
 
 // Step 1: confirm the picker is actually at the right bay before revealing
 // what to pick there -- mirrors the main app's confirmGuidedArrival().
+// Opens the device camera and scans for a location QR code -- on success,
+// feeds the decoded text straight into confirmGuidedArrival, same as if the
+// picker had typed it and tapped Confirm. Falls back gracefully (leaves the
+// manual text input available) if the camera can't be accessed.
+var arriveScanner = null;
+function startArriveScan() {
+  var box = document.getElementById('arriveScanBox');
+  box.style.display = 'block';
+  box.innerHTML = '<div id="qrReaderRegion" style="width:100%;border-radius:8px;overflow:hidden"></div>' +
+    '<button class="login-btn" style="width:100%;margin-top:8px;background:#A32D2D" onclick="stopArriveScan()">Cancel scan</button>';
+  arriveScanner = new Html5Qrcode('qrReaderRegion');
+  var config = { fps: 10, qrbox: { width: 220, height: 220 } };
+  arriveScanner.start(
+    { facingMode: 'environment' },
+    config,
+    function(decodedText) {
+      var inp = document.getElementById('guidedArriveInput');
+      if (inp) inp.value = decodedText;
+      stopArriveScan();
+      confirmGuidedArrival(decodedText);
+    },
+    function() { /* fires continuously while no code is in view -- not an error, ignore */ }
+  ).catch(function(err) {
+    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
+      'Could not access camera. Please allow camera access, or type the code manually below.</div>';
+  });
+}
+function stopArriveScan() {
+  var box = document.getElementById('arriveScanBox');
+  if (arriveScanner) {
+    arriveScanner.stop().then(function() {
+      arriveScanner.clear();
+      arriveScanner = null;
+      box.style.display = 'none';
+      box.innerHTML = '';
+    }).catch(function() {
+      arriveScanner = null;
+      box.style.display = 'none';
+      box.innerHTML = '';
+    });
+  } else {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+}
+
 function confirmGuidedArrival(raw) {
   if (!guidedPickState) return;
   var pl = getActivePickListFor(currentPicker);
