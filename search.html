@@ -428,14 +428,12 @@ function stopArriveScan() {
     arriveScanner.stop().then(function() {
       arriveScanner.clear();
       arriveScanner = null;
-      box.style.display = 'none';
-      box.innerHTML = '';
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
     }).catch(function() {
       arriveScanner = null;
-      box.style.display = 'none';
-      box.innerHTML = '';
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
     });
-  } else {
+  } else if (box) {
     box.style.display = 'none';
     box.innerHTML = '';
   }
