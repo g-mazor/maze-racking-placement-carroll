@@ -613,6 +613,18 @@ function checkOrphanedPlacements(){
       found.push(loc+' -- '+LOC[loc]+' (level no longer exists for this bay)');
     }
   });
+  // Also check for placements sitting at a level that's now rendered empty
+  // because their bay newly became a bridge bay (e.g. Row E bay 32 taking
+  // over from bay 33) -- these levels still "exist" per getLevelsForBay but
+  // are rendered as invisible placeholders, so anything there becomes
+  // unreachable just like a genuinely removed level.
+  Object.keys(LOC).forEach(function(loc){
+    var p=loc.split('-');var row=p[0],bay=parseInt(p[1],10),lvl=parseInt(p[2],10);
+    if(!RS[row])return;
+    if(isBridgeBay(row,bay)&&isBridgeEmptyLevel(row,bay,lvl)){
+      found.push(loc+' -- '+LOC[loc]+' (bay is now a bridge bay -- this level is rendered empty)');
+    }
+  });
   if(!found.length){alert('No orphaned placements found -- all bays/levels being removed were genuinely empty. Safe to proceed.');return;}
   alert('WARNING -- '+found.length+' placement'+(found.length!==1?'s are':' is')+' sitting in bay/level positions that no longer exist after this change:\n\n'+found.join('\n')+'\n\nMove these before this reconfiguration takes effect, or they will become unreachable on the map.');
 }
@@ -1495,7 +1507,7 @@ function getLevelsForBay(row,bay){
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
 }
-var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,33]};
+var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,32]};
 // Locations that must never have a pallet placed -- fixed physical obstructions
 // (emergency exits, fire safety equipment). Blocks the full bay width at that
 // level, since access needs to stay completely clear, not just one slot.
