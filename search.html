@@ -44,6 +44,10 @@
   <div id="searchTab">
     <input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/>
     <div id="results"></div>
+    <div style="text-align:center;margin:14px 0 6px;font-size:11px;color:#999">or</div>
+    <button class="mark-btn" style="width:100%;padding:12px;font-size:15px" onclick="startGeneralScan()">📷 Scan a location QR code</button>
+    <div id="generalScanBox" style="display:none;margin-top:8px"></div>
+    <div id="generalScanResult"></div>
   </div>
   <div id="picklistTab" style="display:none">
     <div id="picklistContent"></div>
@@ -254,6 +258,7 @@ document.getElementById('si').addEventListener('input', function() {
 var currentTab = 'search';
 function switchTab(tab) {
   stopArriveScan();
+  stopGeneralScan();
   currentTab = tab;
   document.getElementById('tabSearchBtn').className = 'tab-btn' + (tab === 'search' ? ' active' : '');
   document.getElementById('tabPicklistBtn').className = 'tab-btn' + (tab === 'picklist' ? ' active' : '');
@@ -400,6 +405,119 @@ function renderPicklistTab() {
 // picker had typed it and tapped Confirm. Falls back gracefully (leaves the
 // manual text input available) if the camera can't be accessed.
 var arriveScanner = null;
+// Parses a full location code including level (e.g. "AA-B1-L1" or raw
+// "AA-01-1"), returning {row, bay, level} -- unlike parseLocInput used for
+// arrival confirmation, this keeps the level since a general scan needs to
+// look up one exact shelf, not just confirm a bay match.
+function parseFullLocCode(raw) {
+  if (!raw) return null;
+  var s = raw.trim().toUpperCase().replace(/\s+/g, '');
+  var m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)/);
+  if (!m) return null;
+  return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10)};
+}
+
+// Finds every raw location (any side) matching a given row+bay+level, and
+// reports what's currently placed there, resolving mixed pallet contents.
+function lookupLocation(row, bay, level) {
+  var prefix = row + '-' + String(bay).padStart(2, '0') + '-' + level + '-';
+  var matches = Object.keys(LOC).filter(function(loc) { return loc.indexOf(prefix) === 0; });
+  var items = [];
+  matches.forEach(function(loc) {
+    var sku = LOC[loc];
+    if (isMixedSku(sku)) {
+      var contents = MIXED_CONTENTS[loc] || [];
+      if (contents.length) {
+        contents.forEach(function(e) {
+          var s = typeof e === 'string' ? e : e.sku;
+          var qty = typeof e === 'object' ? e.qty : null;
+          items.push({sku: s, qty: qty, loc: loc});
+        });
+      } else {
+        items.push({sku: 'MIXED', qty: null, loc: loc});
+      }
+    } else {
+      items.push({sku: sku, qty: QTY[loc] != null ? QTY[loc] : null, loc: loc});
+    }
+  });
+  // Dedupe by SKU -- a single physical item spanning multiple sides of the
+  // same bay/level should show once, not once per side.
+  var seen = {};
+  var deduped = [];
+  items.forEach(function(it) {
+    if (seen[it.sku]) {
+      if (it.qty != null && seen[it.sku].qty == null) seen[it.sku].qty = it.qty;
+      return;
+    }
+    seen[it.sku] = it;
+    deduped.push(it);
+  });
+  return deduped;
+}
+
+var generalScanner = null;
+function startGeneralScan() {
+  var box = document.getElementById('generalScanBox');
+  box.style.display = 'block';
+  box.innerHTML = '<div id="generalQrReaderRegion" style="width:100%;border-radius:8px;overflow:hidden"></div>' +
+    '<button class="login-btn" style="width:100%;margin-top:8px;background:#A32D2D" onclick="stopGeneralScan()">Cancel scan</button>';
+  document.getElementById('generalScanResult').innerHTML = '';
+  generalScanner = new Html5Qrcode('generalQrReaderRegion');
+  var config = { fps: 10, qrbox: { width: 220, height: 220 } };
+  generalScanner.start(
+    { facingMode: 'environment' },
+    config,
+    function(decodedText) {
+      stopGeneralScan();
+      showGeneralScanResult(decodedText);
+    },
+    function() { /* fires continuously while no code is in view -- not an error, ignore */ }
+  ).catch(function() {
+    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
+      'Could not access camera. Please allow camera access and try again.</div>';
+  });
+}
+function stopGeneralScan() {
+  var box = document.getElementById('generalScanBox');
+  if (generalScanner) {
+    generalScanner.stop().then(function() {
+      generalScanner.clear();
+      generalScanner = null;
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    }).catch(function() {
+      generalScanner = null;
+      if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    });
+  } else if (box) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+}
+function showGeneralScanResult(decodedText) {
+  var resultEl = document.getElementById('generalScanResult');
+  var parsed = parseFullLocCode(decodedText);
+  if (!parsed) {
+    resultEl.innerHTML = '<div class="not-placed">Could not read that code as a location.</div>';
+    return;
+  }
+  var displayLoc = parsed.row + '-B' + parsed.bay + '-L' + parsed.level;
+  var items = lookupLocation(parsed.row, parsed.bay, parsed.level);
+  if (!items.length) {
+    resultEl.innerHTML = '<div class="card"><div class="sku">' + displayLoc + '</div><div class="not-placed">Empty -- nothing placed here</div></div>';
+    return;
+  }
+  resultEl.innerHTML = '<div class="card"><div class="sku">' + displayLoc + '</div>' +
+    items.map(function(it) {
+      var v = DATA.d[it.sku];
+      var desc = v ? v[4] : '';
+      return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #EEE">' +
+        '<div style="font-weight:700">' + it.sku + '</div>' +
+        '<div class="desc">' + desc + '</div>' +
+        (it.qty != null ? '<div style="font-size:12px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : '') +
+        '</div>';
+    }).join('') + '</div>';
+}
+
 function startArriveScan() {
   var box = document.getElementById('arriveScanBox');
   box.style.display = 'block';
