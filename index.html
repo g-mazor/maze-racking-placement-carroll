@@ -1507,7 +1507,7 @@ function getLevelsForBay(row,bay){
   if(ov&&bay>=ov.from&&bay<=ov.to)return ov.levels;
   return RS[row].l;
 }
-var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,33],C:[12,22,33],D:[12,22,33],E:[12,22,32]};
+var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,32],C:[12,22,32],D:[12,22,32],E:[12,22,32]};
 // Locations that must never have a pallet placed -- fixed physical obstructions
 // (emergency exits, fire safety equipment). Blocks the full bay width at that
 // level, since access needs to stay completely clear, not just one slot.
