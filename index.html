@@ -1534,6 +1534,14 @@ function getSidesForBay(row,bay,level){
   if(isBridgeBay(row,bay))return 3;
   return RS[row].s;
 }
+// The width (in flex units) a bay should occupy on the map regardless of how
+// many pallet slots are actually configured there -- ignores any custom
+// override, so every bay at the same position keeps the same total width
+// across every row, even when its slot count has been customized.
+function getDefaultSidesForBay(row,bay){
+  if(isBridgeBay(row,bay))return 3;
+  return RS[row].s;
+}
 function buildRow(r,container){
   var sp=RS[r];var wrap=document.createElement('div');wrap.className='rr';
   var tag=document.createElement('div');tag.className='rt';
@@ -1551,9 +1559,11 @@ function buildRow(r,container){
     for(var bay=1;bay<=sp.b;bay++){
       var baySides=getSidesForBay(r,bay,lv);
       var isBridge=isBridgeBay(r,bay);
+      var defaultSides=getDefaultSidesForBay(r,bay);
+      var cellFlex=defaultSides/baySides;
       if(isBridge&&isBridgeEmptyLevel(r,bay,lv)){
         for(var nb=0;nb<baySides;nb++){
-          var blank=document.createElement('div');blank.className='noshelf-blank';
+          var blank=document.createElement('div');blank.className='noshelf-blank';blank.style.flex=cellFlex;
           cellInfos.push({el:blank,sku:null,bay:bay});
           if(lv===1){
             if(!bridgeBayEdgeCells[bay])bridgeBayEdgeCells[bay]={};
@@ -1564,13 +1574,14 @@ function buildRow(r,container){
         continue;
       }
       if(lv>getLevelsForBay(r,bay)){
-        for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf-blank';cellInfos.push({el:ph,sku:null,bay:bay});}
+        for(var ns=0;ns<baySides;ns++){var ph=document.createElement('div');ph.className='noshelf-blank';ph.style.flex=cellFlex;cellInfos.push({el:ph,sku:null,bay:bay});}
         continue;
       }
       for(var sl=0;sl<baySides;sl++){
         var sid=baySides===3?String(sl+1):(sl===0?'L':'R');
         var loc2=r+'-'+String(bay).padStart(2,'0')+'-'+lv+'-'+sid;
         var cEl=mkCell(loc2);
+        cEl.style.flex=cellFlex;
         if(isBridge)cEl.classList.add('bridge-bay');
         cellInfos.push({el:cEl,sku:LOC[loc2]||null,bay:bay});
       }
@@ -1587,7 +1598,7 @@ function buildRow(r,container){
   var bayNumRow=document.createElement('div');bayNumRow.className='lrow bay-num-row';
   var spacer=document.createElement('div');spacer.className='ll';spacer.textContent='';bayNumRow.appendChild(spacer);
   for(var bn=1;bn<=sp.b;bn++){
-    var bnEl=document.createElement('div');bnEl.className='bay-num'+(bn===sp.b?' bay-end':'');bnEl.style.flex=sp.s;bnEl.textContent=bn;
+    var bnEl=document.createElement('div');bnEl.className='bay-num'+(bn===sp.b?' bay-end':'');bnEl.style.flex=getDefaultSidesForBay(r,bn);bnEl.textContent=bn;
     bayNumRow.appendChild(bnEl);
   }
   body.appendChild(bayNumRow);
