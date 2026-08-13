@@ -408,6 +408,45 @@ function fetchUnleashedStock(sku){
     if(box)box.innerHTML='<span style="color:#999">Could not load live stock</span>';
   });
 }
+// Fetches which location (if any) is the designated pick face for this SKU
+// and renders a small toggle list -- purely a manual marker independent of
+// real stock-on-hand, used only to trigger a replenish email when that
+// exact location gets picked to zero. Locations are deduped by their
+// readable bay code, so a multi-space pallet shows as one line.
+function fetchPickFaceInfo(sku,locs){
+  jsonpFetch(apiUrl('pickfaces=1')).then(function(data){
+    if(currentDetailSku!==sku)return;
+    var box=document.getElementById('pickFaceBox');
+    if(!box)return;
+    var currentLoc=data&&data.map?data.map[sku]:null;
+    var seen={};var groups=[];
+    (locs||[]).forEach(function(l){var code=fl(l);if(seen[code])return;seen[code]=true;groups.push({loc:l,code:code});});
+    if(!groups.length){box.innerHTML='';return;}
+    var html='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:6px">\ud83d\udccc Pick face (for replenish alerts)</div>';
+    html+=groups.map(function(g){
+      var isCurrent=currentLoc&&fl(currentLoc)===g.code;
+      return '<div style="font-size:11px;margin:2px 0">'+
+        (isCurrent?
+          '\u2b50 <strong>'+g.code+'</strong> -- current pick face &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',false)" style="color:#A32D2D">Unset</a>'
+          :g.code+' &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',true)" style="color:#16A085">Mark as pick face</a>')+
+        '</div>';
+    }).join('');
+    box.innerHTML=html;
+  }).catch(function(){
+    if(currentDetailSku!==sku)return;
+    var box=document.getElementById('pickFaceBox');
+    if(box)box.innerHTML='';
+  });
+}
+
+function togglePickFace(sku,loc,makeCurrent){
+  requirePin(function(){
+    applyC({type:'setpickface',sku:sku,loc:loc,qty:makeCurrent?1:0},true);
+    si2(makeCurrent?'Marked as pick face.':'Pick face unset.');
+    showR(sku);
+  });
+}
+
 function postRemoteChange(change){
   return new Promise(function(resolve){
     var img=new Image();
@@ -3202,6 +3241,7 @@ function showR(sku){
     '<div style="font-size:12px;color:#555;margin:2px 0 7px">'+v[4]+'</div>'+
     '<div class="pills"><span class="p" style="background:#DEEAF1;color:#1F3864">'+v[5]+'</span><span class="p" style="background:'+abcBg+';color:'+abcFg+'">'+v[6]+'</span><span class="p" style="background:'+palBg+';color:#7F3F00">'+v[8]+' pallet'+(v[8]>1?'s':'')+'</span></div>'+
     '<div id="unleashedStockBox" style="margin:6px 0;font-size:11px;color:#888">Loading live Unleashed stock...</div>'+
+    '<div id="pickFaceBox"></div>'+
     suggHtml+
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
@@ -3221,6 +3261,7 @@ function showR(sku){
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},150);
   currentDetailSku=key;
   fetchUnleashedStock(key);
+  if(placed){fetchPickFaceInfo(key,locs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
 }
 
 // Entry point for searching "MIXED" -- always offers both starting a brand
