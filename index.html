@@ -173,6 +173,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -233,6 +234,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="font-size:13px;font-weight:700;color:#0E6655;margin-bottom:10px">\ud83d\udd04 Cycle Count</div>
   <div id="cycleCountBody">Loading...</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('cycleCountPanel').style.display='none'">Close</div>
+</div>
+<div id="unplacedStockPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #C0392B;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#A32D2D;margin-bottom:10px">\ud83d\udce6 On Hand at Carroll but Not Placed</div>
+  <div id="unplacedStockBody">Loading...</div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('unplacedStockPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -3118,6 +3124,39 @@ function showCycleCount(){
     body.innerHTML=html;
   }).catch(function(){
     document.getElementById('cycleCountBody').innerHTML='<div style="font-size:12px;color:#999">Could not load cycle count list.</div>';
+  });
+}
+
+// Fetches Unleashed's full Carroll stock list, compares it against what's
+// actually placed on the map, and shows every SKU that has real stock on
+// hand but nowhere to go yet. Can take a few seconds (pages through
+// Unleashed's whole Carroll warehouse listing) -- only runs when clicked,
+// never automatically. Clicking a result jumps straight to placing it.
+function showUnplacedStock(){
+  document.getElementById('unplacedStockBody').innerHTML='Checking Unleashed -- this can take a few seconds...';
+  document.getElementById('unplacedStockPanel').style.display='block';
+  jsonpFetch(apiUrl('unplacedstock=1')).then(function(data){
+    var body=document.getElementById('unplacedStockBody');
+    if(!data||!data.items){
+      body.innerHTML='<div style="font-size:12px;color:#999">Could not load this list.</div>';
+      return;
+    }
+    var items=data.items;
+    if(!items.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">Nothing found -- everything with stock at Carroll is placed somewhere on the map.</div>';
+      return;
+    }
+    var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(data.checkedAt||'')+' -- <strong>'+items.length+'</strong> SKU(s) with stock but no location</div>';
+    html+=items.map(function(it){
+      return '<div style="background:#FDEDEC;border:1px solid #F1A9A0;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+        '<strong>'+it.sku+'</strong> -- '+(it.desc||'')+'<br>'+
+        '<strong style="color:#A32D2D">'+it.qtyOnHand+'</strong> on hand at Carroll, not placed'+
+        '<div style="text-align:right;margin-top:4px"><button class="btn btn-amber" style="font-size:10px;padding:4px 8px" onclick="document.getElementById(\'unplacedStockPanel\').style.display=\'none\';showR(\''+it.sku+'\')">Place it</button></div>'+
+        '</div>';
+    }).join('');
+    body.innerHTML=html;
+  }).catch(function(){
+    document.getElementById('unplacedStockBody').innerHTML='<div style="font-size:12px;color:#999">Could not load this list.</div>';
   });
 }
 
