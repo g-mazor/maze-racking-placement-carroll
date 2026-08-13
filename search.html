@@ -23,6 +23,9 @@
   .live-stock-others{font-size:11px;color:#777;display:flex;flex-wrap:wrap;gap:6px}
   .live-stock-qld{background:#FFF3CD;border:1px solid #F0D98C;border-radius:6px;padding:3px 8px;color:#7A5B00}
   .live-stock-error{font-size:12px;color:#999}
+  .loc-pill-pickface{background:#FFF3CD;color:#7A5B00;border:1.5px solid #F39C12;font-weight:700}
+  .pickface-row{margin-top:6px;font-size:12px;color:#7A5B00}
+  .confirm-count-btn{background:#EAE0F5;color:#5B2C87;border:1px solid #C9AEE0;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer}
   .status{text-align:center;padding:20px;color:#888;font-size:14px}
   .loading{text-align:center;padding:30px;color:#888}
   .tabs{display:flex;gap:8px;margin-bottom:12px}
@@ -70,6 +73,7 @@ var PICKER_ACCESS_CODE = '3737';
 var SHEET_API = 'https://script.google.com/macros/s/AKfycbwQaeYMqlrC6EUYStRFKnEY9eiCSCqSaoadHn2EhbClkXclUWWvaXs3VpbTY3jeGBko/exec';
 
 var LOC = {}, SLOC = {}, MIXED_CONTENTS = {}, QTY = {}, CHANGES = [];
+var PICKFACE = {}; // sku -> raw loc of its manually-designated pick face, if any
 var PICKERS = {'1982':'Tom', '8074':'Waj'};
 var currentPicker = sessionStorage.getItem('mazePickerName') || null;
 
@@ -234,6 +238,7 @@ function loadData() {
     document.getElementById('results').innerHTML = '<div class="status">Ready -- start typing to search</div>';
     document.getElementById('si').disabled = false;
     if (currentTab === 'picklist') renderPicklistTab();
+    loadPickFaces();
   };
   script.onerror = function() {
     if (done) return;
@@ -243,6 +248,19 @@ function loadData() {
   };
   script.src = SHEET_API + '?ac=' + encodeURIComponent(PICKER_ACCESS_CODE) + '&callback=' + cbName + '&t=' + Date.now();
   document.head.appendChild(script);
+}
+
+// Fetches which SKUs currently have a manually-designated pick face and
+// where -- purely informational (separate from real stock-on-hand), used
+// to show the picker exactly which location to pull from and to let them
+// confirm a count right there. Re-renders the current search afterward so
+// a newly-set pick face shows up without the picker needing to re-search.
+function loadPickFaces() {
+  jsonpFetchStock('pickfaces=1').then(function(data) {
+    PICKFACE = (data && data.map) ? data.map : {};
+    var si = document.getElementById('si');
+    if (si && si.value.trim().length >= 2) renderResults(si.value);
+  }).catch(function() { /* non-critical -- just skip the pick-face info this round */ });
 }
 
 var SKUS = Object.keys(DATA.d);
@@ -268,15 +286,46 @@ function renderResults(query) {
     var v = DATA.d[sku];
     var locs = getSkuLocations(sku);
     var displayLocs = locs.map(fl).filter(function(d, idx, arr) { return arr.indexOf(d) === idx; });
+    var pickFaceLoc = PICKFACE[sku];
+    var pickFaceCode = pickFaceLoc ? fl(pickFaceLoc) : null;
     var locsHtml = displayLocs.length
-      ? '<div class="locs">' + displayLocs.map(function(d) { return '<span class="loc-pill">' + d + '</span>'; }).join('') + '</div>'
+      ? '<div class="locs">' + displayLocs.map(function(d) {
+          return d === pickFaceCode
+            ? '<span class="loc-pill loc-pill-pickface">\u2b50 ' + d + '</span>'
+            : '<span class="loc-pill">' + d + '</span>';
+        }).join('') + '</div>'
       : '<div class="not-placed">Not currently placed</div>';
-    return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml +
+    var pickFaceHtml = pickFaceLoc
+      ? '<div class="pickface-row">\u2b50 Pick from <strong>' + pickFaceCode + '</strong> first' +
+        ' &nbsp;<button type="button" class="confirm-count-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '">\ud83d\udd22 Confirm count</button></div>'
+      : '';
+    return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + pickFaceHtml +
       '<div class="live-stock" data-sku="' + sku + '">' +
       '<button type="button" class="live-stock-btn" data-sku="' + sku + '">\ud83d\udce1 Check live stock</button>' +
       '</div></div>';
   }).join('');
 }
+
+// Lets the picker confirm the counted quantity at the SKU's designated
+// pick face location directly from a search result -- sends the same
+// 'count' event type the main app uses, so the manager map and any
+// automated alerts (like the pick-face replenish email) stay in sync.
+document.getElementById('results').addEventListener('click', function(e) {
+  var cbtn = e.target.closest('.confirm-count-btn');
+  if (!cbtn) return;
+  var sku = cbtn.getAttribute('data-sku');
+  var loc = cbtn.getAttribute('data-loc');
+  var current = QTY[loc] != null ? QTY[loc] : '';
+  var entered = prompt('Confirm stock count for ' + sku + ' at ' + fl(loc) + ':', String(current));
+  if (entered === null) return;
+  var qty = parseInt(entered.trim(), 10);
+  if (isNaN(qty) || qty < 0) { alert('Enter a whole number of 0 or more.'); return; }
+  postRemoteChange({type: 'count', sku: sku, loc: loc, qty: qty, user: currentPicker, ts: Date.now()}).then(function() {
+    QTY[loc] = qty;
+    var si = document.getElementById('si');
+    if (si && si.value.trim().length >= 2) renderResults(si.value);
+  });
+});
 
 // On-demand live Unleashed stock lookup for a single search result card --
 // only fires when the picker taps the button, not automatically for every
