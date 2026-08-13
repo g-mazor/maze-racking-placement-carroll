@@ -422,13 +422,15 @@ function fetchPickFaceInfo(sku,locs){
     var seen={};var groups=[];
     (locs||[]).forEach(function(l){var code=fl(l);if(seen[code])return;seen[code]=true;groups.push({loc:l,code:code});});
     if(!groups.length){box.innerHTML='';return;}
-    var html='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:6px">\ud83d\udccc Pick face (for replenish alerts)</div>';
+    var html='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:6px">\ud83d\udccc Pick Bay (for replenish alerts)</div>';
     html+=groups.map(function(g){
       var isCurrent=currentLoc&&fl(currentLoc)===g.code;
       return '<div style="font-size:11px;margin:2px 0">'+
         (isCurrent?
-          '\u2b50 <strong>'+g.code+'</strong> -- current pick face &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',false)" style="color:#A32D2D">Unset</a>'
-          :g.code+' &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',true)" style="color:#16A085">Mark as pick face</a>')+
+          '\u2b50 <strong>'+g.code+'</strong> -- current Pick Bay'+
+          ' &nbsp;<a href="javascript:void(0)" onclick="quickCount(\''+g.loc+'\',\''+sku+'\')" style="color:#8E44AD">\ud83d\udd22 Confirm count</a>'+
+          ' &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',false)" style="color:#A32D2D">Unset</a>'
+          :g.code+' &nbsp;<a href="javascript:void(0)" onclick="togglePickFace(\''+sku+'\',\''+g.loc+'\',true)" style="color:#16A085">Mark as Pick Bay</a>')+
         '</div>';
     }).join('');
     box.innerHTML=html;
