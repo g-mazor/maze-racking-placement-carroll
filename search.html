@@ -295,11 +295,11 @@ document.getElementById('results').addEventListener('click', function(e) {
     var others = data.warehouses.filter(function(w) { return w.code !== 'OAKLEIGH WH'; });
     var html = '';
     if (carroll) {
-      html += '<span class="live-stock-carroll">' + (carroll.qtyOnHand != null ? carroll.qtyOnHand : '-') + ' at Carroll</span>';
+      html += '<span class="live-stock-carroll">' + (carroll.qtyOnHand != null ? carroll.qtyOnHand : '-') + ' on hand / ' + (carroll.available != null ? carroll.available : '-') + ' avail at Carroll</span>';
     }
     if (others.length) {
       html += '<span class="live-stock-others">' + others.map(function(w) {
-        return (w.name || w.code) + ': ' + (w.qtyOnHand != null ? w.qtyOnHand : '-');
+        return (w.name || w.code) + ': ' + (w.qtyOnHand != null ? w.qtyOnHand : '-') + ' on hand / ' + (w.available != null ? w.available : '-') + ' avail';
       }).join(' | ') + '</span>';
     }
     box.innerHTML = html;
