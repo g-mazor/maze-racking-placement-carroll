@@ -172,6 +172,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -227,6 +228,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
   <div id="pickerStatsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('pickerStatsPanel').style.display='none'">Close</div>
+</div>
+<div id="cycleCountPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #16A085;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#0E6655;margin-bottom:10px">\ud83d\udd04 Cycle Count</div>
+  <div id="cycleCountBody">Loading...</div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('cycleCountPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -1476,36 +1482,9 @@ function buildStats(){
   var totalCap=0,totalOcc=0;
   Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;});
   Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;totalOcc++;});
-  // Count distinct real SKUs per row and overall -- a mixed pallet is not
-  // itself a SKU, so each of its actual contained SKUs (from MIXED_CONTENTS)
-  // is counted individually, deduplicated, instead of the mixed pallet's
-  // own identity counting as a single "SKU".
-  var allDistinctSkus={};
-  var rowSkuSets={};
-  Object.keys(rStats).forEach(function(r){rowSkuSets[r]={};});
-  Object.keys(SLOC).forEach(function(sku){
-    var locs=SLOC[sku];
-    if(!locs||!locs.length)return;
-    if(isMixedSku(sku)){
-      locs.forEach(function(loc){
-        var contents=MIXED_CONTENTS[loc]||[];
-        var r=rowOf(loc);
-        contents.forEach(function(entry){
-          var realSku=typeof entry==='string'?entry:entry.sku;
-          if(!realSku)return;
-          allDistinctSkus[realSku]=true;
-          if(rowSkuSets[r])rowSkuSets[r][realSku]=true;
-        });
-      });
-    } else {
-      allDistinctSkus[sku]=true;
-      var r2=rowOf(locs[0]);
-      if(rowSkuSets[r2])rowSkuSets[r2][sku]=true;
-    }
-  });
-  Object.keys(rStats).forEach(function(r){rStats[r].skus=Object.keys(rowSkuSets[r]).length;});
+  Object.keys(SLOC).forEach(function(sku){var locs=SLOC[sku];if(locs&&locs.length){var r=rowOf(locs[0]);if(rStats[r])rStats[r].skus++;}});
   var empty=totalCap-totalOcc;
-  var totalSkusPlaced=Object.keys(allDistinctSkus).length;
+  var totalSkusPlaced=Object.keys(SLOC).length;
   var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
   ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
@@ -3063,6 +3042,42 @@ function showStockAlerts(){
   html+='<div style="text-align:center;margin-top:12px"><button class="btn btn-blue" onclick="sendStockAlertEmail()">\ud83d\udce7 Send alert email now</button></div>';
   document.getElementById('stockAlertsBody').innerHTML=html;
   document.getElementById('stockAlertsPanel').style.display='block';
+}
+
+// Fetches and renders this week's Cycle Count list -- a rotating batch of
+// ~25 occupied locations to physically verify, regenerated weekly on the
+// backend. Clicking a row opens that SKU's normal detail card, where the
+// existing "Count stock" button records the count -- which the backend
+// then automatically matches back to this list and marks done, so there's
+// no separate "mark as counted" step to remember.
+function showCycleCount(){
+  document.getElementById('cycleCountBody').innerHTML='Loading...';
+  document.getElementById('cycleCountPanel').style.display='block';
+  jsonpFetch(apiUrl('cyclecount=1')).then(function(data){
+    var body=document.getElementById('cycleCountBody');
+    if(!data||!data.items){
+      body.innerHTML='<div style="font-size:12px;color:#999">Could not load cycle count list.</div>';
+      return;
+    }
+    var items=data.items;
+    if(!items.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">No cycle count list generated yet. It runs automatically every Monday.</div>';
+      return;
+    }
+    var doneCount=items.filter(function(it){return it.counted;}).length;
+    var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Week of '+(data.weekOf||'?')+' -- <strong>'+doneCount+' / '+items.length+'</strong> counted</div>';
+    html+=items.map(function(it){
+      var doneStyle=it.counted?'background:#EAF7EE;border:1px solid #BEE3C8':'background:#FFF3CD;border:1px solid #F0D98C';
+      var statusText=it.counted?('\u2705 Counted: '+it.countedQty+' ('+it.countedAt+')'):'\u23f3 Not yet counted';
+      return '<div style="'+doneStyle+';border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'cycleCountPanel\').style.display=\'none\';showR(\''+it.sku+'\')">'+
+        '<strong>'+fl(it.loc)+'</strong> -- '+it.sku+' <span style="color:#555">('+(it.desc||'')+')</span><br>'+
+        'Expected: '+it.expectedQty+' &nbsp; '+statusText+
+        '</div>';
+    }).join('');
+    body.innerHTML=html;
+  }).catch(function(){
+    document.getElementById('cycleCountBody').innerHTML='<div style="font-size:12px;color:#999">Could not load cycle count list.</div>';
+  });
 }
 
 function sendStockAlertEmail(){
