@@ -355,6 +355,43 @@ function jsonpFetch(url){
 async function fetchRemoteChanges(){
   return await jsonpFetch(apiUrl(''));
 }
+
+// Tracks which SKU's detail card is currently open, so a slow live-stock
+// lookup from a previous search can't land in the box after the user has
+// already moved on to a different SKU.
+var currentDetailSku=null;
+
+// Fetches live Unleashed stock-on-hand for the SKU currently shown in the
+// detail card and fills in #unleashedStockBox once it resolves. Carroll
+// Road is shown large and first; other warehouses listed smaller below it.
+function fetchUnleashedStock(sku){
+  jsonpFetch(apiUrl('unleashedstock=1&productCode='+encodeURIComponent(sku))).then(function(data){
+    if(currentDetailSku!==sku)return; // user has since opened a different SKU
+    var box=document.getElementById('unleashedStockBox');
+    if(!box)return;
+    if(!data||!data.found||!data.warehouses||!data.warehouses.length){
+      box.innerHTML='<span style="color:#999">Live Unleashed stock unavailable</span>';
+      return;
+    }
+    var carroll=data.warehouses.filter(function(w){return w.code==='OAKLEIGH WH';})[0];
+    var others=data.warehouses.filter(function(w){return w.code!=='OAKLEIGH WH';});
+    var html='';
+    if(carroll){
+      html+='<div style="font-size:22px;font-weight:800;color:#1E8449;line-height:1.1">'+(carroll.qtyOnHand!=null?carroll.qtyOnHand:'-')+'</div>'+
+        '<div style="font-size:11px;color:#555;margin-bottom:4px">Carroll Rd -- live Unleashed stock</div>';
+    }
+    if(others.length){
+      html+='<div style="font-size:11px;color:#777">'+others.map(function(w){
+        return (w.name||w.code)+': <strong>'+(w.qtyOnHand!=null?w.qtyOnHand:'-')+'</strong>';
+      }).join(' &nbsp;|&nbsp; ')+'</div>';
+    }
+    box.innerHTML=html;
+  }).catch(function(){
+    if(currentDetailSku!==sku)return;
+    var box=document.getElementById('unleashedStockBox');
+    if(box)box.innerHTML='<span style="color:#999">Could not load live stock</span>';
+  });
+}
 function postRemoteChange(change){
   return new Promise(function(resolve){
     var img=new Image();
@@ -1926,7 +1963,7 @@ function showOccInfo(loc,sku,e){
     '<div style="opacity:.85;margin:2px 0">'+v[4]+'</div>'+
     '<div style="opacity:.7;font-size:11px">'+v[5]+' | ABC '+v[6]+' | '+v[8]+' pallet'+(v[8]>1?'s':'')+'</div>'+
     '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
-    '<div style="opacity:.7;font-size:11px">'+(v[11]!=null?v[11].toLocaleString():'?')+' on hand'+(qty!=null?' | counted '+qty:'')+'</div>'+
+    (qty!=null?'<div style="opacity:.7;font-size:11px">Counted: '+qty+'</div>':'')+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener" style="color:#7EC8FF">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="speakSkuInfo(\''+sku+'\')" style="color:#C39BD3">\ud83d\udd0a Read aloud</a>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
@@ -3112,10 +3149,11 @@ function showR(sku){
     '<div style="font-size:14px;font-weight:700">'+key+' &nbsp; <a href="'+photoUrl+'" target="_blank" rel="noopener" style="font-size:11px;font-weight:600;color:#2980B9">\ud83d\udcf7 View photo</a></div>'+
     '<div style="font-size:12px;color:#555;margin:2px 0 7px">'+v[4]+'</div>'+
     '<div class="pills"><span class="p" style="background:#DEEAF1;color:#1F3864">'+v[5]+'</span><span class="p" style="background:'+abcBg+';color:'+abcFg+'">'+v[6]+'</span><span class="p" style="background:'+palBg+';color:#7F3F00">'+v[8]+' pallet'+(v[8]>1?'s':'')+'</span></div>'+
+    '<div id="unleashedStockBox" style="margin:6px 0;font-size:11px;color:#888">Loading live Unleashed stock...</div>'+
     suggHtml+
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
-    '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>'+v[11].toLocaleString()+'</strong> on hand</div><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
+    '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
     '<div style="font-size:11px;color:#555;margin-top:4px">Lead time: <strong>'+(getLeadTime(key)!=null?getLeadTime(key)+' days':'not set')+'</strong> &nbsp; <a href="javascript:void(0)" onclick="setLeadTimeForSku(\''+key+'\')" style="color:#B9770E">\u23f1 Set lead time</a></div>'+
     (placed?
       '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
@@ -3129,6 +3167,8 @@ function showR(sku){
   el.style.display='block';hlSKU(key);
   ttSticky=false;tt.style.display='none';
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},150);
+  currentDetailSku=key;
+  fetchUnleashedStock(key);
 }
 
 // Entry point for searching "MIXED" -- always offers both starting a brand
@@ -3404,7 +3444,7 @@ async function autoPlaceAllPending(){
   });
 }
 
-function cRC(){document.getElementById('rc').style.display='none';clrHL();}
+function cRC(){document.getElementById('rc').style.display='none';clrHL();currentDetailSku=null;}
 
 document.getElementById('pendingSearch').addEventListener('input',function(){renderReceivedList();});
 

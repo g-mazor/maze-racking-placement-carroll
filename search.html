@@ -16,6 +16,12 @@
   .locs{margin-top:8px;font-size:14px}
   .loc-pill{display:inline-block;background:#E8F0FE;color:#1F3864;padding:4px 10px;border-radius:6px;margin:2px 4px 2px 0;font-weight:600}
   .not-placed{color:#A32D2D;font-size:13px;margin-top:6px}
+  .live-stock{margin-top:8px}
+  .live-stock-btn{background:#EAF6EE;color:#1E8449;border:1px solid #BEE3C8;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer}
+  .live-stock-loading{font-size:12px;color:#888}
+  .live-stock-carroll{display:inline-block;font-size:13px;font-weight:700;color:#1E8449;margin-right:10px}
+  .live-stock-others{font-size:11px;color:#777}
+  .live-stock-error{font-size:12px;color:#999}
   .status{text-align:center;padding:20px;color:#888;font-size:14px}
   .loading{text-align:center;padding:30px;color:#888}
   .tabs{display:flex;gap:8px;margin-bottom:12px}
@@ -73,6 +79,24 @@ function fl(loc) {
 
 function isMixedSku(sku) {
   return sku === 'MIXED' || (typeof sku === 'string' && sku.indexOf('MIXED@') === 0);
+}
+
+// Lightweight JSONP fetch for the picker page -- separate from the main
+// change-log poller above, used only for on-demand live Unleashed stock
+// lookups (never fired automatically for every search result, since each
+// lookup makes several sequential calls to Unleashed with built-in delays).
+function jsonpFetchStock(params) {
+  return new Promise(function(resolve, reject) {
+    var cbName = 'jsonpStockCb' + Date.now() + Math.floor(Math.random() * 100000);
+    var script = document.createElement('script');
+    var done = false;
+    var timer = setTimeout(function() { if (done) return; done = true; cleanup(); reject(new Error('timed out')); }, 15000);
+    function cleanup() { delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script); clearTimeout(timer); }
+    window[cbName] = function(data) { if (done) return; done = true; cleanup(); resolve(data); };
+    script.src = SHEET_API + '?ac=' + encodeURIComponent(PICKER_ACCESS_CODE) + '&' + params + '&callback=' + cbName + '&t=' + Date.now();
+    script.onerror = function() { if (done) return; done = true; cleanup(); reject(new Error('could not load')); };
+    document.head.appendChild(script);
+  });
 }
 
 function getMixedPalletLocationsFor(sku) {
@@ -246,9 +270,43 @@ function renderResults(query) {
     var locsHtml = displayLocs.length
       ? '<div class="locs">' + displayLocs.map(function(d) { return '<span class="loc-pill">' + d + '</span>'; }).join('') + '</div>'
       : '<div class="not-placed">Not currently placed</div>';
-    return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + '</div>';
+    return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml +
+      '<div class="live-stock" data-sku="' + sku + '">' +
+      '<button type="button" class="live-stock-btn" data-sku="' + sku + '">\ud83d\udce1 Check live stock</button>' +
+      '</div></div>';
   }).join('');
 }
+
+// On-demand live Unleashed stock lookup for a single search result card --
+// only fires when the picker taps the button, not automatically for every
+// result, since each lookup queries several warehouses in sequence.
+document.getElementById('results').addEventListener('click', function(e) {
+  var btn = e.target.closest('.live-stock-btn');
+  if (!btn) return;
+  var sku = btn.getAttribute('data-sku');
+  var box = btn.closest('.live-stock');
+  box.innerHTML = '<span class="live-stock-loading">Checking live stock...</span>';
+  jsonpFetchStock('unleashedstock=1&productCode=' + encodeURIComponent(sku)).then(function(data) {
+    if (!data || !data.found || !data.warehouses || !data.warehouses.length) {
+      box.innerHTML = '<span class="live-stock-error">Live stock unavailable</span>';
+      return;
+    }
+    var carroll = data.warehouses.filter(function(w) { return w.code === 'OAKLEIGH WH'; })[0];
+    var others = data.warehouses.filter(function(w) { return w.code !== 'OAKLEIGH WH'; });
+    var html = '';
+    if (carroll) {
+      html += '<span class="live-stock-carroll">' + (carroll.qtyOnHand != null ? carroll.qtyOnHand : '-') + ' at Carroll</span>';
+    }
+    if (others.length) {
+      html += '<span class="live-stock-others">' + others.map(function(w) {
+        return (w.name || w.code) + ': ' + (w.qtyOnHand != null ? w.qtyOnHand : '-');
+      }).join(' | ') + '</span>';
+    }
+    box.innerHTML = html;
+  }).catch(function() {
+    box.innerHTML = '<span class="live-stock-error">Could not load live stock</span>';
+  });
+});
 
 document.getElementById('si').disabled = true;
 document.getElementById('si').addEventListener('input', function() {
