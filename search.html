@@ -296,7 +296,7 @@ function renderResults(query) {
         }).join('') + '</div>'
       : '<div class="not-placed">Not currently placed</div>';
     var pickFaceHtml = pickFaceLoc
-      ? '<div class="pickface-row">\u2b50 Pick from <strong>' + pickFaceCode + '</strong> first' +
+      ? '<div class="pickface-row">\u2b50 Pick Bay: <strong>' + pickFaceCode + '</strong>' +
         ' &nbsp;<button type="button" class="confirm-count-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '">\ud83d\udd22 Confirm count</button></div>'
       : '';
     return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + pickFaceHtml +
