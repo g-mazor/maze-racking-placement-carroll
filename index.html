@@ -377,17 +377,23 @@ function fetchUnleashedStock(sku){
     var others=data.warehouses.filter(function(w){return w.code!=='OAKLEIGH WH';});
     var html='';
     if(carroll){
-      html+='<div style="display:flex;gap:14px;align-items:baseline">'+
+      html+='<div style="background:#EAF7EE;border:1px solid #BEE3C8;border-radius:8px;padding:8px 10px;margin-bottom:6px">'+
+        '<div style="display:flex;gap:14px;align-items:baseline">'+
         '<div><div style="font-size:22px;font-weight:800;color:#1E8449;line-height:1.1">'+(carroll.qtyOnHand!=null?carroll.qtyOnHand:'-')+'</div><div style="font-size:10px;color:#777">on hand</div></div>'+
         '<div><div style="font-size:22px;font-weight:800;color:#185FA5;line-height:1.1">'+(carroll.available!=null?carroll.available:'-')+'</div><div style="font-size:10px;color:#777">available</div></div>'+
         '<div><div style="font-size:16px;font-weight:700;color:#B9770E;line-height:1.4">'+(carroll.allocated!=null?carroll.allocated:'-')+'</div><div style="font-size:10px;color:#777">allocated</div></div>'+
         '</div>'+
-        '<div style="font-size:11px;color:#C0392B;font-weight:700;margin:2px 0 4px">Carroll Rd -- live Unleashed stock</div>';
+        '<div style="font-size:11px;color:#C0392B;font-weight:700;margin-top:2px">Carroll Rd -- live Unleashed stock</div>'+
+        '</div>';
     }
     if(others.length){
-      html+='<div style="font-size:11px;color:#777">'+others.map(function(w){
-        return (w.name||w.code)+': <strong>'+(w.qtyOnHand!=null?w.qtyOnHand:'-')+'</strong> on hand, '+(w.available!=null?w.available:'-')+' avail, '+(w.allocated!=null?w.allocated:'-')+' allocated';
-      }).join(' &nbsp;|&nbsp; ')+'</div>';
+      html+='<div style="font-size:11px;color:#777;display:flex;flex-wrap:wrap;gap:6px">'+others.map(function(w){
+        var text=(w.name||w.code)+': <strong>'+(w.qtyOnHand!=null?w.qtyOnHand:'-')+'</strong> on hand, '+(w.available!=null?w.available:'-')+' avail, '+(w.allocated!=null?w.allocated:'-')+' allocated';
+        if(w.code==='W-QLD'){
+          return '<span style="background:#FFF3CD;border:1px solid #F0D98C;border-radius:6px;padding:3px 8px;color:#7A5B00">'+text+'</span>';
+        }
+        return '<span>'+text+'</span>';
+      }).join('')+'</div>';
     }
     box.innerHTML=html;
   }).catch(function(){
