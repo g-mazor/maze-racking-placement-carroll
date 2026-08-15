@@ -3208,8 +3208,9 @@ function showOpenOrders(){
     var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(data.checkedAt||'')+' -- <strong>'+orders.length+'</strong> open order(s), oldest first</div>';
     html+=orders.map(function(o){
       var linesHtml=o.lines.map(function(l){
+        var statusBadge=l.placed?'':' <span style="color:#B9770E;font-weight:700">(not placed yet)</span>';
         return '<div style="font-size:11px;margin:2px 0;cursor:pointer;color:#185FA5" onclick="document.getElementById(\'openOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')">'+
-          '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+
+          '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+statusBadge+
           '</div>';
       }).join('');
       return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
