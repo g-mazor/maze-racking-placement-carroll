@@ -174,6 +174,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Orders to Dispatch</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -239,6 +240,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="font-size:13px;font-weight:700;color:#A32D2D;margin-bottom:10px">\ud83d\udce6 On Hand at Carroll but Not Placed</div>
   <div id="unplacedStockBody">Loading...</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('unplacedStockPanel').style.display='none'">Close</div>
+</div>
+<div id="openOrdersPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #185FA5;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#185FA5;margin-bottom:10px">\ud83d\udccb Orders to Dispatch (Carroll stock, oldest first)</div>
+  <div id="openOrdersBody">Loading...</div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('openOrdersPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -3177,6 +3183,44 @@ function showUnplacedStock(){
     body.innerHTML=html;
   }).catch(function(){
     document.getElementById('unplacedStockBody').innerHTML='<div style="font-size:12px;color:#999">Could not load this list.</div>';
+  });
+}
+
+// Fetches open Sales Orders (Parked/Placed/Backordered) assigned to
+// Carroll, filtered down to only the line items whose SKU is currently
+// placed on the map, sorted oldest order first. Can take a few seconds --
+// only runs when clicked, never automatically. Clicking a line jumps to
+// that SKU's detail card for picking.
+function showOpenOrders(){
+  document.getElementById('openOrdersBody').innerHTML='Checking Unleashed -- this can take a few seconds...';
+  document.getElementById('openOrdersPanel').style.display='block';
+  jsonpFetch(apiUrl('opencarrollorders=1')).then(function(data){
+    var body=document.getElementById('openOrdersBody');
+    if(!data||!data.orders){
+      body.innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
+      return;
+    }
+    var orders=data.orders;
+    if(!orders.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">No open orders can currently be fulfilled from Carroll stock.</div>';
+      return;
+    }
+    var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(data.checkedAt||'')+' -- <strong>'+orders.length+'</strong> open order(s), oldest first</div>';
+    html+=orders.map(function(o){
+      var linesHtml=o.lines.map(function(l){
+        return '<div style="font-size:11px;margin:2px 0;cursor:pointer;color:#185FA5" onclick="document.getElementById(\'openOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')">'+
+          '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+
+          '</div>';
+      }).join('');
+      return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+        '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
+        ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
+        linesHtml+
+        '</div>';
+    }).join('');
+    body.innerHTML=html;
+  }).catch(function(){
+    document.getElementById('openOrdersBody').innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
   });
 }
 
