@@ -3224,6 +3224,9 @@ function showOpenOrders(){
       return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
         '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
         ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
+        (o.needsReassignToCarroll?
+          '<div style="margin-top:3px;font-size:10px;color:#A32D2D;font-weight:700">\u26a0\ufe0f Currently assigned to '+(o.assignedWarehouse||'another warehouse')+' in Unleashed -- switch to Carroll to fulfill from here</div>'
+          :'')+
         linesHtml+
         '</div>';
     }).join('');
