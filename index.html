@@ -362,7 +362,11 @@ function jsonpFetch(url){
     var cbName='jsonpCb'+Date.now()+Math.floor(Math.random()*100000);
     var script=document.createElement('script');
     var done=false;
-    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},12000);
+    // 60s, not the previous 12s -- some endpoints (e.g. Orders to Dispatch)
+    // page through several real Unleashed API calls server-side and can
+    // genuinely take longer than 12 seconds, especially on a cold-started
+    // web app request rather than a warmed-up Apps Script editor run.
+    var timer=setTimeout(function(){if(done)return;done=true;cleanup();reject(new Error('timed out'));},60000);
     function cleanup(){delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);clearTimeout(timer);}
     window[cbName]=function(data){if(done)return;done=true;cleanup();resolve(data);};
     script.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cbName+'&t='+Date.now();
