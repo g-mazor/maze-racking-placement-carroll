@@ -1634,9 +1634,7 @@ var BRIDGE_BAYS={A:[17,30],AA:[17,30],B:[12,22,32],C:[12,22,32],D:[12,22,32],E:[
 // (emergency exits, fire safety equipment). Blocks the full bay width at that
 // level, since access needs to stay completely clear, not just one slot.
 var BLOCKED_LOCATIONS={
-  'G-03-1-1':'Emergency exit / fire hose reel',
-  'G-03-1-2':'Emergency exit / fire hose reel',
-  'G-03-1-3':'Emergency exit / fire hose reel'
+  'G-03-1-1':'Emergency exit / fire hose reel'
 };
 function isBridgeBay(row,bay){
   return BRIDGE_BAYS[row]&&BRIDGE_BAYS[row].indexOf(bay)>=0;
