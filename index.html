@@ -1571,11 +1571,11 @@ function buildStats(){
   });
   var empty=totalCap-totalOcc;
   var totalSkusPlaced=Object.keys(totalDistinctSkus).length;
-  var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
-  h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">'+(window.lastStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta">'+(window.lastStockValueMetaHtml||'')+'</div></div>';
-  h+='<div class="st" id="ordersToPickStat"><div class="l">Carroll Orders</div><div class="v" id="ordersToPickDisplay">'+(window.lastOrdersToPickHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="ordersToPickMeta">'+(window.lastOrdersToPickMetaHtml||'')+'</div></div>';
+  var h='<div class="st"><div class="l">Carroll Total Warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
   h+='<div class="st" id="allOrdersStat"><div class="l">All Orders</div><div class="v" id="allOrdersDisplay">'+(window.lastAllOrdersHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="allOrdersMeta">'+(window.lastAllOrdersMetaHtml||'')+'</div></div>';
+  h+='<div class="st" id="ordersToPickStat"><div class="l">Carroll Orders</div><div class="v" id="ordersToPickDisplay">'+(window.lastOrdersToPickHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="ordersToPickMeta">'+(window.lastOrdersToPickMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="allWhStockValueStat"><div class="l">All Warehouses Stock Value</div><div class="v" id="allWhStockValueDisplay">'+(window.lastAllWhStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="allWhStockValueMeta">'+(window.lastAllWhStockValueMetaHtml||'')+'</div></div>';
+  h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">'+(window.lastStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta">'+(window.lastStockValueMetaHtml||'')+'</div></div>';
   ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
 }
