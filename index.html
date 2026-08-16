@@ -4530,7 +4530,11 @@ function fetchOrdersToPickSummary(){
       return;
     }
     disp.innerHTML=data.orderCount+' <span style="font-size:12px;font-weight:400">order'+(data.orderCount!==1?'s':'')+'</span>';
-    if(meta)meta.textContent='$'+Math.round(data.totalValue||0).toLocaleString()+' total value | live as of '+(data.checkedAt||'');
+    var metaText='$'+Math.round(data.totalValue||0).toLocaleString()+' total value | live as of '+(data.checkedAt||'');
+    if(data.oldOrderCount){
+      metaText+='<br><span style="color:#FFD9A0;font-weight:700">\u26a0\ufe0f '+data.oldOrderCount+' order'+(data.oldOrderCount!==1?'s are':' is')+' 3+ days old</span>';
+    }
+    if(meta)meta.innerHTML=metaText;
   }).catch(function(){
     var disp=document.getElementById('ordersToPickDisplay');
     if(disp)disp.textContent='--';
