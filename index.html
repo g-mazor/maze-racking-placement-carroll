@@ -1565,6 +1565,7 @@ function buildStats(){
   var empty=totalCap-totalOcc;
   var totalSkusPlaced=Object.keys(totalDistinctSkus).length;
   var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
+  h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">Loading...</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta"></div></div>';
   ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
 }
@@ -4395,10 +4396,32 @@ async function pollSync(manual){
   }
 }
 
+// Fetches the cached (hourly-updated) Carroll stock value and fills in
+// the stat box next to "Total warehouse". Reads a cached number
+// server-side, so this is fast -- never triggers a live Unleashed scan.
+function fetchCarrollStockValue(){
+  jsonpFetch(apiUrl('carrollstockvalue=1')).then(function(data){
+    var disp=document.getElementById('stockValueDisplay');
+    var meta=document.getElementById('stockValueMeta');
+    if(!disp)return;
+    if(!data||data.totalValue==null){
+      disp.textContent='--';
+      if(meta)meta.textContent=(data&&data.note)?data.note:'Not available yet';
+      return;
+    }
+    disp.innerHTML='$'+Math.round(data.totalValue).toLocaleString();
+    if(meta)meta.textContent=(data.skuCount||0)+' SKUs | updated '+(data.checkedAt||'');
+  }).catch(function(){
+    var disp=document.getElementById('stockValueDisplay');
+    if(disp)disp.textContent='--';
+  });
+}
+
 (async function init(){
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
+  fetchCarrollStockValue();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
