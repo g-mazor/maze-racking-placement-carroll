@@ -174,7 +174,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
-    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Orders to Dispatch</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Carroll Stock to Dispatch</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#6C3483;color:#FFF" onclick="closeSettingsPanel();showAllOpenOrders()">📑 All Open Orders</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -242,9 +243,15 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('unplacedStockPanel').style.display='none'">Close</div>
 </div>
 <div id="openOrdersPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #185FA5;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
-  <div style="font-size:13px;font-weight:700;color:#185FA5;margin-bottom:10px">\ud83d\udccb Orders to Dispatch (Carroll stock, oldest first)</div>
+  <div style="font-size:13px;font-weight:700;color:#185FA5;margin-bottom:10px">\ud83d\udccb Carroll Stock to Dispatch (oldest first)</div>
   <div id="openOrdersBody">Loading...</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('openOrdersPanel').style.display='none'">Close</div>
+</div>
+<div id="allOpenOrdersPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:560px;margin:0 auto;background:#FFF;border:2px solid #6C3483;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#6C3483;margin-bottom:10px">\ud83d\udcd1 All Open Orders (oldest first)</div>
+  <div id="allOpenOrdersFilterBar" style="display:none;margin-bottom:8px;font-size:11px"></div>
+  <div id="allOpenOrdersBody">Loading...</div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('allOpenOrdersPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -3291,6 +3298,96 @@ function toggleOrderDetail(id){
 // runs the preview immediately) rather than building a separate
 // mechanism. Unplaced lines are skipped -- there's no location to send a
 // picker to yet -- and the person is told how many were left out.
+var lastAllOpenOrdersData=[];
+var lastAllOpenOrdersCheckedAt='';
+var currentAllOrdersStatusFilter='All';
+
+function showAllOpenOrders(){
+  document.getElementById('allOpenOrdersBody').innerHTML='Checking Unleashed -- this can take a few seconds...';
+  document.getElementById('allOpenOrdersFilterBar').style.display='none';
+  document.getElementById('allOpenOrdersPanel').style.display='block';
+  jsonpFetch(apiUrl('allopenorders=1')).then(function(data){
+    var body=document.getElementById('allOpenOrdersBody');
+    if(!data||!data.orders){
+      body.innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
+      return;
+    }
+    lastAllOpenOrdersData=data.orders;
+    lastAllOpenOrdersCheckedAt=data.checkedAt||'';
+    currentAllOrdersStatusFilter='All';
+    if(!lastAllOpenOrdersData.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">No open orders found.</div>';
+      return;
+    }
+    renderAllOpenOrdersFilterBar();
+    renderAllOpenOrdersList();
+  }).catch(function(){
+    document.getElementById('allOpenOrdersBody').innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
+  });
+}
+
+function renderAllOpenOrdersFilterBar(){
+  var bar=document.getElementById('allOpenOrdersFilterBar');
+  var statuses=['All'];
+  var counts={All:lastAllOpenOrdersData.length};
+  lastAllOpenOrdersData.forEach(function(o){
+    if(statuses.indexOf(o.orderStatus)<0)statuses.push(o.orderStatus);
+    counts[o.orderStatus]=(counts[o.orderStatus]||0)+1;
+  });
+  bar.style.display='flex';
+  bar.style.gap='6px';
+  bar.style.flexWrap='wrap';
+  bar.style.justifyContent='center';
+  bar.innerHTML=statuses.map(function(s){
+    var active=s===currentAllOrdersStatusFilter;
+    return '<button type="button" onclick="setAllOrdersStatusFilter(\''+s+'\')" style="padding:4px 10px;border-radius:12px;border:1px solid '+(active?'#6C3483':'#CCC')+';background:'+(active?'#6C3483':'#FFF')+';color:'+(active?'#FFF':'#444')+';font-size:11px;cursor:pointer">'+s+' ('+counts[s]+')</button>';
+  }).join('');
+}
+
+function setAllOrdersStatusFilter(status){
+  currentAllOrdersStatusFilter=status;
+  renderAllOpenOrdersFilterBar();
+  renderAllOpenOrdersList();
+}
+
+function renderAllOpenOrdersList(){
+  var body=document.getElementById('allOpenOrdersBody');
+  var orders=lastAllOpenOrdersData.filter(function(o){
+    return currentAllOrdersStatusFilter==='All'||o.orderStatus===currentAllOrdersStatusFilter;
+  });
+  if(!orders.length){
+    body.innerHTML='<div style="font-size:12px;color:#777">No orders in this category.</div>';
+    return;
+  }
+  var html='<div style="font-size:11px;color:#777;margin:6px 0 8px">Checked '+lastAllOpenOrdersCheckedAt+' -- <strong>'+orders.length+'</strong> order(s) shown</div>';
+  html+=orders.map(function(o,idx){
+    var linesHtml=o.lines.map(function(l){
+      var carrollBadge=l.hasCarrollStock?(l.placed?' <span style="color:#1E8449;font-size:10px">(Carroll, placed)</span>':' <span style="color:#B9770E;font-size:10px">(Carroll, not placed)</span>'):' <span style="color:#999;font-size:10px">(not Carroll stock)</span>';
+      return '<div style="font-size:11px;margin:2px 0'+(l.hasCarrollStock?';cursor:pointer;color:#185FA5':'')+'"'+(l.hasCarrollStock?' onclick="document.getElementById(\'allOpenOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')"':'')+'>'+
+        '\u2192 '+l.sku+' -- '+(l.desc||'')+' \u00d7'+l.qty+carrollBadge+
+        '</div>';
+    }).join('');
+    var detailId='allOrdDetail'+idx;
+    return '<div style="background:#F3EAF8;border:1px solid #D2B8E8;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
+      ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
+      linesHtml+
+      '<div style="margin-top:4px"><a href="javascript:void(0)" onclick="toggleOrderDetail(\''+detailId+'\')" style="font-size:10px">View full order details</a></div>'+
+      '<div id="'+detailId+'" style="display:none;margin-top:6px;padding-top:6px;border-top:1px dashed #D2B8E8;font-size:11px;color:#444">'+
+        (o.requiredDate?('<div>Required by: '+o.requiredDate+'</div>'):'')+
+        (o.customerRef?('<div>Customer ref: '+o.customerRef+'</div>'):'')+
+        '<div>Assigned warehouse: '+(o.assignedWarehouse||'?')+'</div>'+
+        (o.deliveryName?('<div>Deliver to: '+o.deliveryName+'</div>'):'')+
+        (o.deliveryAddress?('<div>Address: '+o.deliveryAddress+'</div>'):'')+
+        (o.deliveryInstruction?('<div>Instructions: '+o.deliveryInstruction+'</div>'):'')+
+        (o.comments?('<div>Comments: '+o.comments+'</div>'):'')+
+        (o.total!=null?('<div>Order total: $'+o.total+'</div>'):'')+
+      '</div>'+
+      '</div>';
+  }).join('');
+  body.innerHTML=html;
+}
+
 function generatePickListFromOpenOrders(){
   var selectedOrders=lastOpenOrdersData.filter(function(o){return selectedOrderNumbers.has(o.orderNumber);});
   if(!selectedOrders.length){
