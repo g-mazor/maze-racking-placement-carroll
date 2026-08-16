@@ -28,6 +28,8 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 #acl div:hover{background:#F0F7FF}
 #acl div span{color:#888;margin-left:8px;font-size:11px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:10px}
+.statsRows{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;margin-bottom:10px;padding-bottom:2px}
+.statsRows .sr{flex:0 0 130px}
 .st{background:#1F3864;border-radius:7px;padding:9px 11px;color:#FFF;grid-column:span 2}
 .st .v{font-size:20px;font-weight:700}.st .l{font-size:10px;opacity:.75;margin-bottom:1px}
 .sr{border-radius:7px;padding:7px 9px;border-left:3px solid}
@@ -150,6 +152,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </div>
 <div id="titleBar" style="font-size:14px;font-weight:700;color:#1F3864;letter-spacing:.5px;margin-bottom:6px">SKU Location Map<span style="font-size:9px;color:#DDD;cursor:pointer;margin-left:10px;user-select:none" onclick="openManagerPanel()">&bull;</span></div>
 <div class="stats" id="sg"></div>
+<div class="statsRows" id="sgRows"></div>
 <div class="topbar">
 <div id="acw"><input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/><div id="acl"></div></div>
 <div style="text-align:center;margin-top:4px"><span id="acStatusDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#999;margin-right:5px"></span><span style="font-size:11px;color:#888;text-decoration:underline;cursor:pointer" onclick="promptAccessCode()">🔒 Enter/update access code</span></div>
@@ -1530,6 +1533,8 @@ function saveDL(){
 
 function buildStats(){
   var grid=document.getElementById('sg');
+  var gridRows=document.getElementById('sgRows');
+  var hRows='';
   var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
@@ -1576,8 +1581,9 @@ function buildStats(){
   h+='<div class="st" id="ordersToPickStat" style="cursor:pointer" onclick="showOpenOrders()"><div class="l">Carroll Orders \u2b07\ufe0f</div><div class="v" id="ordersToPickDisplay">'+(window.lastOrdersToPickHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="ordersToPickMeta">'+(window.lastOrdersToPickMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="allWhStockValueStat"><div class="l">All Warehouses Stock Value</div><div class="v" id="allWhStockValueDisplay">'+(window.lastAllWhStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="allWhStockValueMeta">'+(window.lastAllWhStockValueMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">'+(window.lastStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta">'+(window.lastStockValueMetaHtml||'')+'</div></div>';
-  ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
+  ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);hRows+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
+  if(gridRows)gridRows.innerHTML=hRows;
 }
 
 // Returns the correct cell background color for a given SKU -- mixed
