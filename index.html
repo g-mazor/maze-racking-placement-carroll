@@ -3201,6 +3201,8 @@ function showUnplacedStock(){
 // that SKU's detail card for picking.
 var lastOpenOrdersData=[]; // most recently fetched dispatchable orders, kept so "Generate Pick List" doesn't need to refetch
 
+var selectedOrderNumbers=new Set(); // which orders are checked for pick-list generation
+
 function showOpenOrders(){
   document.getElementById('openOrdersBody').innerHTML='Checking Unleashed -- this can take a few seconds...';
   document.getElementById('openOrdersPanel').style.display='block';
@@ -3212,26 +3214,50 @@ function showOpenOrders(){
     }
     var orders=data.orders;
     lastOpenOrdersData=orders;
+    selectedOrderNumbers=new Set(orders.map(function(o){return o.orderNumber;})); // all selected by default
     if(!orders.length){
       body.innerHTML='<div style="font-size:12px;color:#777">No open orders can currently be fulfilled from Carroll stock.</div>';
       return;
     }
     var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(data.checkedAt||'')+' -- <strong>'+orders.length+'</strong> open order(s), oldest first</div>';
-    html+='<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List from these Orders</button></div>';
-    html+=orders.map(function(o){
+    html+='<div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px;font-size:11px">'+
+      '<a href="javascript:void(0)" onclick="setAllOrderSelection(true)">Select all</a>'+
+      '<a href="javascript:void(0)" onclick="setAllOrderSelection(false)">Select none</a>'+
+      '</div>';
+    html+='<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List from Selected Orders</button></div>';
+    html+=orders.map(function(o,idx){
       var linesHtml=o.lines.map(function(l){
         var statusBadge=l.placed?'':' <span style="color:#B9770E;font-weight:700">(not placed yet)</span>';
         return '<div style="font-size:11px;margin:2px 0;cursor:pointer;color:#185FA5" onclick="document.getElementById(\'openOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')">'+
           '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+statusBadge+
           '</div>';
       }).join('');
+      var otherLinesHtml=(o.allLines||[]).filter(function(al){return !o.lines.some(function(ml){return ml.sku===al.sku;});}).map(function(al){
+        return '<div style="font-size:11px;margin:2px 0;color:#999">'+al.sku+' -- '+(al.desc||'')+' \u00d7'+al.qty+' <span style="font-size:10px">(not Carroll stock)</span></div>';
+      }).join('');
+      var detailId='ordDetail'+idx;
       return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+        '<div style="display:flex;gap:6px;align-items:flex-start">'+
+        '<input type="checkbox" class="order-select-cb" data-order="'+o.orderNumber+'" checked onclick="toggleOrderSelection(this)" style="margin-top:3px">'+
+        '<div style="flex:1">'+
         '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
         ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
         (o.needsReassignToCarroll?
           '<div style="margin-top:3px;font-size:10px;color:#A32D2D;font-weight:700">\u26a0\ufe0f Currently assigned to '+(o.assignedWarehouse||'another warehouse')+' in Unleashed -- switch to Carroll to fulfill from here</div>'
           :'')+
         linesHtml+
+        '<div style="margin-top:4px"><a href="javascript:void(0)" onclick="toggleOrderDetail(\''+detailId+'\')" style="font-size:10px">View full order details</a></div>'+
+        '<div id="'+detailId+'" style="display:none;margin-top:6px;padding-top:6px;border-top:1px dashed #B7D3EE;font-size:11px;color:#444">'+
+          (o.requiredDate?('<div>Required by: '+o.requiredDate+'</div>'):'')+
+          (o.customerRef?('<div>Customer ref: '+o.customerRef+'</div>'):'')+
+          (o.deliveryName?('<div>Deliver to: '+o.deliveryName+'</div>'):'')+
+          (o.deliveryAddress?('<div>Address: '+o.deliveryAddress+'</div>'):'')+
+          (o.deliveryInstruction?('<div>Instructions: '+o.deliveryInstruction+'</div>'):'')+
+          (o.comments?('<div>Comments: '+o.comments+'</div>'):'')+
+          (o.total!=null?('<div>Order total: $'+o.total+'</div>'):'')+
+          (otherLinesHtml?('<div style="margin-top:4px">Other lines on this order (not Carroll stock):'+otherLinesHtml+'</div>'):'')+
+        '</div>'+
+        '</div></div>'+
         '</div>';
     }).join('');
     body.innerHTML=html;
@@ -3240,17 +3266,40 @@ function showOpenOrders(){
   });
 }
 
-// Aggregates quantities for every PLACED SKU across the currently-loaded
-// dispatch list (same SKU on multiple orders sums together), then feeds
-// that straight into the existing pick-list creation flow (prefills the
-// textarea and runs the preview immediately) rather than building a
-// separate mechanism. Unplaced lines are skipped -- there's no location
-// to send a picker to yet -- and the person is told how many were left out.
+function toggleOrderSelection(cb){
+  var order=cb.getAttribute('data-order');
+  if(cb.checked)selectedOrderNumbers.add(order);else selectedOrderNumbers.delete(order);
+}
+
+function setAllOrderSelection(selectAll){
+  document.querySelectorAll('.order-select-cb').forEach(function(cb){
+    cb.checked=selectAll;
+    var order=cb.getAttribute('data-order');
+    if(selectAll)selectedOrderNumbers.add(order);else selectedOrderNumbers.delete(order);
+  });
+}
+
+function toggleOrderDetail(id){
+  var el=document.getElementById(id);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+// Aggregates quantities for every PLACED SKU across the SELECTED orders
+// (same SKU on multiple orders sums together), then feeds that straight
+// into the existing pick-list creation flow (prefills the textarea and
+// runs the preview immediately) rather than building a separate
+// mechanism. Unplaced lines are skipped -- there's no location to send a
+// picker to yet -- and the person is told how many were left out.
 function generatePickListFromOpenOrders(){
+  var selectedOrders=lastOpenOrdersData.filter(function(o){return selectedOrderNumbers.has(o.orderNumber);});
+  if(!selectedOrders.length){
+    alert('No orders selected -- check the boxes next to the orders you want, or use "Select all".');
+    return;
+  }
   var skuQtyMap={};
   var skuOrderMap={};
   var skippedUnplaced=0;
-  lastOpenOrdersData.forEach(function(o){
+  selectedOrders.forEach(function(o){
     o.lines.forEach(function(l){
       if(!l.placed){skippedUnplaced++;return;}
       skuQtyMap[l.sku]=(skuQtyMap[l.sku]||0)+l.qty;
@@ -3260,7 +3309,7 @@ function generatePickListFromOpenOrders(){
   });
   var skus=Object.keys(skuQtyMap);
   if(!skus.length){
-    alert('None of the matching SKUs are placed on the map yet, so there\'s nothing pickable to build a list from.');
+    alert('None of the matching SKUs in the selected orders are placed on the map yet, so there\'s nothing pickable to build a list from.');
     return;
   }
   window.pendingOrderBreakdown=null;
