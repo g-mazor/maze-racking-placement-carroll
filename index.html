@@ -1574,6 +1574,7 @@ function buildStats(){
   var h='<div class="st"><div class="l">Total warehouse</div><div class="v">'+empty+' <span style="font-size:12px;font-weight:400">empty locations</span></div><div style="font-size:10px;opacity:.7;margin-top:1px">'+totalCap+' total | '+totalOcc+' occupied | '+totalSkusPlaced+' distinct SKUs placed</div></div>';
   h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">'+(window.lastStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta">'+(window.lastStockValueMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="ordersToPickStat"><div class="l">Orders to Pick</div><div class="v" id="ordersToPickDisplay">'+(window.lastOrdersToPickHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="ordersToPickMeta">'+(window.lastOrdersToPickMetaHtml||'')+'</div></div>';
+  h+='<div class="st" id="allWhStockValueStat"><div class="l">All Warehouses Stock Value</div><div class="v" id="allWhStockValueDisplay">'+(window.lastAllWhStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="allWhStockValueMeta">'+(window.lastAllWhStockValueMetaHtml||'')+'</div></div>';
   ['A','AA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);h+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
 }
@@ -4547,12 +4548,36 @@ function fetchOrdersToPickSummary(){
   });
 }
 
+// Fetches the LIVE stock value across ALL warehouses combined (not just
+// Carroll). Fired in parallel with the other two live stat fetches.
+function fetchAllWarehousesStockValue(){
+  jsonpFetch(apiUrl('allwarehousesstockvaluelive=1')).then(function(data){
+    var disp=document.getElementById('allWhStockValueDisplay');
+    var meta=document.getElementById('allWhStockValueMeta');
+    if(!data||data.totalValue==null){
+      window.lastAllWhStockValueHtml='--';
+      window.lastAllWhStockValueMetaHtml=(data&&data.note)?data.note:'Could not load';
+    } else {
+      window.lastAllWhStockValueHtml='$'+Math.round(data.totalValue).toLocaleString();
+      window.lastAllWhStockValueMetaHtml=(data.skuCount||0)+' SKUs | live as of '+(data.checkedAt||'');
+    }
+    if(disp)disp.innerHTML=window.lastAllWhStockValueHtml;
+    if(meta)meta.innerHTML=window.lastAllWhStockValueMetaHtml;
+  }).catch(function(){
+    window.lastAllWhStockValueHtml='--';
+    window.lastAllWhStockValueMetaHtml='Could not load';
+    var disp=document.getElementById('allWhStockValueDisplay');
+    if(disp)disp.textContent='--';
+  });
+}
+
 (async function init(){
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
   fetchCarrollStockValue();
   fetchOrdersToPickSummary();
+  fetchAllWarehousesStockValue();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
