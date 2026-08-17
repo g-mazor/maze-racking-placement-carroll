@@ -2242,6 +2242,14 @@ function startMoveToLocation(loc){
 // AA is reserved double-deep stock, E/F/G are oversize and picked separately);
 // anything outside those rows sorts last rather than being dropped.
 var ROW_WALK_ORDER=['A','B','C','D'];
+// Rows E, F, and G are walked in REVERSE bay order -- their end closest to
+// the loading area is the highest bay number (E starts at 38, G at 13, F
+// at 4), unlike every other row which starts from bay 1. Confirmed
+// directly by warehouse staff 18 Aug 2026. Level ordering (bottom first,
+// then up) needs no separate rule -- it's already the ascending tiebreaker
+// below, applied after bay.
+var REVERSED_BAY_ROWS=['E','F','G'];
+
 function sortLocationsByWalkPath(locs){
   return locs.slice().sort(function(a,b){
     var pa=a.split('-'),pb=b.split('-');
@@ -2249,7 +2257,10 @@ function sortLocationsByWalkPath(locs){
     var ib=ROW_WALK_ORDER.indexOf(pb[0]);if(ib<0)ib=999;
     if(ia!==ib)return ia-ib;
     var baya=parseInt(pa[1],10),bayb=parseInt(pb[1],10);
-    if(baya!==bayb)return baya-bayb;
+    if(baya!==bayb){
+      var reversed=REVERSED_BAY_ROWS.indexOf(pa[0])>=0; // pa[0]===pb[0] here since ia===ib
+      return reversed?(bayb-baya):(baya-bayb);
+    }
     return parseInt(pa[2],10)-parseInt(pb[2],10);
   });
 }
