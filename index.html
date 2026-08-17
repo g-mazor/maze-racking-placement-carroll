@@ -179,6 +179,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Carroll Stock to Dispatch</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#6C3483;color:#FFF" onclick="closeSettingsPanel();showAllOpenOrders()">📑 All Open Orders</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();document.getElementById('importPickListPanel').style.display='block'">📥 Import Pick List</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -255,6 +256,14 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div id="allOpenOrdersFilterBar" style="display:none;margin-bottom:8px;font-size:11px"></div>
   <div id="allOpenOrdersBody">Loading...</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('allOpenOrdersPanel').style.display='none'">Close</div>
+</div>
+<div id="importPickListPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:560px;margin:0 auto;background:#FFF;border:2px solid #16A085;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#0E6655;margin-bottom:6px">\ud83d\udce5 Import Pick List</div>
+  <div style="font-size:11px;color:#666;margin-bottom:8px">Paste rows as <strong>SKU, Qty, Reference</strong> (tab or comma separated, one per line). Same SKU appearing more than once will be combined into one pick with the split shown to the picker.</div>
+  <textarea id="importPickListInput" rows="10" style="width:100%;font-family:monospace;font-size:12px;padding:8px;border-radius:6px;border:1.5px solid #8CD98C;box-sizing:border-box" placeholder="703370	1	16 Aug&#10;703370	1	14 Aug (x2)&#10;705125	1	14 Aug"></textarea>
+  <div style="text-align:center;margin-top:8px"><button class="btn btn-green" style="font-size:12px" onclick="parseImportPickList()">Parse &amp; Preview</button></div>
+  <div id="importPickListUnmatched" style="margin-top:8px"></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('importPickListPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -3395,6 +3404,56 @@ function renderAllOpenOrdersList(){
       '</div>';
   }).join('');
   body.innerHTML=html;
+}
+
+// Parses pasted SKU/Qty/Reference rows (tab or comma separated), combines
+// same-SKU lines into one pick quantity with an order-breakdown showing
+// the split (reusing the exact same batch-picking display already built
+// for Orders to Dispatch), and flags any SKU that doesn't match the
+// catalog so it can be fixed before assigning to a picker.
+function parseImportPickList(){
+  var raw=document.getElementById('importPickListInput').value;
+  var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
+  var skuQtyMap={};
+  var skuOrderMap={};
+  var unmatched=[];
+  lines.forEach(function(line){
+    var parts=line.split(/\t|,/).map(function(p){return p.trim();});
+    if(parts.length<2)return;
+    var sku=parts[0];
+    var qty=parseInt(parts[1],10);
+    var ref=parts[2]||'';
+    if(!sku||isNaN(qty))return;
+    if(!DATA.d[sku]){
+      if(unmatched.indexOf(sku)<0)unmatched.push(sku);
+    }
+    skuQtyMap[sku]=(skuQtyMap[sku]||0)+qty;
+    if(!skuOrderMap[sku])skuOrderMap[sku]=[];
+    skuOrderMap[sku].push({orderNumber:ref||('qty '+qty),qty:qty});
+  });
+  var skus=Object.keys(skuQtyMap);
+  var unmatchedBox=document.getElementById('importPickListUnmatched');
+  if(unmatched.length){
+    unmatchedBox.innerHTML='<div style="background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:8px;font-size:11px;color:#A32D2D"><strong>\u26a0\ufe0f '+unmatched.length+' SKU(s) not found in the catalog -- check for typos or combo-SKU codes before assigning:</strong><br>'+unmatched.join(', ')+'</div>';
+  } else {
+    unmatchedBox.innerHTML='';
+  }
+  var matchedSkus=skus.filter(function(s){return DATA.d[s];});
+  if(!matchedSkus.length){
+    alert('No recognized SKUs to build a pick list from -- check the pasted data.');
+    return;
+  }
+  window.pendingOrderBreakdown=null;
+  document.getElementById('importPickListPanel').style.display='none';
+  enterCreatePickListMode();
+  setTimeout(function(){
+    window.pendingOrderBreakdown=skuOrderMap;
+    var ta=document.getElementById('pickListInput');
+    if(ta){
+      ta.value=matchedSkus.map(function(s){return s+' '+skuQtyMap[s];}).join('\n');
+      previewPickList();
+    }
+  },50);
 }
 
 function generatePickListFromOpenOrders(){
