@@ -499,7 +499,8 @@ function renderPicklistTab() {
       '<input id="guidedQtyInput" type="number" placeholder="Qty you picked" autocomplete="off" value="' + item.qty + '" ' +
       'style="width:100%;padding:12px;border-radius:6px;border:2px solid #27AE60;font-size:18px;box-sizing:border-box;text-align:center"/>' +
       '<div id="guidedMsg" style="margin-top:10px;font-size:13px;font-weight:600"></div>' +
-      '<button class="mark-btn" style="width:100%;margin-top:10px;padding:12px;font-size:15px" onclick="confirmGuidedPick()">Confirm pick</button>';
+      '<button class="mark-btn" style="width:100%;margin-top:10px;padding:12px;font-size:15px" onclick="confirmGuidedPick()">Confirm pick</button>' +
+      '<div style="text-align:center;margin-top:8px"><a href="javascript:void(0)" onclick="guidedPickStockCount(\'' + item.loc + '\',\'' + item.sku + '\')" style="font-size:11px;color:#8E44AD">\ud83d\udd22 Also do a stock count here</a></div>';
   }
   html += '</div><div style="text-align:center;margin-top:14px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
   el.innerHTML = html;
@@ -689,6 +690,21 @@ function confirmGuidedArrival(raw) {
   msg.innerHTML = '<span style="color:#1E8449">\u2705 Correct location!</span>';
   guidedPickState.phase = 'pick';
   setTimeout(renderPicklistTab, 400);
+}
+
+// Optional extra step during a guided pick -- lets the picker record a
+// stock count at the same location without leaving the pick flow. Reuses
+// the same 'count' event type as every other counting entry point in the
+// app (the picker access code is already allowed to send 'count' events).
+function guidedPickStockCount(loc, sku) {
+  var current = QTY[loc] != null ? QTY[loc] : '';
+  var entered = prompt('Stock count for ' + sku + ' at ' + fl(loc) + ':', String(current));
+  if (entered === null) return;
+  var qty = parseInt(entered.trim(), 10);
+  if (isNaN(qty) || qty < 0) { alert('Enter a whole number of 0 or more.'); return; }
+  postRemoteChange({type: 'count', sku: sku, loc: loc, qty: qty, user: currentPicker, ts: Date.now()}).then(function() {
+    QTY[loc] = qty;
+  });
 }
 
 // Step 2: confirm the quantity actually picked, sends the matching 'pick'
