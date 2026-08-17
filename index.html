@@ -180,6 +180,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Carroll Stock to Dispatch</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#6C3483;color:#FFF" onclick="closeSettingsPanel();showAllOpenOrders()">📑 All Open Orders</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();document.getElementById('importPickListPanel').style.display='block'">📥 Import Pick List</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#8E44AD;color:#FFF" onclick="closeSettingsPanel();showPackStation()">📦 Pack Station</button>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -264,6 +265,12 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="text-align:center;margin-top:8px"><button class="btn btn-green" style="font-size:12px" onclick="parseImportPickList()">Parse &amp; Preview</button></div>
   <div id="importPickListUnmatched" style="margin-top:8px"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('importPickListPanel').style.display='none'">Close</div>
+</div>
+<div id="packStationPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:560px;margin:0 auto;background:#FFF;border:2px solid #8E44AD;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#6C3483;margin-bottom:6px">📦 Pack Station</div>
+  <div style="font-size:11px;color:#666;margin-bottom:8px">Orders grouped from your batch picks -- shows exactly what goes in each box, so the right label goes on the right box.</div>
+  <div id="packStationBody">Loading...</div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('packStationPanel').style.display='none'">Close</div>
 </div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
@@ -3456,6 +3463,65 @@ function parseImportPickList(){
   },50);
 }
 
+// Groups every batch-picked item (from any pick list, via its
+// orderBreakdown) by ORDER instead of by SKU -- the packer's view of
+// "what goes in this specific customer's box" rather than the picker's
+// view of "what to pick from which bay". Uses no new backend endpoint:
+// "packed" status is a lightweight 'orderpacked' entry in the same
+// change log everything else already uses (same pattern as login/logout),
+// so marking an order packed needs no server-side change at all.
+function showPackStation(){
+  var panel=document.getElementById('packStationPanel');
+  var body=document.getElementById('packStationBody');
+  panel.style.display='block';
+
+  var packedSet={};
+  CHANGES.forEach(function(c){if(c.type==='orderpacked')packedSet[c.sku]=true;});
+
+  var orders={};
+  getPickLists().forEach(function(pl){
+    pl.items.forEach(function(item){
+      if(!item.orderBreakdown||!item.orderBreakdown.length)return;
+      item.orderBreakdown.forEach(function(b){
+        if(!orders[b.orderNumber])orders[b.orderNumber]={customerName:b.customerName||'',deliveryAddress:b.deliveryAddress||'',lines:[]};
+        orders[b.orderNumber].lines.push({sku:item.sku,desc:item.desc,qty:b.qty});
+      });
+    });
+  });
+
+  var orderNumbers=Object.keys(orders);
+  if(!orderNumbers.length){
+    body.innerHTML='<div style="font-size:12px;color:#777">No batch-picked orders found yet -- use "Generate Pick List from Selected Orders" (in Carroll/All Orders) or Import Pick List to create one first.</div>';
+    return;
+  }
+  orderNumbers.sort(function(a,b){
+    var ap=packedSet[a]?1:0,bp=packedSet[b]?1:0;
+    if(ap!==bp)return ap-bp;
+    return String(a).localeCompare(String(b));
+  });
+
+  body.innerHTML=orderNumbers.map(function(on){
+    var o=orders[on];
+    var packed=packedSet[on];
+    var linesHtml=o.lines.map(function(l){
+      return '<div style="font-size:11px;margin:2px 0">'+l.sku+' -- '+(l.desc||'')+' \u00d7'+l.qty+'</div>';
+    }).join('');
+    return '<div style="background:'+(packed?'#EAF7EE':'#F3EAF8')+';border:1px solid '+(packed?'#BEE3C8':'#D2B8E8')+';border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<strong>'+on+'</strong>'+(o.customerName?' -- '+o.customerName:'')+
+      (packed?' <span style="color:#1E8449;font-weight:700">\u2705 Packed</span>':'')+
+      (o.deliveryAddress?'<div style="font-size:10px;color:#777;margin-top:2px">'+o.deliveryAddress+'</div>':'')+
+      linesHtml+
+      (packed?'':'<div style="text-align:right;margin-top:4px"><button class="btn btn-green" style="font-size:10px;padding:4px 8px" onclick="markOrderPacked(\''+on+'\')">Mark packed</button></div>')+
+      '</div>';
+  }).join('');
+}
+
+function markOrderPacked(orderNumber){
+  applyC({type:'orderpacked',sku:orderNumber,user:currentUser||currentPicker},true);
+  si2('Order '+orderNumber+' marked packed.');
+  showPackStation();
+}
+
 function generatePickListFromOpenOrders(){
   var selectedOrders=lastOpenOrdersData.filter(function(o){return selectedOrderNumbers.has(o.orderNumber);});
   if(!selectedOrders.length){
@@ -3470,7 +3536,7 @@ function generatePickListFromOpenOrders(){
       if(!l.placed){skippedUnplaced++;return;}
       skuQtyMap[l.sku]=(skuQtyMap[l.sku]||0)+l.qty;
       if(!skuOrderMap[l.sku])skuOrderMap[l.sku]=[];
-      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty});
+      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty,customerName:o.customerName,deliveryAddress:o.deliveryAddress});
     });
   });
   var skus=Object.keys(skuQtyMap);
