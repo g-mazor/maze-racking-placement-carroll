@@ -70,8 +70,17 @@
         </div>
         <div class="field-label" style="margin-top:6px">Description (auto-fills when you pick a match, or type your own for a new SKU)</div>
         <input type="text" id="recvDesc" placeholder="Product description" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
-        <div class="field-label" style="margin-top:6px">Quantity</div>
-        <input type="number" id="recvQty" placeholder="How many arrived" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div class="field-row" style="margin-top:6px">
+          <div style="flex:1">
+            <div class="field-label">Number of pallets</div>
+            <input type="number" id="recvPallets" placeholder="e.g. 4" oninput="updateRecvTotal()" style="width:100%;box-sizing:border-box"/>
+          </div>
+          <div style="flex:1">
+            <div class="field-label">Units per pallet</div>
+            <input type="number" id="recvUnitsPerPallet" placeholder="e.g. 10" oninput="updateRecvTotal()" style="width:100%;box-sizing:border-box"/>
+          </div>
+        </div>
+        <div id="recvTotalDisplay" style="font-size:13px;font-weight:700;color:#1F3864;margin-top:6px"></div>
         <div class="field-label" style="margin-top:6px">Note (container #, supplier, etc -- optional)</div>
         <input type="text" id="recvNote" placeholder="Note" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
         <div style="text-align:center;margin-top:10px"><button class="login-btn" onclick="logReceivedStock()">Log as received</button></div>
@@ -158,25 +167,63 @@ function postRemoteChangeForklift(params) {
   });
 }
 
+// Live-updates the "Total units" readout as the driver types pallet
+// count / units-per-pallet, so they can see the math before submitting.
+function updateRecvTotal() {
+  var pallets = parseInt(document.getElementById('recvPallets').value, 10);
+  var perPallet = parseInt(document.getElementById('recvUnitsPerPallet').value, 10);
+  var display = document.getElementById('recvTotalDisplay');
+  if (!isNaN(pallets) && !isNaN(perPallet) && pallets > 0 && perPallet > 0) {
+    display.textContent = 'Total: ' + (pallets * perPallet) + ' units (' + pallets + ' pallet' + (pallets !== 1 ? 's' : '') + ' x ' + perPallet + ' each)';
+  } else {
+    display.textContent = '';
+  }
+}
+
 // Step 1: log that stock has arrived (no location yet) -- same 'receive'
 // event the manager's own Receive button already uses, so it shows up in
-// the same Pending Goods-in list either surface reads.
+// the same Pending Goods-in list either surface reads. Pallet count and
+// units-per-pallet are asked separately (not a single total) since
+// incoming stock arrives by the pallet, not the unit. The backend's
+// 'receive' event only has one qty field and one note field, so the
+// pallet breakdown is encoded into the note text itself (e.g. "4 pallets
+// x 10 units each") -- no backend change needed, and it's parsed back out
+// below to guide the placement step.
 function logReceivedStock() {
   var sku = document.getElementById('recvSku').value.trim();
   var desc = document.getElementById('recvDesc').value.trim();
-  var qty = parseInt(document.getElementById('recvQty').value, 10);
-  var note = document.getElementById('recvNote').value.trim();
+  var pallets = parseInt(document.getElementById('recvPallets').value, 10);
+  var perPallet = parseInt(document.getElementById('recvUnitsPerPallet').value, 10);
+  var userNote = document.getElementById('recvNote').value.trim();
   if (!sku) { alert('Enter a SKU.'); return; }
-  if (isNaN(qty) || qty <= 0) { alert('Enter a valid quantity.'); return; }
+  if (isNaN(pallets) || pallets <= 0) { alert('Enter a valid number of pallets.'); return; }
+  if (isNaN(perPallet) || perPallet <= 0) { alert('Enter a valid units-per-pallet.'); return; }
+  var qty = pallets * perPallet;
+  var palletTag = pallets + ' pallets x ' + perPallet + ' units each';
+  var note = palletTag + (userNote ? ' -- ' + userNote : '');
   var id = 'FK' + Date.now() + Math.floor(Math.random() * 1000);
   postRemoteChangeForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + qty + '&id=' + id + '&note=' + encodeURIComponent(note)).then(function(ok) {
     if (!ok) { alert('Could not reach the server -- check your connection and try again.'); return; }
     document.getElementById('recvSku').value = '';
     document.getElementById('recvDesc').value = '';
-    document.getElementById('recvQty').value = '';
+    document.getElementById('recvPallets').value = '';
+    document.getElementById('recvUnitsPerPallet').value = '';
+    document.getElementById('recvTotalDisplay').textContent = '';
     document.getElementById('recvNote').value = '';
     loadPendingGoods();
   });
+}
+
+// Pulls "N pallets x U units each" back out of a pending item's note
+// (written by logReceivedStock above), so the placement step can remind
+// the driver how many pallet spaces to expect. Returns null if the note
+// doesn't match that pattern (e.g. items received before this feature,
+// or manually via the main map's own Receive button).
+function parsePalletInfo(note) {
+  if (!note) return null;
+  var m = /^(\d+)\s*pallets?\s*x\s*(\d+)\s*units?\s*each/i.exec(note.trim());
+  if (!m) return null;
+  return {pallets: parseInt(m[1], 10), perPallet: parseInt(m[2], 10)};
 }
 
 function loadPendingGoods() {
@@ -189,12 +236,20 @@ function loadPendingGoods() {
     }
     window.lastPendingData = data.items;
     box.innerHTML = data.items.map(function(p, pi) {
+      var palletInfo = parsePalletInfo(p.note);
+      var qtyLine = palletInfo
+        ? 'Qty: ' + p.qty + ' units -- \uD83D\uDCE6 ' + palletInfo.pallets + ' pallet' + (palletInfo.pallets !== 1 ? 's' : '') + ' x ' + palletInfo.perPallet + ' each'
+        : 'Qty: ' + p.qty + (p.note ? ' -- ' + p.note : '');
+      var palletReminder = palletInfo
+        ? '<div style="font-size:12px;color:#B9770E;font-weight:700;margin-top:8px">\u26A0\uFE0F This is ' + palletInfo.pallets + ' separate pallet' + (palletInfo.pallets !== 1 ? 's' : '') + ' -- check ' + palletInfo.pallets + ' pallet space' + (palletInfo.pallets !== 1 ? 's' : '') + ' below (or place them one at a time).</div>'
+        : '';
       return '<div class="pend-item">' +
         '<div class="task-sku">' + p.sku + '</div>' +
         '<div class="task-desc">' + (p.desc || '') + '</div>' +
-        '<div style="font-size:13px;font-weight:700;color:#1F3864;margin-top:4px">Qty: ' + p.qty + (p.note ? ' -- ' + p.note : '') + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#1F3864;margin-top:4px">' + qtyLine + '</div>' +
         '<div style="font-size:11px;color:#999;margin-top:2px">Arrived: ' + (p.arrivedAt || '') + '</div>' +
         '<div id="placeForm' + pi + '" style="display:none">' +
+          palletReminder +
           '<div class="field-row">' +
             '<div><div class="field-label">Row</div><select id="placeRow' + pi + '" onchange="updateSideOptions(' + pi + ')">' +
               Object.keys(ROW_SPEC_JS).map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('') +
