@@ -50,6 +50,7 @@
   <div class="tabs">
     <div class="tab-btn active" id="tabSearchBtn" onclick="switchTab('search')">🔍 Search</div>
     <div class="tab-btn" id="tabPicklistBtn" onclick="switchTab('picklist')">📋 My Picklist</div>
+    <div class="tab-btn" id="tabPackBtn" onclick="switchTab('pack')">📦 Pack</div>
   </div>
   <div id="searchTab">
     <input type="text" id="si" placeholder="Search SKU or description..." autocomplete="off"/>
@@ -61,6 +62,9 @@
   </div>
   <div id="picklistTab" style="display:none">
     <div id="picklistContent"></div>
+  </div>
+  <div id="packTab" style="display:none">
+    <div id="packStationContent"></div>
   </div>
 </div>
 <script>
@@ -434,9 +438,12 @@ function switchTab(tab) {
   currentTab = tab;
   document.getElementById('tabSearchBtn').className = 'tab-btn' + (tab === 'search' ? ' active' : '');
   document.getElementById('tabPicklistBtn').className = 'tab-btn' + (tab === 'picklist' ? ' active' : '');
+  document.getElementById('tabPackBtn').className = 'tab-btn' + (tab === 'pack' ? ' active' : '');
   document.getElementById('searchTab').style.display = tab === 'search' ? 'block' : 'none';
   document.getElementById('picklistTab').style.display = tab === 'picklist' ? 'block' : 'none';
+  document.getElementById('packTab').style.display = tab === 'pack' ? 'block' : 'none';
   if (tab === 'picklist') renderPicklistTab();
+  if (tab === 'pack') renderPackStationTab();
 }
 
 function updatePickerNameTag() {
@@ -558,6 +565,7 @@ function renderPicklistTab() {
   var nextIdx = pl.items.findIndex(function(it) { return !it.picked; });
   if (nextIdx < 0) {
     el.innerHTML = '<div style="background:#EAF3DE;border:2px solid #27AE60;border-radius:8px;padding:16px;text-align:center;font-weight:700;color:#1E8449;font-size:15px">\ud83c\udf89 Pick list complete!</div>' +
+      '<div style="text-align:center;margin-top:12px"><button class="mark-btn" onclick="switchTab(\'pack\')">📦 Go to Pack Station</button></div>' +
       '<div style="text-align:center;margin-top:14px"><span style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer" onclick="pickerLogout()">Not ' + currentPicker + '? Switch picker</span></div>';
     guidedPickState = null;
     return;
@@ -851,6 +859,69 @@ function confirmGuidedPick() {
   }
   guidedPickState = null;
   setTimeout(renderPicklistTab, 700);
+}
+
+// Groups every batch-picked item (from any pick list, via its
+// orderBreakdown) by ORDER instead of by SKU -- the packer's view of
+// "what goes in this specific customer's box" rather than the picker's
+// view of "what to pick from which bay". Uses no new backend endpoint:
+// "packed" status is a lightweight 'orderpacked' entry in the same
+// change log everything else already uses (same pattern as login/logout),
+// so marking an order packed needs no server-side change at all. Mirrors
+// the manager map's showPackStation() exactly, so both surfaces agree.
+function renderPackStationTab() {
+  var body = document.getElementById('packStationContent');
+  if (!currentPicker) {
+    body.innerHTML = '<div class="status">Log in on the My Picklist tab first.</div>';
+    return;
+  }
+
+  var packedSet = {};
+  CHANGES.forEach(function(c) { if (c.type === 'orderpacked') packedSet[c.sku] = true; });
+
+  var orders = {};
+  getPickLists().forEach(function(pl) {
+    pl.items.forEach(function(item) {
+      if (!item.orderBreakdown || !item.orderBreakdown.length) return;
+      item.orderBreakdown.forEach(function(b) {
+        if (!orders[b.orderNumber]) orders[b.orderNumber] = {customerName: b.customerName || '', deliveryAddress: b.deliveryAddress || '', lines: []};
+        orders[b.orderNumber].lines.push({sku: item.sku, desc: item.desc, qty: b.qty});
+      });
+    });
+  });
+
+  var orderNumbers = Object.keys(orders);
+  if (!orderNumbers.length) {
+    body.innerHTML = '<div class="status">No batch-picked orders found yet.</div>';
+    return;
+  }
+  orderNumbers.sort(function(a, b) {
+    var ap = packedSet[a] ? 1 : 0, bp = packedSet[b] ? 1 : 0;
+    if (ap !== bp) return ap - bp;
+    return String(a).localeCompare(String(b));
+  });
+
+  body.innerHTML = '<div style="font-size:11px;color:#666;margin-bottom:8px">Orders grouped from batch picks -- tap Mark packed once boxed up.</div>' +
+    orderNumbers.map(function(on) {
+      var o = orders[on];
+      var packed = packedSet[on];
+      var linesHtml = o.lines.map(function(l) {
+        return '<div style="font-size:12px;margin:2px 0">' + l.sku + ' -- ' + (l.desc || '') + ' \u00d7' + l.qty + '</div>';
+      }).join('');
+      return '<div class="card" style="background:' + (packed ? '#EAF7EE' : '#F3EAF8') + ';border:1px solid ' + (packed ? '#BEE3C8' : '#D2B8E8') + '">' +
+        '<div class="sku">' + on + (o.customerName ? ' -- ' + o.customerName : '') +
+        (packed ? ' <span style="color:#1E8449;font-weight:700;font-size:12px">\u2705 Packed</span>' : '') + '</div>' +
+        (o.deliveryAddress ? '<div class="desc">' + o.deliveryAddress + '</div>' : '') +
+        linesHtml +
+        (packed ? '' : '<div style="text-align:right;margin-top:6px"><button class="mark-btn" onclick="markOrderPacked(\'' + on + '\')">Mark packed</button></div>') +
+        '</div>';
+    }).join('');
+}
+
+function markOrderPacked(orderNumber) {
+  postRemoteChange({type: 'orderpacked', sku: orderNumber, user: currentPicker, ts: Date.now()});
+  CHANGES.push({type: 'orderpacked', sku: orderNumber, user: currentPicker, ts: Date.now()});
+  renderPackStationTab();
 }
 
 loadData();
