@@ -491,6 +491,71 @@ function togglePickFace(sku,loc,makeCurrent){
   });
 }
 
+// Shows the Unleashed-derived "true" pick face quantity as a cross-check
+// alongside the picker's own manual pick-face count above -- NOT a
+// replacement for it. Reserve pallets are sealed and never opened until
+// moved to the pick face, so instead of manually recounting them: true
+// pick face qty = Unleashed's live total - (reserve pallets on the map x
+// units-per-pallet). Lets the manager set units-per-pallet once per SKU
+// if it isn't set yet.
+function fetchTruePickFaceInfo(sku){
+  var box=document.getElementById('truePickFaceBox');
+  if(!box)return;
+  jsonpFetch(apiUrl('truepickface=1&sku='+encodeURIComponent(sku))).then(function(data){
+    if(currentDetailSku!==sku)return;
+    if(!data){box.innerHTML='';return;}
+    if(!data.unitsPerPallet){
+      box.innerHTML='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:8px">\ud83d\udce6 Unleashed cross-check</div>'+
+        '<div style="font-size:11px;color:#888;margin-top:2px">No units-per-pallet set yet. '+
+        '<input type="number" id="upInput" placeholder="units per pallet" style="width:90px;padding:3px 6px;font-size:11px;border-radius:4px;border:1px solid #CCC"/> '+
+        '<a href="javascript:void(0)" onclick="saveUnitsPerPallet(\''+sku+'\')" style="color:#16A085">Save</a></div>';
+      return;
+    }
+    if(data.error){
+      box.innerHTML='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:8px">\ud83d\udce6 Unleashed cross-check</div>'+
+        '<div style="font-size:11px;color:#A32D2D;margin-top:2px">'+data.error+'</div>';
+      return;
+    }
+    var mismatch=data.mapTrackedPickFaceQty!=null&&data.mapTrackedPickFaceQty!==data.truePickFaceQty;
+    box.innerHTML='<div style="font-size:11px;font-weight:700;color:#374A5C;margin-top:8px">\ud83d\udce6 Unleashed cross-check ('+data.unitsPerPallet+'/pallet -- '+
+      '<a href="javascript:void(0)" onclick="editUnitsPerPallet(\''+sku+'\','+data.unitsPerPallet+')" style="color:#2980B9">edit</a>)</div>'+
+      '<div style="font-size:11px;color:#555;margin-top:2px">Unleashed total: <strong>'+data.unleashedQtyOnHand+'</strong> -- '+
+      data.reservePalletCount+' reserve pallet'+(data.reservePalletCount!==1?'s':'')+' x '+data.unitsPerPallet+' = '+data.reserveTotal+'</div>'+
+      '<div style="font-size:12px;font-weight:700;margin-top:2px;color:'+(mismatch?'#A32D2D':'#1E8449')+'">True pick face: '+data.truePickFaceQty+
+      (mismatch?' <span style="font-weight:400;font-size:10px">(map shows '+data.mapTrackedPickFaceQty+' -- worth a recount)</span>':'')+'</div>';
+  }).catch(function(){
+    if(currentDetailSku!==sku)return;
+    box.innerHTML='';
+  });
+}
+
+function saveUnitsPerPallet(sku){
+  var input=document.getElementById('upInput');
+  var units=parseInt(input.value,10);
+  if(isNaN(units)||units<=0){alert('Enter a valid number of units per pallet.');return;}
+  requirePin(function(){
+    var v=DATA.d[sku];
+    var desc=v?v[4]:'';
+    applyC({type:'setunitsperpallet',sku:sku,desc:desc,qty:units},true);
+    si2('Units per pallet saved.');
+    fetchTruePickFaceInfo(sku);
+  });
+}
+
+function editUnitsPerPallet(sku,currentUnits){
+  var entered=prompt('Units per pallet for '+sku+':',String(currentUnits));
+  if(entered===null)return;
+  var units=parseInt(entered.trim(),10);
+  if(isNaN(units)||units<=0){alert('Enter a valid number.');return;}
+  requirePin(function(){
+    var v=DATA.d[sku];
+    var desc=v?v[4]:'';
+    applyC({type:'setunitsperpallet',sku:sku,desc:desc,qty:units},true);
+    si2('Units per pallet updated.');
+    fetchTruePickFaceInfo(sku);
+  });
+}
+
 function postRemoteChange(change){
   return new Promise(function(resolve){
     var img=new Image();
@@ -3789,6 +3854,7 @@ function showR(sku){
     '<div class="pills"><span class="p" style="background:#DEEAF1;color:#1F3864">'+v[5]+'</span><span class="p" style="background:'+abcBg+';color:'+abcFg+'">'+v[6]+'</span><span class="p" style="background:'+palBg+';color:#7F3F00">'+v[8]+' pallet'+(v[8]>1?'s':'')+'</span></div>'+
     '<div id="unleashedStockBox" style="margin:6px 0;font-size:11px;color:#888">Loading live Unleashed stock...</div>'+
     '<div id="pickFaceBox"></div>'+
+    '<div id="truePickFaceBox"></div>'+
     suggHtml+
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
@@ -3809,6 +3875,7 @@ function showR(sku){
   currentDetailSku=key;
   fetchUnleashedStock(key);
   if(placed){fetchPickFaceInfo(key,locs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
+  fetchTruePickFaceInfo(key);
 }
 
 // Entry point for searching "MIXED" -- always offers both starting a brand
