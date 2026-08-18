@@ -2245,23 +2245,27 @@ var ROW_WALK_ORDER=['A','B','C','D'];
 // Rows E, F, and G are walked in REVERSE bay order -- their end closest to
 // the loading area is the highest bay number (E starts at 38, G at 13, F
 // at 4), unlike every other row which starts from bay 1. Confirmed
-// directly by warehouse staff 18 Aug 2026. Level ordering (bottom first,
-// then up) needs no separate rule -- it's already the ascending tiebreaker
-// below, applied after bay.
+// directly by warehouse staff 18 Aug 2026.
 var REVERSED_BAY_ROWS=['E','F','G'];
 
+// LEVEL is checked BEFORE bay distance -- a picker always exhausts level 1
+// options across the whole row before ever going up to level 2+, even if
+// that means walking further within the row than a level-3 spot would
+// need. Confirmed directly by warehouse staff 18 Aug 2026 (a level-3 pick
+// was wrongly chosen over a level-1 option in a different bay of the same
+// row). Bay distance (respecting the reversed direction above) only comes
+// in as the tiebreaker once level matches.
 function sortLocationsByWalkPath(locs){
   return locs.slice().sort(function(a,b){
     var pa=a.split('-'),pb=b.split('-');
     var ia=ROW_WALK_ORDER.indexOf(pa[0]);if(ia<0)ia=999;
     var ib=ROW_WALK_ORDER.indexOf(pb[0]);if(ib<0)ib=999;
     if(ia!==ib)return ia-ib;
+    var lvla=parseInt(pa[2],10),lvlb=parseInt(pb[2],10);
+    if(lvla!==lvlb)return lvla-lvlb;
     var baya=parseInt(pa[1],10),bayb=parseInt(pb[1],10);
-    if(baya!==bayb){
-      var reversed=REVERSED_BAY_ROWS.indexOf(pa[0])>=0; // pa[0]===pb[0] here since ia===ib
-      return reversed?(bayb-baya):(baya-bayb);
-    }
-    return parseInt(pa[2],10)-parseInt(pb[2],10);
+    var reversed=REVERSED_BAY_ROWS.indexOf(pa[0])>=0; // pa[0]===pb[0] here since ia===ib
+    return reversed?(bayb-baya):(baya-bayb);
   });
 }
 
