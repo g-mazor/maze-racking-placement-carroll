@@ -27,26 +27,55 @@
   #skuSuggestList div{padding:8px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F0F0}
   #skuSuggestList div:hover,#skuSuggestList div:active{background:#F0F7FF}
   #skuSuggestList div span{color:#888;margin-left:8px;font-size:11px}
+  .tabs{display:flex;background:#8A5A0B}
+  .tab{flex:1;text-align:center;padding:10px;font-size:13px;font-weight:700;color:#F0D9B5;cursor:pointer}
+  .tab.active{color:#FFF;background:#B9770E}
+  .pend-item{background:#FFF;border-radius:8px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:2px solid #B7D3EE}
+  .field-row{display:flex;gap:6px;margin-top:8px}
+  .field-row select,.field-row input{padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC}
+  .field-label{font-size:10px;color:#888;margin-bottom:2px}
 </style>
 </head>
 <body>
-<div class="hdr"><span>🚜 Replenishment</span><button class="refresh-btn" onclick="loadTasks()">Refresh</button></div>
+<div class="hdr"><span>🚜 Forklift</span><button class="refresh-btn" onclick="refreshCurrentTab()">Refresh</button></div>
+<div class="tabs" id="tabBar" style="display:none">
+  <div class="tab active" id="tabReplenishBtn" onclick="switchForkliftTab('replenish')">🔄 Replenish</div>
+  <div class="tab" id="tabReceiveBtn" onclick="switchForkliftTab('receive')">📥 Receive</div>
+</div>
 <div class="wrap">
   <div id="loginBox" class="login-box">
-    <div style="margin-bottom:12px;font-weight:600">Enter your replenishment access code</div>
+    <div style="margin-bottom:12px;font-weight:600">Enter your access code</div>
     <input type="password" id="codeInput" placeholder="Access code" style="width:100%;padding:10px;font-size:15px;border-radius:8px;border:1.5px solid #CCC;margin-bottom:10px;box-sizing:border-box"/>
     <button class="login-btn" onclick="doLogin()">Log in</button>
   </div>
   <div id="mainBox" style="display:none">
-    <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:6px">Choose what to replenish yourself</div>
-      <div id="skuSearchWrap">
-        <input type="text" id="skuSearchInput" placeholder="Search by SKU or name..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
-        <div id="skuSuggestList"></div>
+    <div id="replenishTabContent">
+      <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:6px">Choose what to replenish yourself</div>
+        <div id="skuSearchWrap">
+          <input type="text" id="skuSearchInput" placeholder="Search by SKU or name..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+          <div id="skuSuggestList"></div>
+        </div>
+        <div id="skuSearchResult" style="margin-top:10px"></div>
       </div>
-      <div id="skuSearchResult" style="margin-top:10px"></div>
+      <div id="tasksBox"></div>
     </div>
-    <div id="tasksBox"></div>
+    <div id="receiveTabContent" style="display:none">
+      <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:8px">📥 Log new incoming stock</div>
+        <div class="field-label">SKU</div>
+        <input type="text" id="recvSku" placeholder="SKU code" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div class="field-label" style="margin-top:6px">Description</div>
+        <input type="text" id="recvDesc" placeholder="Product description" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div class="field-label" style="margin-top:6px">Quantity</div>
+        <input type="number" id="recvQty" placeholder="How many arrived" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div class="field-label" style="margin-top:6px">Note (container #, supplier, etc -- optional)</div>
+        <input type="text" id="recvNote" placeholder="Note" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div style="text-align:center;margin-top:10px"><button class="login-btn" onclick="logReceivedStock()">Log as received</button></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:8px">📤 Pending -- not yet placed</div>
+      <div id="pendingBox"></div>
+    </div>
   </div>
 </div>
 <script>
@@ -76,12 +105,141 @@ function doLogin() {
   accessCode = entered;
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('mainBox').style.display = 'block';
+  document.getElementById('tabBar').style.display = 'flex';
   loadTasks();
 }
+
+var currentForkliftTab = 'replenish';
+function switchForkliftTab(tab) {
+  currentForkliftTab = tab;
+  document.getElementById('tabReplenishBtn').className = 'tab' + (tab === 'replenish' ? ' active' : '');
+  document.getElementById('tabReceiveBtn').className = 'tab' + (tab === 'receive' ? ' active' : '');
+  document.getElementById('replenishTabContent').style.display = tab === 'replenish' ? 'block' : 'none';
+  document.getElementById('receiveTabContent').style.display = tab === 'receive' ? 'block' : 'none';
+  if (tab === 'receive') loadPendingGoods();
+}
+
+function refreshCurrentTab() {
+  if (currentForkliftTab === 'replenish') loadTasks();
+  else loadPendingGoods();
+}
+
+// Row/bay/level/side bounds, mirrored from Code.gs ROW_SPEC -- used only
+// for client-side dropdown population and a quick sanity check before
+// sending; the server (validateForkliftPlacement_) is still the real
+// authority and re-checks everything.
+var ROW_SPEC_JS = {
+  A:{bays:39,levels:3,sides:2}, AA:{bays:39,levels:3,sides:2},
+  B:{bays:38,levels:4,sides:2}, C:{bays:38,levels:4,sides:2}, D:{bays:38,levels:4,sides:2},
+  E:{bays:38,levels:3,sides:2}, F:{bays:4,levels:4,sides:3}, G:{bays:13,levels:4,sides:3}, H:{bays:12,levels:3,sides:2}
+};
 
 function fl(loc) {
   var p = loc.split('-');
   return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
+}
+
+// Step 1: log that stock has arrived (no location yet) -- same 'receive'
+// event the manager's own Receive button already uses, so it shows up in
+// the same Pending Goods-in list either surface reads.
+function logReceivedStock() {
+  var sku = document.getElementById('recvSku').value.trim();
+  var desc = document.getElementById('recvDesc').value.trim();
+  var qty = parseInt(document.getElementById('recvQty').value, 10);
+  var note = document.getElementById('recvNote').value.trim();
+  if (!sku) { alert('Enter a SKU.'); return; }
+  if (isNaN(qty) || qty <= 0) { alert('Enter a valid quantity.'); return; }
+  var id = 'FK' + Date.now() + Math.floor(Math.random() * 1000);
+  jsonpFetchForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + qty + '&id=' + id + '&note=' + encodeURIComponent(note)).then(function() {
+    document.getElementById('recvSku').value = '';
+    document.getElementById('recvDesc').value = '';
+    document.getElementById('recvQty').value = '';
+    document.getElementById('recvNote').value = '';
+    loadPendingGoods();
+  }).catch(function() {
+    alert('Could not reach the server -- check your connection and try again.');
+  });
+}
+
+function loadPendingGoods() {
+  var box = document.getElementById('pendingBox');
+  box.innerHTML = '<div class="status">Loading...</div>';
+  jsonpFetchForklift('pendinggoods=1').then(function(data) {
+    if (!data || !data.items || !data.items.length) {
+      box.innerHTML = '<div class="status">Nothing pending right now.</div>';
+      return;
+    }
+    window.lastPendingData = data.items;
+    box.innerHTML = data.items.map(function(p, pi) {
+      return '<div class="pend-item">' +
+        '<div class="task-sku">' + p.sku + '</div>' +
+        '<div class="task-desc">' + (p.desc || '') + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#1F3864;margin-top:4px">Qty: ' + p.qty + (p.note ? ' -- ' + p.note : '') + '</div>' +
+        '<div style="font-size:11px;color:#999;margin-top:2px">Arrived: ' + (p.arrivedAt || '') + '</div>' +
+        '<div id="placeForm' + pi + '" style="display:none">' +
+          '<div class="field-row">' +
+            '<div><div class="field-label">Row</div><select id="placeRow' + pi + '" onchange="updateSideOptions(' + pi + ')">' +
+              Object.keys(ROW_SPEC_JS).map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('') +
+            '</select></div>' +
+            '<div><div class="field-label">Bay</div><input type="number" id="placeBay' + pi + '" style="width:60px"/></div>' +
+            '<div><div class="field-label">Level</div><input type="number" id="placeLevel' + pi + '" style="width:60px"/></div>' +
+            '<div><div class="field-label">Side</div><select id="placeSide' + pi + '"></select></div>' +
+          '</div>' +
+          '<div style="text-align:center;margin-top:8px"><button class="login-btn" style="padding:8px 16px;font-size:13px" onclick="confirmPlacePending(' + pi + ')">Place it here</button></div>' +
+        '</div>' +
+        '<div style="text-align:right;margin-top:8px"><button class="login-btn" style="padding:6px 12px;font-size:12px" onclick="togglePlaceForm(' + pi + ')">Place on map</button></div>' +
+        '</div>';
+    }).join('');
+    // populate side dropdowns with their row's default (first row) options
+    data.items.forEach(function(p, pi) { updateSideOptions(pi); });
+  }).catch(function() {
+    box.innerHTML = '<div class="status" style="color:#A32D2D">Could not load. <a href="javascript:void(0)" onclick="loadPendingGoods()">Retry</a></div>';
+  });
+}
+
+function togglePlaceForm(pi) {
+  var form = document.getElementById('placeForm' + pi);
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function updateSideOptions(pi) {
+  var row = document.getElementById('placeRow' + pi).value;
+  var sideSel = document.getElementById('placeSide' + pi);
+  var spec = ROW_SPEC_JS[row];
+  var options = spec.sides === 3 ? ['1', '2', '3'] : ['L', 'R'];
+  sideSel.innerHTML = options.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+}
+
+// Places a pending item onto the map: sends 'add' (validated server-side
+// against occupancy + row/bay/level bounds, since this page has no
+// visual grid), then 'receiveresolve' to clear it from Pending -- the
+// exact same two-step the manager map's own Pending Goods-in panel uses.
+function confirmPlacePending(pi) {
+  var p = window.lastPendingData[pi];
+  var row = document.getElementById('placeRow' + pi).value;
+  var bay = parseInt(document.getElementById('placeBay' + pi).value, 10);
+  var level = parseInt(document.getElementById('placeLevel' + pi).value, 10);
+  var side = document.getElementById('placeSide' + pi).value;
+  if (isNaN(bay) || isNaN(level)) { alert('Enter a bay and level number.'); return; }
+  var spec = ROW_SPEC_JS[row];
+  if (bay < 1 || bay > spec.bays) { alert('Bay must be between 1 and ' + spec.bays + ' for row ' + row + '.'); return; }
+  if (level < 1 || level > spec.levels) { alert('Level must be between 1 and ' + spec.levels + ' for row ' + row + '.'); return; }
+  var bayStr = String(bay).padStart(2, '0');
+  var rawLoc = row + '-' + bayStr + '-' + level + '-' + side;
+  var readableLoc = row + '-B' + bay + '-L' + level + '-' + side;
+  if (!confirm('Place ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '?')) return;
+  jsonpFetchForklift('beacon=1&type=add&sku=' + encodeURIComponent(p.sku) + '&desc=' + encodeURIComponent(p.desc || '') + '&qty=' + p.qty + '&tl=' + encodeURIComponent(JSON.stringify([rawLoc]))).then(function(result) {
+    if (result && result.ok === false) {
+      alert('Could not place: ' + result.error);
+      return;
+    }
+    return jsonpFetchForklift('beacon=1&type=receiveresolve&id=' + encodeURIComponent(p.id)).then(function() {
+      alert('Placed ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '.');
+      loadPendingGoods();
+    });
+  }).catch(function() {
+    alert('Could not reach the server -- check your connection and try again.');
+  });
 }
 
 // Live-as-you-type autocomplete, matching the exact search UX already
