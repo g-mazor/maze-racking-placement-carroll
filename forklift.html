@@ -142,6 +142,22 @@ function fl(loc) {
   return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
 }
 
+// The actual writes ('add', 'receive', 'receiveresolve') return a tiny
+// image-pixel response everywhere else in this app -- they are
+// fire-and-forget beacons, NEVER JSONP. This mirrors postRemoteChange in
+// index.html/search.html exactly, using an <img> load instead of a
+// <script> callback, so these calls actually resolve instead of timing
+// out waiting for a JSON response that will never arrive.
+function postRemoteChangeForklift(params) {
+  return new Promise(function(resolve) {
+    var img = new Image();
+    var timer = setTimeout(function() { resolve(false); }, 8000);
+    img.onload = function() { clearTimeout(timer); resolve(true); };
+    img.onerror = function() { clearTimeout(timer); resolve(false); };
+    img.src = SHEET_API + '?ac=' + encodeURIComponent(accessCode) + '&' + params + '&t=' + Date.now();
+  });
+}
+
 // Step 1: log that stock has arrived (no location yet) -- same 'receive'
 // event the manager's own Receive button already uses, so it shows up in
 // the same Pending Goods-in list either surface reads.
@@ -153,14 +169,13 @@ function logReceivedStock() {
   if (!sku) { alert('Enter a SKU.'); return; }
   if (isNaN(qty) || qty <= 0) { alert('Enter a valid quantity.'); return; }
   var id = 'FK' + Date.now() + Math.floor(Math.random() * 1000);
-  jsonpFetchForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + qty + '&id=' + id + '&note=' + encodeURIComponent(note)).then(function() {
+  postRemoteChangeForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + qty + '&id=' + id + '&note=' + encodeURIComponent(note)).then(function(ok) {
+    if (!ok) { alert('Could not reach the server -- check your connection and try again.'); return; }
     document.getElementById('recvSku').value = '';
     document.getElementById('recvDesc').value = '';
     document.getElementById('recvQty').value = '';
     document.getElementById('recvNote').value = '';
     loadPendingGoods();
-  }).catch(function() {
-    alert('Could not reach the server -- check your connection and try again.');
   });
 }
 
@@ -186,14 +201,15 @@ function loadPendingGoods() {
             '</select></div>' +
             '<div><div class="field-label">Bay</div><input type="number" id="placeBay' + pi + '" style="width:60px"/></div>' +
             '<div><div class="field-label">Level</div><input type="number" id="placeLevel' + pi + '" style="width:60px"/></div>' +
-            '<div><div class="field-label">Side</div><select id="placeSide' + pi + '"></select></div>' +
           '</div>' +
+          '<div class="field-label" style="margin-top:8px">Pallet space(s) this takes -- check every side it needs</div>' +
+          '<div id="placeSides' + pi + '" style="display:flex;gap:10px;margin-top:4px"></div>' +
           '<div style="text-align:center;margin-top:8px"><button class="login-btn" style="padding:8px 16px;font-size:13px" onclick="confirmPlacePending(' + pi + ')">Place it here</button></div>' +
         '</div>' +
         '<div style="text-align:right;margin-top:8px"><button class="login-btn" style="padding:6px 12px;font-size:12px" onclick="togglePlaceForm(' + pi + ')">Place on map</button></div>' +
         '</div>';
     }).join('');
-    // populate side dropdowns with their row's default (first row) options
+    // populate side checkboxes with their row's default (first row) options
     data.items.forEach(function(p, pi) { updateSideOptions(pi); });
   }).catch(function() {
     box.innerHTML = '<div class="status" style="color:#A32D2D">Could not load. <a href="javascript:void(0)" onclick="loadPendingGoods()">Retry</a></div>';
@@ -205,40 +221,54 @@ function togglePlaceForm(pi) {
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
+// Sides shown as CHECKBOXES, not a single dropdown -- a pallet can take
+// more than one shelf space (e.g. an oversized item needing 2 or 3
+// sides), and only checking one would silently cram the whole quantity
+// into a single space. Confirmed needed 18 Aug 2026: 4 pallets were being
+// forced into 1 space with the old single-side dropdown.
 function updateSideOptions(pi) {
   var row = document.getElementById('placeRow' + pi).value;
-  var sideSel = document.getElementById('placeSide' + pi);
+  var wrap = document.getElementById('placeSides' + pi);
   var spec = ROW_SPEC_JS[row];
   var options = spec.sides === 3 ? ['1', '2', '3'] : ['L', 'R'];
-  sideSel.innerHTML = options.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+  wrap.innerHTML = options.map(function(s) {
+    return '<label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="sideCb' + pi + '" value="' + s + '"/>' + s + '</label>';
+  }).join('');
 }
 
-// Places a pending item onto the map: sends 'add' (validated server-side
-// against occupancy + row/bay/level bounds, since this page has no
-// visual grid), then 'receiveresolve' to clear it from Pending -- the
-// exact same two-step the manager map's own Pending Goods-in panel uses.
+// Places a pending item onto the map, across however many pallet spaces
+// were checked. Pre-validates via the dedicated JSONP endpoint FIRST (for
+// a real error message), then sends the actual 'add' (fire-and-forget
+// image-pixel, matching the rest of the app), then 'receiveresolve' to
+// clear it from Pending -- the same two-step the manager map's own
+// Pending Goods-in panel uses.
 function confirmPlacePending(pi) {
   var p = window.lastPendingData[pi];
   var row = document.getElementById('placeRow' + pi).value;
   var bay = parseInt(document.getElementById('placeBay' + pi).value, 10);
   var level = parseInt(document.getElementById('placeLevel' + pi).value, 10);
-  var side = document.getElementById('placeSide' + pi).value;
+  var checkedSides = Array.prototype.slice.call(document.querySelectorAll('.sideCb' + pi + ':checked')).map(function(cb) { return cb.value; });
   if (isNaN(bay) || isNaN(level)) { alert('Enter a bay and level number.'); return; }
+  if (!checkedSides.length) { alert('Check at least one pallet space (side).'); return; }
   var spec = ROW_SPEC_JS[row];
   if (bay < 1 || bay > spec.bays) { alert('Bay must be between 1 and ' + spec.bays + ' for row ' + row + '.'); return; }
   if (level < 1 || level > spec.levels) { alert('Level must be between 1 and ' + spec.levels + ' for row ' + row + '.'); return; }
   var bayStr = String(bay).padStart(2, '0');
-  var rawLoc = row + '-' + bayStr + '-' + level + '-' + side;
-  var readableLoc = row + '-B' + bay + '-L' + level + '-' + side;
-  if (!confirm('Place ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '?')) return;
-  jsonpFetchForklift('beacon=1&type=add&sku=' + encodeURIComponent(p.sku) + '&desc=' + encodeURIComponent(p.desc || '') + '&qty=' + p.qty + '&tl=' + encodeURIComponent(JSON.stringify([rawLoc]))).then(function(result) {
-    if (result && result.ok === false) {
-      alert('Could not place: ' + result.error);
+  var rawLocs = checkedSides.map(function(side) { return row + '-' + bayStr + '-' + level + '-' + side; });
+  var readableLoc = row + '-B' + bay + '-L' + level + ' (side' + (checkedSides.length > 1 ? 's ' : ' ') + checkedSides.join('+') + ')';
+
+  jsonpFetchForklift('validateplacement=1&tl=' + encodeURIComponent(JSON.stringify(rawLocs))).then(function(check) {
+    if (!check || check.ok === false) {
+      alert('Could not place: ' + (check && check.error ? check.error : 'validation failed'));
       return;
     }
-    return jsonpFetchForklift('beacon=1&type=receiveresolve&id=' + encodeURIComponent(p.id)).then(function() {
-      alert('Placed ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '.');
-      loadPendingGoods();
+    if (!confirm('Place ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + ' (' + checkedSides.length + ' pallet space' + (checkedSides.length > 1 ? 's' : '') + ')?')) return;
+    postRemoteChangeForklift('beacon=1&type=add&sku=' + encodeURIComponent(p.sku) + '&desc=' + encodeURIComponent(p.desc || '') + '&qty=' + p.qty + '&tl=' + encodeURIComponent(JSON.stringify(rawLocs))).then(function(ok) {
+      if (!ok) { alert('Could not reach the server -- check your connection and try again.'); return; }
+      postRemoteChangeForklift('beacon=1&type=receiveresolve&id=' + encodeURIComponent(p.id)).then(function() {
+        alert('Placed ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '.');
+        loadPendingGoods();
+      });
     });
   }).catch(function() {
     alert('Could not reach the server -- check your connection and try again.');
