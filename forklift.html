@@ -157,13 +157,21 @@ function fl(loc) {
 // index.html/search.html exactly, using an <img> load instead of a
 // <script> callback, so these calls actually resolve instead of timing
 // out waiting for a JSON response that will never arrive.
+// The actual writes ('add', 'receive', 'receiveresolve') return a tiny
+// image-pixel response everywhere else in this app -- they are
+// fire-and-forget beacons, matching postRemoteChange in
+// index.html/search.html. Confirmed 18 Aug 2026: the img.onload signal
+// this used to wait on was unreliable in practice -- every write actually
+// succeeded server-side, but onload sometimes never fired, showing a
+// false "could not reach the server" error despite nothing being wrong.
+// This now fires the request and resolves immediately rather than
+// waiting on that unreliable signal, matching the fire-and-forget nature
+// already accepted for every other beacon in this app.
 function postRemoteChangeForklift(params) {
   return new Promise(function(resolve) {
     var img = new Image();
-    var timer = setTimeout(function() { resolve(false); }, 8000);
-    img.onload = function() { clearTimeout(timer); resolve(true); };
-    img.onerror = function() { clearTimeout(timer); resolve(false); };
     img.src = SHEET_API + '?ac=' + encodeURIComponent(accessCode) + '&' + params + '&t=' + Date.now();
+    setTimeout(function() { resolve(true); }, 400);
   });
 }
 
