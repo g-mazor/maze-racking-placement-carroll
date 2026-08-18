@@ -22,6 +22,11 @@
   .login-box{background:#FFF;border-radius:8px;padding:20px;text-align:center;margin-top:40px}
   .login-btn{background:#B9770E;color:#FFF;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer}
   .refresh-btn{background:none;border:none;color:#FFF;font-size:13px;cursor:pointer;text-decoration:underline}
+  #skuSearchWrap{position:relative;flex:1}
+  #skuSuggestList{position:absolute;top:100%;left:0;right:0;background:#FFF;border:1.5px solid #CCC;border-radius:6px;max-height:200px;overflow-y:auto;z-index:999;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  #skuSuggestList div{padding:8px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F0F0}
+  #skuSuggestList div:hover,#skuSuggestList div:active{background:#F0F7FF}
+  #skuSuggestList div span{color:#888;margin-left:8px;font-size:11px}
 </style>
 </head>
 <body>
@@ -35,9 +40,9 @@
   <div id="mainBox" style="display:none">
     <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
       <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:6px">Choose what to replenish yourself</div>
-      <div style="display:flex;gap:6px">
-        <input type="text" id="skuSearchInput" placeholder="Type a SKU..." style="flex:1;padding:8px 10px;font-size:14px;border-radius:6px;border:1.5px solid #CCC"/>
-        <button class="login-btn" style="padding:8px 14px;font-size:13px" onclick="searchSku()">Search</button>
+      <div id="skuSearchWrap">
+        <input type="text" id="skuSearchInput" placeholder="Search by SKU or name..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+        <div id="skuSuggestList"></div>
       </div>
       <div id="skuSearchResult" style="margin-top:10px"></div>
     </div>
@@ -79,14 +84,53 @@ function fl(loc) {
   return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
 }
 
-// Manual, proactive path: driver types any SKU and sees its pick bay +
-// reserve options directly, regardless of whether it's auto-flagged as
-// urgently empty. Confirmed needed 18 Aug 2026: since picks aren't synced
-// to Unleashed yet, everything here runs off this app's own stock counts,
-// and the driver should be able to choose what to replenish themselves,
-// not only react to the zero-stock task list.
-function searchSku() {
-  var sku = document.getElementById('skuSearchInput').value.trim();
+// Live-as-you-type autocomplete, matching the exact search UX already
+// used on the main map (name or SKU both work). Debounced so it doesn't
+// fire a request on every keystroke.
+var skuSearchDebounce = null;
+document.addEventListener('DOMContentLoaded', function() {
+  var input = document.getElementById('skuSearchInput');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    clearTimeout(skuSearchDebounce);
+    var q = input.value.trim();
+    if (q.length < 2) { document.getElementById('skuSuggestList').style.display = 'none'; return; }
+    skuSearchDebounce = setTimeout(function() { fetchSkuSuggestions(q); }, 250);
+  });
+  document.addEventListener('click', function(e) {
+    if (e.target.id !== 'skuSearchInput') document.getElementById('skuSuggestList').style.display = 'none';
+  });
+});
+
+function fetchSkuSuggestions(q) {
+  jsonpFetchForklift('replenishmentskusuggest=1&q=' + encodeURIComponent(q)).then(function(data) {
+    var list = document.getElementById('skuSuggestList');
+    if (!data || !data.results || !data.results.length) {
+      list.innerHTML = '<div style="color:#999">No matching pick bays found.</div>';
+      list.style.display = 'block';
+      return;
+    }
+    list.innerHTML = data.results.map(function(r) {
+      return '<div onclick="selectSuggestedSku(\'' + r.sku.replace(/'/g, "\\'") + '\')"><strong>' + r.sku + '</strong><span>' + (r.desc || '') + '</span></div>';
+    }).join('');
+    list.style.display = 'block';
+  }).catch(function() {});
+}
+
+function selectSuggestedSku(sku) {
+  document.getElementById('skuSearchInput').value = sku;
+  document.getElementById('skuSuggestList').style.display = 'none';
+  searchSku(sku);
+}
+
+// Manual, proactive path: driver picks any SKU (via the search above) and
+// sees its pick bay + reserve options directly, regardless of whether
+// it's auto-flagged as urgently empty. Confirmed needed 18 Aug 2026: since
+// picks aren't synced to Unleashed yet, everything here runs off this
+// app's own stock counts, and the driver should be able to choose what to
+// replenish themselves, not only react to the zero-stock task list.
+function searchSku(skuOverride) {
+  var sku = skuOverride || document.getElementById('skuSearchInput').value.trim();
   var box = document.getElementById('skuSearchResult');
   if (!sku) { box.innerHTML = ''; return; }
   box.innerHTML = '<div class="status">Searching...</div>';

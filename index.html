@@ -4277,6 +4277,7 @@ var guidedShowingFullList=false;
 
 function togglePickerFullList(){
   guidedShowingFullList=!guidedShowingFullList;
+  window.pickListFilterQuery='';
   renderPickerAssignedList();
 }
 
@@ -4327,10 +4328,16 @@ function renderPickerAssignedList(){
 
   if(guidedShowingFullList){
     var doneCount2=pl.items.filter(function(it){return it.picked;}).length;
+    var q=(window.pickListFilterQuery||'').toLowerCase();
+    var filteredItems=q?pl.items.filter(function(it){return it.sku.toLowerCase().indexOf(q)>=0||(it.desc||'').toLowerCase().indexOf(q)>=0;}):pl.items;
     var html2='<div style="background:#FFF;border:2px solid #16A085;border-radius:10px;padding:14px">'+
       '<div style="font-weight:700;color:#16A085;margin-bottom:8px">📋 Full pick list -- '+doneCount2+' of '+pl.items.length+' done</div>'+
+      '<input type="text" id="pickListFilterInput" placeholder="Search by SKU or name..." autocomplete="off" value="'+(window.pickListFilterQuery||'')+'" '+
+      'oninput="window.pickListFilterQuery=this.value;renderPickerAssignedList();setTimeout(function(){var el=document.getElementById(\'pickListFilterInput\');if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}},0)" '+
+      'style="width:100%;padding:8px 10px;font-size:13px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box;margin-bottom:8px"/>'+
       '<div style="font-size:11px;color:#666;margin-bottom:8px">Tap any item to record what you\'re taking now -- partial amounts are saved, so you can pick some now and come back for the rest.</div>'+
-      pl.items.map(function(it,i){
+      (filteredItems.length?filteredItems.map(function(it){
+        var i=pl.items.indexOf(it);
         var soFar=it.pickedSoFar||0;
         var remaining=Math.max(0,it.qty-soFar);
         var breakdownHtml=it.picked?'':buildBreakdownHtml(it.orderBreakdown,'#7A5B00');
@@ -4339,7 +4346,7 @@ function renderPickerAssignedList(){
           (it.picked?'✅':(i+1)+'.')+' '+it.sku+' -- '+it.desc+' -- '+(soFar>0&&!it.picked?soFar+' of '+it.qty+' taken, '+remaining+' left':'qty '+it.qty)+' at '+fl(it.loc)+
           '</div>'+breakdownHtml+
           '</div>';
-      }).join('')+
+      }).join(''):'<div style="font-size:12px;color:#999;text-align:center;padding:10px">No items match "'+(window.pickListFilterQuery||'')+'"</div>')+
       '<div style="text-align:center;margin-top:10px"><button class="btn btn-blue" onclick="togglePickerFullList()">Back to current pick</button></div>'+
       '</div>';
     container.innerHTML=html2;
