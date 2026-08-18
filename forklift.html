@@ -23,10 +23,10 @@
   .login-btn{background:#B9770E;color:#FFF;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer}
   .refresh-btn{background:none;border:none;color:#FFF;font-size:13px;cursor:pointer;text-decoration:underline}
   #skuSearchWrap{position:relative;flex:1}
-  #skuSuggestList{position:absolute;top:100%;left:0;right:0;background:#FFF;border:1.5px solid #CCC;border-radius:6px;max-height:200px;overflow-y:auto;z-index:999;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
-  #skuSuggestList div{padding:8px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F0F0}
-  #skuSuggestList div:hover,#skuSuggestList div:active{background:#F0F7FF}
-  #skuSuggestList div span{color:#888;margin-left:8px;font-size:11px}
+  #skuSuggestList,#recvSuggestList{position:absolute;top:100%;left:0;right:0;background:#FFF;border:1.5px solid #CCC;border-radius:6px;max-height:200px;overflow-y:auto;z-index:999;display:none;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  #skuSuggestList div,#recvSuggestList div{padding:8px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F0F0}
+  #skuSuggestList div:hover,#skuSuggestList div:active,#recvSuggestList div:hover,#recvSuggestList div:active{background:#F0F7FF}
+  #skuSuggestList div span,#recvSuggestList div span{color:#888;margin-left:8px;font-size:11px}
   .tabs{display:flex;background:#8A5A0B}
   .tab{flex:1;text-align:center;padding:10px;font-size:13px;font-weight:700;color:#F0D9B5;cursor:pointer}
   .tab.active{color:#FFF;background:#B9770E}
@@ -64,8 +64,11 @@
       <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
         <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:8px">📥 Log new incoming stock</div>
         <div class="field-label">SKU</div>
-        <input type="text" id="recvSku" placeholder="SKU code" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
-        <div class="field-label" style="margin-top:6px">Description</div>
+        <div id="recvSkuWrap" style="position:relative">
+          <input type="text" id="recvSku" placeholder="Search by SKU or name..." autocomplete="off" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
+          <div id="recvSuggestList"></div>
+        </div>
+        <div class="field-label" style="margin-top:6px">Description (auto-fills when you pick a match, or type your own for a new SKU)</div>
         <input type="text" id="recvDesc" placeholder="Product description" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
         <div class="field-label" style="margin-top:6px">Quantity</div>
         <input type="number" id="recvQty" placeholder="How many arrived" style="width:100%;padding:8px;font-size:14px;border-radius:6px;border:1.5px solid #CCC;box-sizing:border-box"/>
@@ -246,19 +249,54 @@ function confirmPlacePending(pi) {
 // used on the main map (name or SKU both work). Debounced so it doesn't
 // fire a request on every keystroke.
 var skuSearchDebounce = null;
+var recvSearchDebounce = null;
 document.addEventListener('DOMContentLoaded', function() {
   var input = document.getElementById('skuSearchInput');
-  if (!input) return;
-  input.addEventListener('input', function() {
-    clearTimeout(skuSearchDebounce);
-    var q = input.value.trim();
-    if (q.length < 2) { document.getElementById('skuSuggestList').style.display = 'none'; return; }
-    skuSearchDebounce = setTimeout(function() { fetchSkuSuggestions(q); }, 250);
-  });
+  if (input) {
+    input.addEventListener('input', function() {
+      clearTimeout(skuSearchDebounce);
+      var q = input.value.trim();
+      if (q.length < 2) { document.getElementById('skuSuggestList').style.display = 'none'; return; }
+      skuSearchDebounce = setTimeout(function() { fetchSkuSuggestions(q); }, 250);
+    });
+  }
+  var recvInput = document.getElementById('recvSku');
+  if (recvInput) {
+    recvInput.addEventListener('input', function() {
+      clearTimeout(recvSearchDebounce);
+      var q = recvInput.value.trim();
+      if (q.length < 2) { document.getElementById('recvSuggestList').style.display = 'none'; return; }
+      recvSearchDebounce = setTimeout(function() { fetchReceivingSuggestions(q); }, 250);
+    });
+  }
   document.addEventListener('click', function(e) {
     if (e.target.id !== 'skuSearchInput') document.getElementById('skuSuggestList').style.display = 'none';
+    if (e.target.id !== 'recvSku') document.getElementById('recvSuggestList').style.display = 'none';
   });
 });
+
+function fetchReceivingSuggestions(q) {
+  jsonpFetchForklift('receivingskusuggest=1&q=' + encodeURIComponent(q)).then(function(data) {
+    var list = document.getElementById('recvSuggestList');
+    if (!data || !data.results || !data.results.length) {
+      list.innerHTML = '<div style="color:#999">No match -- type the full SKU and description for a new item.</div>';
+      list.style.display = 'block';
+      return;
+    }
+    list.innerHTML = data.results.map(function(r) {
+      return '<div onclick="selectReceivingSku(\'' + r.sku.replace(/'/g, "\\'") + '\',\'' + (r.desc || '').replace(/'/g, "\\'") + '\')"><strong>' + r.sku + '</strong><span>' + (r.desc || '') + '</span></div>';
+    }).join('');
+    list.style.display = 'block';
+  }).catch(function() {});
+}
+
+// Selecting a match fills BOTH fields at once -- no need to type the
+// description separately when it's a SKU we already know about.
+function selectReceivingSku(sku, desc) {
+  document.getElementById('recvSku').value = sku;
+  document.getElementById('recvDesc').value = desc;
+  document.getElementById('recvSuggestList').style.display = 'none';
+}
 
 function fetchSkuSuggestions(q) {
   jsonpFetchForklift('replenishmentskusuggest=1&q=' + encodeURIComponent(q)).then(function(data) {
