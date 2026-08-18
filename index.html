@@ -3874,7 +3874,8 @@ function showR(sku){
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'start'});},150);
   currentDetailSku=key;
   fetchUnleashedStock(key);
-  if(placed){fetchPickFaceInfo(key,locs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
+  var pickFaceCandidateLocs=locs.concat(placed?[]:mixedLocs);
+  if(pickFaceCandidateLocs.length){fetchPickFaceInfo(key,pickFaceCandidateLocs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
   fetchTruePickFaceInfo(key);
 }
 
