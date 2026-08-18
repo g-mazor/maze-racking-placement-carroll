@@ -2854,6 +2854,27 @@ function enforceReversedRowDirection(route){
   return result;
 }
 
+// Splits an item's orderBreakdown into two clearly separated groups --
+// orders needing MORE THAN ONE unit (a real "batch", pack that many
+// together for that one order) vs orders needing exactly one (pack
+// separately, one per box) -- instead of one flat mixed list where a
+// picker can't tell which numbers belong together. Confirmed needed
+// directly by warehouse staff 18 Aug 2026: a combined pick of 2 batched +
+// 7 individual units was showing as just "9", indistinguishable.
+function buildBreakdownHtml(orderBreakdown,color){
+  if(!orderBreakdown||orderBreakdown.length<2)return '';
+  var multi=orderBreakdown.filter(function(b){return b.qty>1;});
+  var single=orderBreakdown.filter(function(b){return b.qty===1;});
+  var parts=[];
+  if(multi.length){
+    parts.push('<div>\ud83d\udce6 Batch (pack together per order): '+multi.map(function(b){return b.orderNumber+' \u00d7'+b.qty;}).join(', ')+'</div>');
+  }
+  if(single.length){
+    parts.push('<div>1\ufe0f\u20e3 Individual (pack separately, 1 each): '+single.map(function(b){return b.orderNumber;}).join(', ')+' ('+single.length+' total)</div>');
+  }
+  return '<div style="font-size:10px;color:'+(color||'#7A5B00')+';margin-top:3px">'+parts.join('')+'</div>';
+}
+
 function previewPickList(){
   var raw=document.getElementById('pickListInput').value;
   var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
@@ -2900,8 +2921,7 @@ function previewPickList(){
     if(it.error){
       return '<div style="background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;color:#A32D2D">'+it.sku+' -- qty '+it.qty+' -- '+it.error+'</div>';
     }
-    var breakdownHtml=(it.orderBreakdown&&it.orderBreakdown.length>1)?
-      '<div style="font-size:10px;color:#7A5B00;margin-top:3px">Split: '+it.orderBreakdown.map(function(b){return b.orderNumber+' \u00d7'+b.qty;}).join(', ')+'</div>':'';
+    var breakdownHtml=buildBreakdownHtml(it.orderBreakdown);
     return '<div style="background:#F0F8F0;border:1px solid #8CD98C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
       '<strong>'+(i+1)+'. '+it.sku+'</strong> -- '+it.desc+' -- qty '+it.qty+'<br>At '+fl(it.loc)+breakdownHtml+
       '</div>';
@@ -4275,9 +4295,9 @@ function renderPickerAssignedList(){
       '<div style="font-size:14px;color:#555;margin-bottom:8px">'+item.desc+'</div>'+
       '<div style="font-size:16px;font-weight:700;color:#16A085;margin-bottom:6px">Quantity needed: '+item.qty+'</div>'+
       (item.orderBreakdown&&item.orderBreakdown.length>1?
-        '<div style="background:#FFF3CD;border:1px solid #F0D98C;border-radius:6px;padding:8px;margin-bottom:10px;font-size:12px;color:#7A5B00;text-align:left">'+
-          '<strong>\u26a0\ufe0f Combined pick for '+item.orderBreakdown.length+' orders -- split after picking:</strong><br>'+
-          item.orderBreakdown.map(function(b){return '\u2022 '+b.orderNumber+': '+b.qty;}).join('<br>')+
+        '<div style="background:#FFF3CD;border:1px solid #F0D98C;border-radius:6px;padding:8px;margin-bottom:10px;font-size:12px;text-align:left">'+
+          '<strong style="color:#7A5B00">\u26a0\ufe0f Combined pick for '+item.orderBreakdown.length+' orders -- split after picking:</strong>'+
+          buildBreakdownHtml(item.orderBreakdown,'#7A5B00')+
           '</div>':'')+
       '<input id="guidedQtyInput" type="number" placeholder="Qty you picked" autocomplete="off" '+
       'style="width:100%;padding:12px;border-radius:6px;border:2px solid #27AE60;font-size:18px;box-sizing:border-box;text-align:center"/>'+
