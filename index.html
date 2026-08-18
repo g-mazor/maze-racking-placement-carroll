@@ -2281,7 +2281,7 @@ var PICK_HANDLING_SECONDS=20;  // assumed time to grab an item once at the bay
 // BETWEEN separate blocks (e.g. B<->D, A<->B) needs an extra, wider aisle --
 // without this, the router can't tell "right there" (B<->C) apart from
 // "a whole racking block away" (B<->D), and picks bad routes as a result.
-var ROW_BLOCK={A:0,AA:0,B:1,C:1,D:2,E:2};
+var ROW_BLOCK={A:0,AA:0,B:1,C:1,D:2,E:2,F:3,G:4,H:5};
 var INTER_BLOCK_AISLE_WIDTH_M=8;
 // Returns which bay a cross-row walk actually crosses at (a row-end, or a
 // specific bridge bay) -- exposed so the visual route drawing can match
@@ -2819,6 +2819,37 @@ function blockAwareRoute(items,startLoc){
   return route;
 }
 
+// nearestNeighborRoute optimizes purely by walking distance, which doesn't
+// know about the FIXED physical walking direction required in rows E, F,
+// and G (confirmed directly by warehouse staff 18 Aug 2026: always enter
+// from the high-bay end -- E from 38, G from 13, F from 4 -- and walk
+// down, never the reverse, regardless of which order minimizes distance).
+// This runs as a post-process: for every unbroken run of consecutive stops
+// that are all in the same reversed row, re-sort just that run by
+// descending bay number, leaving which row gets visited when (chosen by
+// the real distance model) untouched.
+function enforceReversedRowDirection(route){
+  var result=route.slice();
+  var i=0;
+  while(i<result.length){
+    var row=result[i].loc.split('-')[0];
+    if(REVERSED_BAY_ROWS.indexOf(row)>=0){
+      var j=i;
+      while(j<result.length&&result[j].loc.split('-')[0]===row)j++;
+      var segment=result.slice(i,j).sort(function(a,b){
+        var ba=parseInt(a.loc.split('-')[1],10);
+        var bb=parseInt(b.loc.split('-')[1],10);
+        return bb-ba;
+      });
+      for(var k=0;k<segment.length;k++)result[i+k]=segment[k];
+      i=j;
+    } else {
+      i++;
+    }
+  }
+  return result;
+}
+
 function previewPickList(){
   var raw=document.getElementById('pickListInput').value;
   var lines=raw.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
@@ -2838,6 +2869,7 @@ function previewPickList(){
   var unresolvable=items.filter(function(it){return !it.loc;});
   var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
   resolvable=blockAwareRoute(resolvable,START_LOC);
+  resolvable=enforceReversedRowDirection(resolvable);
   var ordered=resolvable.concat(unresolvable);
   lastPickListPreview=resolvable;
 
