@@ -2956,7 +2956,7 @@ function assignPickList(){
   var picker=document.getElementById('assignPickerSelect').value;
   if(!picker){alert('No picker available -- add one under Picker Login first.');return;}
   var id=genId();
-  var items=lastPickListPreview.map(function(it){return {sku:it.sku,qty:it.qty,desc:it.desc,loc:it.loc,picked:false,orderBreakdown:it.orderBreakdown||null};});
+  var items=lastPickListPreview.map(function(it){return {sku:it.sku,qty:it.qty,desc:it.desc,loc:it.loc,picked:false,pickedSoFar:0,orderBreakdown:it.orderBreakdown||null};});
   applyC({type:'picklist_save',id:id,contents:{items:items,assignedTo:picker,status:'open'},ts:Date.now()},true);
   si2('Assigned to '+picker+' -- '+items.length+' item'+(items.length!==1?'s':''));
   setNorm();
@@ -4241,6 +4241,41 @@ function togglePickerFullList(){
   renderPickerAssignedList();
 }
 
+// Lets the picker record a pick against ANY item in their list directly
+// (not just the current guided step), and supports PARTIAL amounts --
+// entering less than what's needed saves the progress (pickedSoFar) and
+// leaves the item open to come back to later, rather than requiring the
+// full quantity in one go. Confirmed needed directly by warehouse staff
+// 18 Aug 2026: pickers need to prioritize older orders within a combined
+// pick without being forced through the whole batch at once.
+function recordFreeformPick(itemIndex){
+  var pl=getActivePickListFor(currentPicker);
+  if(!pl)return;
+  var item=pl.items[itemIndex];
+  if(!item||item.picked)return;
+  var soFar=item.pickedSoFar||0;
+  var remainingNeeded=item.qty-soFar;
+  var currentQty=QTY[item.loc]!=null?QTY[item.loc]:0;
+  var promptLabel='How many of '+item.sku+' are you taking now? (need '+remainingNeeded+' more'+(soFar>0?', '+soFar+' already taken':'')+', '+currentQty+' available at '+fl(item.loc)+')';
+  var entered=prompt(promptLabel,String(Math.min(remainingNeeded,currentQty)));
+  if(entered===null)return;
+  var qty=parseInt(entered.trim(),10);
+  if(isNaN(qty)||qty<=0){alert('Enter a whole number greater than 0.');return;}
+  if(qty>currentQty){alert('Only '+currentQty+' available at '+fl(item.loc)+' -- check your count.');return;}
+  if(qty>remainingNeeded){
+    if(!confirm('That\'s more than the '+remainingNeeded+' still needed for this item. Take '+qty+' anyway?'))return;
+  }
+  var remainingStock=Math.max(0,currentQty-qty);
+  applyC({type:'pick',sku:item.sku,loc:item.loc,qty:qty,remainingQty:remainingStock,ts:Date.now()},true);
+  rebuildMap();
+  item.pickedSoFar=soFar+qty;
+  item.picked=item.pickedSoFar>=item.qty;
+  var allDone=pl.items.every(function(it){return it.picked;});
+  applyC({type:'picklist_save',id:pl.id,contents:{items:pl.items,assignedTo:pl.assignedTo,status:allDone?'complete':'open'},ts:Date.now()},true);
+  si2(item.picked?'Done: '+item.sku:'Saved '+qty+' of '+item.sku+' -- '+(item.qty-item.pickedSoFar)+' left');
+  renderPickerAssignedList();
+}
+
 function renderPickerAssignedList(){
   var container=document.getElementById('pickerAssignedList');
   var freeForm=document.getElementById('pickerFreeForm');
@@ -4255,9 +4290,15 @@ function renderPickerAssignedList(){
     var doneCount2=pl.items.filter(function(it){return it.picked;}).length;
     var html2='<div style="background:#FFF;border:2px solid #16A085;border-radius:10px;padding:14px">'+
       '<div style="font-weight:700;color:#16A085;margin-bottom:8px">📋 Full pick list -- '+doneCount2+' of '+pl.items.length+' done</div>'+
+      '<div style="font-size:11px;color:#666;margin-bottom:8px">Tap any item to record what you\'re taking now -- partial amounts are saved, so you can pick some now and come back for the rest.</div>'+
       pl.items.map(function(it,i){
-        return '<div style="padding:5px 0;font-size:12px;'+(it.picked?'color:#AAA;text-decoration:line-through':'color:#222;font-weight:600')+'">'+
-          (it.picked?'✅':(i+1)+'.')+' '+it.sku+' -- '+it.desc+' -- qty '+it.qty+' at '+fl(it.loc)+
+        var soFar=it.pickedSoFar||0;
+        var remaining=Math.max(0,it.qty-soFar);
+        var breakdownHtml=it.picked?'':buildBreakdownHtml(it.orderBreakdown,'#7A5B00');
+        return '<div style="padding:8px;margin-bottom:6px;border-radius:6px;background:'+(it.picked?'#F5F5F5':'#F0F8F0')+';border:1px solid '+(it.picked?'#DDD':'#8CD98C')+';'+(it.picked?'':'cursor:pointer')+'"'+(it.picked?'':' onclick="recordFreeformPick('+i+')"')+'>'+
+          '<div style="font-size:12px;'+(it.picked?'color:#AAA;text-decoration:line-through':'color:#222;font-weight:600')+'">'+
+          (it.picked?'✅':(i+1)+'.')+' '+it.sku+' -- '+it.desc+' -- '+(soFar>0&&!it.picked?soFar+' of '+it.qty+' taken, '+remaining+' left':'qty '+it.qty)+' at '+fl(it.loc)+
+          '</div>'+breakdownHtml+
           '</div>';
       }).join('')+
       '<div style="text-align:center;margin-top:10px"><button class="btn btn-blue" onclick="togglePickerFullList()">Back to current pick</button></div>'+
@@ -4376,17 +4417,20 @@ function confirmGuidedPick(){
     speak('Only '+currentQty+' available. Please check your count.');
     return;
   }
-  var mismatch=entered!==item.qty;
+  var alreadyPicked=item.pickedSoFar||0;
+  var remainingNeeded=item.qty-alreadyPicked;
+  var mismatch=entered!==remainingNeeded;
   if(mismatch&&!guidedPickState.confirmingMismatch){
     guidedPickState.confirmingMismatch=true;
-    msg.innerHTML='<span style="color:#A32D2D">\u26a0\ufe0f Expected '+item.qty+', you entered '+entered+'. Tap Confirm pick again if that\'s correct, or fix the number.</span>';
-    speak('Expected '+item.qty+', you entered '+entered+'. Please check.');
+    msg.innerHTML='<span style="color:#A32D2D">\u26a0\ufe0f Expected '+remainingNeeded+', you entered '+entered+'. Tap Confirm pick again if that\'s correct, or fix the number.</span>';
+    speak('Expected '+remainingNeeded+', you entered '+entered+'. Please check.');
     return;
   }
   var remaining=Math.max(0,currentQty-entered);
   applyC({type:'pick',sku:item.sku,loc:item.loc,qty:entered,remainingQty:remaining,ts:Date.now()},true);
   rebuildMap();
-  item.picked=true;
+  item.pickedSoFar=alreadyPicked+entered;
+  item.picked=item.pickedSoFar>=item.qty;
   item.pickedQty=entered;
   item.mistake=mismatch;
   var allDone=pl.items.every(function(it){return it.picked;});
