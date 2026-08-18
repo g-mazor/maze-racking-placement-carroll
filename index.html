@@ -2854,23 +2854,62 @@ function enforceReversedRowDirection(route){
   return result;
 }
 
+// Same working-days logic as the backend's countWorkingDaysSince_ (Code.gs)
+// -- kept in sync manually since frontend and backend run in separate
+// environments. Only covers 2026; needs a fresh set of dates for 2027+.
+var VIC_PUBLIC_HOLIDAYS_JS=[
+  '2026-01-01','2026-01-26','2026-03-09','2026-04-03','2026-04-04','2026-04-05',
+  '2026-04-06','2026-04-25','2026-06-08','2026-09-25','2026-11-03','2026-12-25',
+  '2026-12-26','2026-12-28'
+];
+function countWorkingDaysSinceJS(pastDate){
+  var holidaySet={};
+  VIC_PUBLIC_HOLIDAYS_JS.forEach(function(d){holidaySet[d]=true;});
+  var cursor=new Date(pastDate.getFullYear(),pastDate.getMonth(),pastDate.getDate());
+  var today=new Date();
+  today=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  var count=0;
+  while(cursor<today){
+    cursor.setDate(cursor.getDate()+1);
+    var day=cursor.getDay();
+    var y=cursor.getFullYear(),m=String(cursor.getMonth()+1).padStart(2,'0'),d=String(cursor.getDate()).padStart(2,'0');
+    var dateStr=y+'-'+m+'-'+d;
+    if(day!==0&&day!==6&&!holidaySet[dateStr])count++;
+  }
+  return count;
+}
+function isOldOrderJS(orderDateSort){
+  if(!orderDateSort)return false;
+  return countWorkingDaysSinceJS(new Date(orderDateSort))>=3;
+}
+
 // Splits an item's orderBreakdown into two clearly separated groups --
 // orders needing MORE THAN ONE unit (a real "batch", pack that many
 // together for that one order) vs orders needing exactly one (pack
 // separately, one per box) -- instead of one flat mixed list where a
 // picker can't tell which numbers belong together. Confirmed needed
 // directly by warehouse staff 18 Aug 2026: a combined pick of 2 batched +
-// 7 individual units was showing as just "9", indistinguishable.
+// 7 individual units was showing as just "9", indistinguishable. Also
+// flags any individual order within the breakdown that's 3+ working days
+// old in red, so the picker knows to send that portion out first.
 function buildBreakdownHtml(orderBreakdown,color){
   if(!orderBreakdown||orderBreakdown.length<2)return '';
+  var oldCount=orderBreakdown.filter(function(b){return isOldOrderJS(b.orderDateSort);}).length;
   var multi=orderBreakdown.filter(function(b){return b.qty>1;});
   var single=orderBreakdown.filter(function(b){return b.qty===1;});
+  function fmtEntry(b,showQty){
+    var label=b.orderNumber+(showQty?' \u00d7'+b.qty:'');
+    return isOldOrderJS(b.orderDateSort)?'<span style="color:#C0392B;font-weight:700">\u26a0\ufe0f '+label+'</span>':label;
+  }
   var parts=[];
+  if(oldCount){
+    parts.push('<div style="color:#C0392B;font-weight:700">\u26a0\ufe0f '+oldCount+' of '+orderBreakdown.length+' order'+(orderBreakdown.length!==1?'s':'')+' '+(oldCount!==1?'are':'is')+' 3+ working days old -- pick these first</div>');
+  }
   if(multi.length){
-    parts.push('<div>\ud83d\udce6 Batch (pack together per order): '+multi.map(function(b){return b.orderNumber+' \u00d7'+b.qty;}).join(', ')+'</div>');
+    parts.push('<div>\ud83d\udce6 Batch (pack together per order): '+multi.map(function(b){return fmtEntry(b,true);}).join(', ')+'</div>');
   }
   if(single.length){
-    parts.push('<div>1\ufe0f\u20e3 Individual (pack separately, 1 each): '+single.map(function(b){return b.orderNumber;}).join(', ')+' ('+single.length+' total)</div>');
+    parts.push('<div>1\ufe0f\u20e3 Individual (pack separately, 1 each): '+single.map(function(b){return fmtEntry(b,false);}).join(', ')+' ('+single.length+' total)</div>');
   }
   return '<div style="font-size:10px;color:'+(color||'#7A5B00')+';margin-top:3px">'+parts.join('')+'</div>';
 }
@@ -3603,7 +3642,7 @@ function generatePickListFromOpenOrders(){
       if(!l.placed){skippedUnplaced++;return;}
       skuQtyMap[l.sku]=(skuQtyMap[l.sku]||0)+l.qty;
       if(!skuOrderMap[l.sku])skuOrderMap[l.sku]=[];
-      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty,customerName:o.customerName,deliveryAddress:o.deliveryAddress});
+      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty,customerName:o.customerName,deliveryAddress:o.deliveryAddress,orderDateSort:o.orderDateSort});
     });
   });
   var skus=Object.keys(skuQtyMap);
