@@ -32,7 +32,17 @@
     <input type="password" id="codeInput" placeholder="Access code" style="width:100%;padding:10px;font-size:15px;border-radius:8px;border:1.5px solid #CCC;margin-bottom:10px;box-sizing:border-box"/>
     <button class="login-btn" onclick="doLogin()">Log in</button>
   </div>
-  <div id="tasksBox" style="display:none"></div>
+  <div id="mainBox" style="display:none">
+    <div style="background:#FFF;border-radius:8px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:6px">Choose what to replenish yourself</div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="skuSearchInput" placeholder="Type a SKU..." style="flex:1;padding:8px 10px;font-size:14px;border-radius:6px;border:1.5px solid #CCC"/>
+        <button class="login-btn" style="padding:8px 14px;font-size:13px" onclick="searchSku()">Search</button>
+      </div>
+      <div id="skuSearchResult" style="margin-top:10px"></div>
+    </div>
+    <div id="tasksBox"></div>
+  </div>
 </div>
 <script>
 // CHANGE THIS to match FORKLIFT_ACCESS_CODE in your Apps Script Script
@@ -60,13 +70,70 @@ function doLogin() {
   if (!entered) return;
   accessCode = entered;
   document.getElementById('loginBox').style.display = 'none';
-  document.getElementById('tasksBox').style.display = 'block';
+  document.getElementById('mainBox').style.display = 'block';
   loadTasks();
 }
 
 function fl(loc) {
   var p = loc.split('-');
   return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
+}
+
+// Manual, proactive path: driver types any SKU and sees its pick bay +
+// reserve options directly, regardless of whether it's auto-flagged as
+// urgently empty. Confirmed needed 18 Aug 2026: since picks aren't synced
+// to Unleashed yet, everything here runs off this app's own stock counts,
+// and the driver should be able to choose what to replenish themselves,
+// not only react to the zero-stock task list.
+function searchSku() {
+  var sku = document.getElementById('skuSearchInput').value.trim();
+  var box = document.getElementById('skuSearchResult');
+  if (!sku) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="status">Searching...</div>';
+  jsonpFetchForklift('replenishmentskusearch=1&sku=' + encodeURIComponent(sku)).then(function(data) {
+    if (!data || !data.found) {
+      box.innerHTML = '<div class="no-reserves">' + (data && data.error ? data.error : 'Not found.') + '</div>';
+      return;
+    }
+    window.lastSkuSearchResult = data;
+    var reservesHtml;
+    if (!data.reserves.length) {
+      reservesHtml = '<div class="no-reserves">No reserve stock found elsewhere for this SKU.</div>';
+    } else {
+      reservesHtml = '<div class="reserve-label">Tap where you\'re taking it from:</div>' +
+        data.reserves.map(function(r, ri) {
+          return '<div class="reserve-option" onclick="confirmReplenishFromSearch(' + ri + ')">' +
+            '<span class="reserve-bay">' + r.bayCode + '</span><span class="reserve-qty">' + r.qty + ' units</span>' +
+            '</div>';
+        }).join('');
+    }
+    box.innerHTML = '<div class="task" style="border-color:#8CD98C">' +
+      '<div class="task-sku">' + data.sku + '</div>' +
+      '<div class="task-desc">' + (data.desc || '') + '</div>' +
+      '<div style="margin-top:8px;font-size:13px;color:#1F3864;font-weight:700">Pick bay: ' + data.pickBayCode + ' (currently ' + (data.pickBayQty != null ? data.pickBayQty : '?') + ' units)</div>' +
+      reservesHtml +
+      '</div>';
+  }).catch(function() {
+    box.innerHTML = '<div class="no-reserves">Could not search -- check your connection.</div>';
+  });
+}
+
+function confirmReplenishFromSearch(reserveIndex) {
+  var data = window.lastSkuSearchResult;
+  var reserve = data.reserves[reserveIndex];
+  if (!confirm('Move ' + reserve.qty + ' units of ' + data.sku + ' from ' + reserve.bayCode + ' to pick bay ' + data.pickBayCode + '?')) return;
+  jsonpFetchForklift('beacon=1&type=replenish_move&sku=' + encodeURIComponent(data.sku) + '&fromLoc=' + encodeURIComponent(reserve.loc) + '&toLoc=' + encodeURIComponent(data.pickBayLoc)).then(function(result) {
+    if (result && result.ok) {
+      alert('Done! ' + reserve.bayCode + ' is now empty, pick bay ' + data.pickBayCode + ' refilled with ' + result.qtyMoved + '.');
+    } else {
+      alert('Could not complete: ' + (result && result.error ? result.error : 'unknown error'));
+    }
+    document.getElementById('skuSearchInput').value = '';
+    document.getElementById('skuSearchResult').innerHTML = '';
+    loadTasks();
+  }).catch(function() {
+    alert('Could not reach the server -- check your connection and try again.');
+  });
 }
 
 function loadTasks() {
