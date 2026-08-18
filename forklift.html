@@ -191,6 +191,16 @@ function updateRecvTotal() {
 // pallet breakdown is encoded into the note text itself (e.g. "4 pallets
 // x 10 units each") -- no backend change needed, and it's parsed back out
 // below to guide the placement step.
+// Fires one 'receive' event PER PALLET (not one combined entry) --
+// confirmed needed 18 Aug 2026: seeing "6 pallets" as one combined
+// pending item with a running remaining-count was confusing. This way
+// the Pending list shows all 6 as separate, individually clickable
+// cards, matching how the driver actually thinks about a container.
+// Also auto-saves units-per-pallet as the durable per-SKU setting (the
+// same one the Unleashed cross-check on the main map reads) instead of
+// only encoding it into this delivery's note text -- confirmed needed:
+// entering it here should count as setting it, not require typing it
+// again separately later.
 function logReceivedStock() {
   var sku = document.getElementById('recvSku').value.trim();
   var desc = document.getElementById('recvDesc').value.trim();
@@ -200,12 +210,16 @@ function logReceivedStock() {
   if (!sku) { alert('Enter a SKU.'); return; }
   if (isNaN(pallets) || pallets <= 0) { alert('Enter a valid number of pallets.'); return; }
   if (isNaN(perPallet) || perPallet <= 0) { alert('Enter a valid units-per-pallet.'); return; }
-  var qty = pallets * perPallet;
-  var palletTag = pallets + ' pallets x ' + perPallet + ' units each';
-  var note = palletTag + (userNote ? ' -- ' + userNote : '');
-  var id = 'FK' + Date.now() + Math.floor(Math.random() * 1000);
-  postRemoteChangeForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + qty + '&id=' + id + '&note=' + encodeURIComponent(note)).then(function(ok) {
-    if (!ok) { alert('Could not reach the server -- check your connection and try again.'); return; }
+
+  var baseTs = Date.now();
+  for (var n = 1; n <= pallets; n++) {
+    var note = 'Pallet ' + n + ' of ' + pallets + (userNote ? ' -- ' + userNote : '');
+    var id = 'FK' + baseTs + '_' + n;
+    postRemoteChangeForklift('beacon=1&type=receive&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + perPallet + '&id=' + id + '&note=' + encodeURIComponent(note));
+  }
+  postRemoteChangeForklift('beacon=1&type=setunitsperpallet&sku=' + encodeURIComponent(sku) + '&desc=' + encodeURIComponent(desc) + '&qty=' + perPallet);
+
+  setTimeout(function() {
     document.getElementById('recvSku').value = '';
     document.getElementById('recvDesc').value = '';
     document.getElementById('recvPallets').value = '';
@@ -213,28 +227,19 @@ function logReceivedStock() {
     document.getElementById('recvTotalDisplay').textContent = '';
     document.getElementById('recvNote').value = '';
     loadPendingGoods();
-  });
+  }, 500);
 }
 
-// Pulls "N pallets x U units each" back out of a pending item's note
-// (written by logReceivedStock above), so the placement step can remind
-// the driver how many pallet spaces to expect. Returns null if the note
-// doesn't match that pattern (e.g. items received before this feature,
-// or manually via the main map's own Receive button).
+// Pulls "Pallet N of T" back out of a pending item's note (written by
+// logReceivedStock above), just to show a friendly "Pallet 2 of 6" label
+// -- purely cosmetic now, since each pending item already represents
+// exactly one pallet on its own.
 function parsePalletInfo(note) {
   if (!note) return null;
-  var m = /^(\d+)\s*pallets?\s*x\s*(\d+)\s*units?\s*each/i.exec(note.trim());
+  var m = /^Pallet\s*(\d+)\s*of\s*(\d+)/i.exec(note.trim());
   if (!m) return null;
-  return {pallets: parseInt(m[1], 10), perPallet: parseInt(m[2], 10)};
+  return {palletNumber: parseInt(m[1], 10), totalPallets: parseInt(m[2], 10)};
 }
-
-// Tracks how much of each pending item is still unplaced, keyed by
-// pending id. Starts at the full qty; each individual pallet placement
-// decrements it. Lives only in this browser session -- if the page
-// reloads mid-way, it resets to the full remaining amount (the backend
-// itself doesn't track partial-placement progress, only all-or-nothing
-// pending/resolved), which is an acceptable tradeoff for now.
-window.pendingRemaining = window.pendingRemaining || {};
 
 function loadPendingGoods() {
   var box = document.getElementById('pendingBox');
@@ -245,25 +250,17 @@ function loadPendingGoods() {
       return;
     }
     window.lastPendingData = data.items;
-    data.items.forEach(function(p) {
-      if (window.pendingRemaining[p.id] == null) window.pendingRemaining[p.id] = p.qty;
-    });
     box.innerHTML = data.items.map(function(p, pi) {
       var palletInfo = parsePalletInfo(p.note);
-      var remaining = window.pendingRemaining[p.id];
-      var qtyLine = palletInfo
-        ? 'Remaining: ' + remaining + ' of ' + p.qty + ' units -- \uD83D\uDCE6 ' + palletInfo.pallets + ' pallet' + (palletInfo.pallets !== 1 ? 's' : '') + ' x ' + palletInfo.perPallet + ' each'
-        : 'Remaining: ' + remaining + ' of ' + p.qty + (p.note ? ' -- ' + p.note : '');
-      var suggestedQty = palletInfo ? Math.min(palletInfo.perPallet, remaining) : remaining;
+      var titleLine = palletInfo
+        ? '\uD83D\uDCE6 Pallet ' + palletInfo.palletNumber + ' of ' + palletInfo.totalPallets + ' -- ' + p.qty + ' units'
+        : p.qty + ' units' + (p.note ? ' -- ' + p.note : '');
       return '<div class="pend-item">' +
         '<div class="task-sku">' + p.sku + '</div>' +
         '<div class="task-desc">' + (p.desc || '') + '</div>' +
-        '<div style="font-size:13px;font-weight:700;color:#1F3864;margin-top:4px">' + qtyLine + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#1F3864;margin-top:4px">' + titleLine + '</div>' +
         '<div style="font-size:11px;color:#999;margin-top:2px">Arrived: ' + (p.arrivedAt || '') + '</div>' +
         '<div id="placeForm' + pi + '" style="display:none">' +
-          '<div style="font-size:12px;color:#B9770E;font-weight:700;margin-top:8px">\uD83D\uDCE6 Place ONE pallet at a time -- each can go to a different spot.</div>' +
-          '<div class="field-label" style="margin-top:8px">Units on THIS pallet</div>' +
-          '<input type="number" id="placeQty' + pi + '" value="' + suggestedQty + '" style="width:100px"/>' +
           '<div class="field-row">' +
             '<div><div class="field-label">Row</div><select id="placeRow' + pi + '" onchange="updateSideOptions(' + pi + ')">' +
               Object.keys(ROW_SPEC_JS).map(function(r) { return '<option value="' + r + '">' + r + '</option>'; }).join('') +
@@ -271,11 +268,11 @@ function loadPendingGoods() {
             '<div><div class="field-label">Bay</div><input type="number" id="placeBay' + pi + '" style="width:60px"/></div>' +
             '<div><div class="field-label">Level</div><input type="number" id="placeLevel' + pi + '" style="width:60px"/></div>' +
           '</div>' +
-          '<div class="field-label" style="margin-top:8px">Pallet space(s) this ONE pallet takes (usually 1 -- check more only if it\'s oversized)</div>' +
+          '<div class="field-label" style="margin-top:8px">Pallet space(s) this takes (usually 1 -- check more only if it\'s oversized)</div>' +
           '<div id="placeSides' + pi + '" style="display:flex;gap:10px;margin-top:4px"></div>' +
           '<div style="text-align:center;margin-top:8px"><button class="login-btn" style="padding:8px 16px;font-size:13px" onclick="confirmPlacePending(' + pi + ')">Place this pallet</button></div>' +
         '</div>' +
-        '<div style="text-align:right;margin-top:8px"><button class="login-btn" style="padding:6px 12px;font-size:12px" onclick="togglePlaceForm(' + pi + ')">Place a pallet on the map</button></div>' +
+        '<div style="text-align:right;margin-top:8px"><button class="login-btn" style="padding:6px 12px;font-size:12px" onclick="togglePlaceForm(' + pi + ')">Place on the map</button></div>' +
         '</div>';
     }).join('');
     data.items.forEach(function(p, pi) { updateSideOptions(pi); });
@@ -303,23 +300,16 @@ function updateSideOptions(pi) {
   }).join('');
 }
 
-// Places ONE pallet from a pending item at ONE location, decrements the
-// running remaining count, and lets the driver place the NEXT pallet at
-// a DIFFERENT location right after -- rather than forcing the whole
-// delivery into one combined placement. Confirmed needed 18 Aug 2026:
-// pallets from the same delivery often need to go to different spots,
-// not all crammed together. Only fires 'receiveresolve' (clearing it
-// from Pending) once every unit has been placed.
+// Places ONE pallet (this pending item, in full) at ONE chosen location.
+// Since each pending item now represents exactly one pallet (see
+// logReceivedStock above), this is now a straightforward one-shot
+// placement -- no running remaining-count needed anymore.
 function confirmPlacePending(pi) {
   var p = window.lastPendingData[pi];
-  var remaining = window.pendingRemaining[p.id];
-  var qty = parseInt(document.getElementById('placeQty' + pi).value, 10);
   var row = document.getElementById('placeRow' + pi).value;
   var bay = parseInt(document.getElementById('placeBay' + pi).value, 10);
   var level = parseInt(document.getElementById('placeLevel' + pi).value, 10);
   var checkedSides = Array.prototype.slice.call(document.querySelectorAll('.sideCb' + pi + ':checked')).map(function(cb) { return cb.value; });
-  if (isNaN(qty) || qty <= 0) { alert('Enter how many units are on this pallet.'); return; }
-  if (qty > remaining) { alert('Only ' + remaining + ' units left to place for this delivery.'); return; }
   if (isNaN(bay) || isNaN(level)) { alert('Enter a bay and level number.'); return; }
   if (!checkedSides.length) { alert('Check at least one pallet space (side).'); return; }
   var spec = ROW_SPEC_JS[row];
@@ -334,20 +324,13 @@ function confirmPlacePending(pi) {
       alert('Could not place: ' + (check && check.error ? check.error : 'validation failed'));
       return;
     }
-    if (!confirm('Place ' + qty + ' x ' + p.sku + ' at ' + readableLoc + ' (' + checkedSides.length + ' pallet space' + (checkedSides.length > 1 ? 's' : '') + ')?')) return;
-    postRemoteChangeForklift('beacon=1&type=add&sku=' + encodeURIComponent(p.sku) + '&desc=' + encodeURIComponent(p.desc || '') + '&qty=' + qty + '&tl=' + encodeURIComponent(JSON.stringify(rawLocs))).then(function(ok) {
+    if (!confirm('Place ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + ' (' + checkedSides.length + ' pallet space' + (checkedSides.length > 1 ? 's' : '') + ')?')) return;
+    postRemoteChangeForklift('beacon=1&type=add&sku=' + encodeURIComponent(p.sku) + '&desc=' + encodeURIComponent(p.desc || '') + '&qty=' + p.qty + '&tl=' + encodeURIComponent(JSON.stringify(rawLocs))).then(function(ok) {
       if (!ok) { alert('Could not reach the server -- check your connection and try again.'); return; }
-      window.pendingRemaining[p.id] = remaining - qty;
-      if (window.pendingRemaining[p.id] <= 0) {
-        postRemoteChangeForklift('beacon=1&type=receiveresolve&id=' + encodeURIComponent(p.id)).then(function() {
-          delete window.pendingRemaining[p.id];
-          alert('Placed ' + qty + ' x ' + p.sku + ' at ' + readableLoc + '. All units for this delivery are now placed.');
-          loadPendingGoods();
-        });
-      } else {
-        alert('Placed ' + qty + ' x ' + p.sku + ' at ' + readableLoc + '. ' + window.pendingRemaining[p.id] + ' units still to place -- pick the next spot.');
+      postRemoteChangeForklift('beacon=1&type=receiveresolve&id=' + encodeURIComponent(p.id)).then(function() {
+        alert('Placed ' + p.qty + ' x ' + p.sku + ' at ' + readableLoc + '.');
         loadPendingGoods();
-      }
+      });
     });
   }).catch(function() {
     alert('Could not reach the server -- check your connection and try again.');
