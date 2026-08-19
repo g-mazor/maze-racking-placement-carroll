@@ -289,7 +289,7 @@ var GRPC={'COMPOST':'#1D9E75','KETER GROUP':'#2980B9','KETER SHEDS':'#C0561A','G
 var RS={A:{b:39,s:2,l:3},AA:{b:39,s:2,l:3},AAA:{b:40,s:2,l:4},B:{b:38,s:2,l:3},C:{b:38,s:2,l:3},D:{b:38,s:2,l:4},E:{b:38,s:2,l:3},F:{b:4,s:3,l:4},G:{b:13,s:3,l:4},H:{b:12,s:2,l:3}};
 var RCOL={A:'#8AC640',AA:'#8AC640',AAA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC640',E:'#8AC640',F:'#8AC640',G:'#8AC640',H:'#8AC640'};
 var RFCOL={A:'#111',AA:'#111',AAA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111',H:'#111'};
-var RI={A:'Row A - Compost (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',AAA:'Row AAA - separate row underneath Row AA, own wall (40 bays, 4 levels, 2 pallet spaces per bay)',B:'Row B - Keter Group (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Empty (4 bays, 3 slots, 4 levels)',G:'Row G - Canopia + Greenhouses (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (12 bays, 2 slots, 3 levels)'};
+var RI={A:'Row A - Compost (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',AAA:'Row AAA - Lower Area (40 bays, 4 levels, 2 pallet spaces per bay)',B:'Row B - Keter Group (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Empty (4 bays, 3 slots, 4 levels)',G:'Row G - Canopia + Greenhouses (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (12 bays, 2 slots, 3 levels)'};
 
 var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
@@ -1617,7 +1617,7 @@ function buildStats(){
   var grid=document.getElementById('sg');
   var gridRows=document.getElementById('sgRows');
   var hRows='';
-  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},AAA:{fc:'#1F3864',bg:'#B8CEDD',l:'Row AAA - underneath AA'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
+  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},AAA:{fc:'#1F3864',bg:'#B8CEDD',l:'Row AAA - Lower Area'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
     for(var bay=1;bay<=sp.b;bay++){
@@ -1903,7 +1903,7 @@ function bMain(){
   m.appendChild(makeGroup('Row C + B (back-to-back)',['C','B']));
   m.appendChild(aisleMarker('picker'));
   m.appendChild(makeGroup('Row A + AA (double-deep pair)',['A','AA']));
-  m.appendChild(makeGroup('Row AAA (separate row underneath AA, own wall)',['AAA']));
+  m.appendChild(makeGroup('Row AAA - Lower Area',['AAA']));
 }
 
 var tt=document.getElementById('tt');
