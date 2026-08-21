@@ -3491,58 +3491,82 @@ function showOpenOrders(){
       body.innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
       return;
     }
-    var orders=data.orders;
-    lastOpenOrdersData=orders;
-    selectedOrderNumbers=new Set(orders.map(function(o){return o.orderNumber;})); // all selected by default
-    if(!orders.length){
-      body.innerHTML='<div style="font-size:12px;color:#777">No open orders can currently be fulfilled from Carroll stock.</div>';
-      return;
-    }
-    var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(data.checkedAt||'')+' -- <strong>'+orders.length+'</strong> open order(s), oldest first</div>';
-    html+='<div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px;font-size:11px">'+
-      '<a href="javascript:void(0)" onclick="setAllOrderSelection(true)">Select all</a>'+
-      '<a href="javascript:void(0)" onclick="setAllOrderSelection(false)">Select none</a>'+
-      '</div>';
-    html+='<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List from Selected Orders</button></div>';
-    html+=orders.map(function(o,idx){
-      var linesHtml=o.lines.map(function(l){
-        var statusBadge=l.placed?'':' <span style="color:#B9770E;font-weight:700">(not placed yet)</span>';
-        return '<div style="font-size:11px;margin:2px 0;cursor:pointer;color:#185FA5" onclick="document.getElementById(\'openOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')">'+
-          '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+statusBadge+
-          '</div>';
-      }).join('');
-      var otherLinesHtml=(o.allLines||[]).filter(function(al){return !o.lines.some(function(ml){return ml.sku===al.sku;});}).map(function(al){
-        return '<div style="font-size:11px;margin:2px 0;color:#999">'+al.sku+' -- '+(al.desc||'')+' \u00d7'+al.qty+' <span style="font-size:10px">(not Carroll stock)</span></div>';
-      }).join('');
-      var detailId='ordDetail'+idx;
-      return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
-        '<div style="display:flex;gap:6px;align-items:flex-start">'+
-        '<input type="checkbox" class="order-select-cb" data-order="'+o.orderNumber+'" checked onclick="toggleOrderSelection(this)" style="margin-top:3px">'+
-        '<div style="flex:1">'+
-        '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
-        ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
-        (o.needsReassignToCarroll?
-          '<div style="margin-top:3px;font-size:10px;color:#A32D2D;font-weight:700">\u26a0\ufe0f Currently assigned to '+(o.assignedWarehouse||'another warehouse')+' in Unleashed -- switch to Carroll to fulfill from here</div>'
-          :'')+
-        linesHtml+
-        '<div style="margin-top:4px"><a href="javascript:void(0)" onclick="toggleOrderDetail(\''+detailId+'\')" style="font-size:10px">View full order details</a></div>'+
-        '<div id="'+detailId+'" style="display:none;margin-top:6px;padding-top:6px;border-top:1px dashed #B7D3EE;font-size:11px;color:#444">'+
-          (o.requiredDate?('<div>Required by: '+o.requiredDate+'</div>'):'')+
-          (o.customerRef?('<div>Customer ref: '+o.customerRef+'</div>'):'')+
-          (o.deliveryName?('<div>Deliver to: '+o.deliveryName+'</div>'):'')+
-          (o.deliveryAddress?('<div>Address: '+o.deliveryAddress+'</div>'):'')+
-          (o.deliveryInstruction?('<div>Instructions: '+o.deliveryInstruction+'</div>'):'')+
-          (o.comments?('<div>Comments: '+o.comments+'</div>'):'')+
-          (o.total!=null?('<div>Order total: $'+o.total+'</div>'):'')+
-          (otherLinesHtml?('<div style="margin-top:4px">Other lines on this order (not Carroll stock):'+otherLinesHtml+'</div>'):'')+
-        '</div>'+
-        '</div></div>'+
-        '</div>';
-    }).join('');
-    body.innerHTML=html;
+    lastOpenOrdersData=data.orders;
+    window.dispatchStatusFilter=window.dispatchStatusFilter||'active';
+    renderOpenOrdersBody(data.checkedAt);
   }).catch(function(){
     document.getElementById('openOrdersBody').innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
   });
+}
+
+// Separates Backordered orders into their own tab instead of mixing them
+// in with active/actionable (Parked/Placed) ones -- confirmed needed 21
+// Aug 2026: backorders aren't actionable right now (nothing to pick), so
+// seeing them mixed into the main dispatch list was noise.
+function renderOpenOrdersBody(checkedAt){
+  var body=document.getElementById('openOrdersBody');
+  var allOrders=lastOpenOrdersData||[];
+  var activeOrders=allOrders.filter(function(o){return o.orderStatus!=='Backordered';});
+  var backorderedOrders=allOrders.filter(function(o){return o.orderStatus==='Backordered';});
+  var orders=window.dispatchStatusFilter==='backordered'?backorderedOrders:activeOrders;
+  selectedOrderNumbers=new Set(orders.map(function(o){return o.orderNumber;})); // all selected by default, within the current tab only
+
+  var tabsHtml='<div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">'+
+    '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter!=='backordered'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'active\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Active ('+activeOrders.length+')</button>'+
+    '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter==='backordered'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'backordered\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Backordered ('+backorderedOrders.length+')</button>'+
+    '</div>';
+
+  if(!allOrders.length){
+    body.innerHTML=tabsHtml+'<div style="font-size:12px;color:#777">No open orders can currently be fulfilled from Carroll stock.</div>';
+    return;
+  }
+  if(!orders.length){
+    body.innerHTML=tabsHtml+'<div style="font-size:12px;color:#777">No '+(window.dispatchStatusFilter==='backordered'?'backordered':'active')+' orders right now.</div>';
+    return;
+  }
+  var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(checkedAt||'')+' -- <strong>'+orders.length+'</strong> order(s), oldest first</div>';
+  html+=tabsHtml;
+  html+='<div style="display:flex;gap:8px;justify-content:center;margin-bottom:8px;font-size:11px">'+
+    '<a href="javascript:void(0)" onclick="setAllOrderSelection(true)">Select all</a>'+
+    '<a href="javascript:void(0)" onclick="setAllOrderSelection(false)">Select none</a>'+
+    '</div>';
+  html+='<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List from Selected Orders</button></div>';
+  html+=orders.map(function(o,idx){
+    var linesHtml=o.lines.map(function(l){
+      var statusBadge=l.placed?'':' <span style="color:#B9770E;font-weight:700">(not placed yet)</span>';
+      return '<div style="font-size:11px;margin:2px 0;cursor:pointer;color:#185FA5" onclick="document.getElementById(\'openOrdersPanel\').style.display=\'none\';showR(\''+l.sku+'\')">'+
+        '\u2192 '+l.sku+' -- '+(l.desc||'')+' &times;'+l.qty+statusBadge+
+        '</div>';
+    }).join('');
+    var otherLinesHtml=(o.allLines||[]).filter(function(al){return !o.lines.some(function(ml){return ml.sku===al.sku;});}).map(function(al){
+      return '<div style="font-size:11px;margin:2px 0;color:#999">'+al.sku+' -- '+(al.desc||'')+' \u00d7'+al.qty+' <span style="font-size:10px">(not Carroll stock)</span></div>';
+    }).join('');
+    var detailId='ordDetail'+idx;
+    return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
+      '<div style="display:flex;gap:6px;align-items:flex-start">'+
+      '<input type="checkbox" class="order-select-cb" data-order="'+o.orderNumber+'" checked onclick="toggleOrderSelection(this)" style="margin-top:3px">'+
+      '<div style="flex:1">'+
+      '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
+      ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
+      (o.needsReassignToCarroll&&o.assignedWarehouse?
+        '<div style="margin-top:3px;font-size:10px;color:#A32D2D;font-weight:700">\u26a0\ufe0f Currently assigned to '+o.assignedWarehouse+' in Unleashed -- switch to Carroll to fulfill from here</div>'
+        :'')+
+      linesHtml+
+      '<div style="margin-top:4px"><a href="javascript:void(0)" onclick="toggleOrderDetail(\''+detailId+'\')" style="font-size:10px">View full order details</a></div>'+
+      '<div id="'+detailId+'" style="display:none;margin-top:6px;padding-top:6px;border-top:1px dashed #B7D3EE;font-size:11px;color:#444">'+
+        (o.requiredDate?('<div>Required by: '+o.requiredDate+'</div>'):'')+
+        (o.customerRef?('<div>Customer ref: '+o.customerRef+'</div>'):'')+
+        (o.deliveryName?('<div>Deliver to: '+o.deliveryName+'</div>'):'')+
+        (o.deliveryAddress?('<div>Address: '+o.deliveryAddress+'</div>'):'')+
+        (o.deliveryInstruction?('<div>Instructions: '+o.deliveryInstruction+'</div>'):'')+
+        (o.comments?('<div>Comments: '+o.comments+'</div>'):'')+
+        (o.total!=null?('<div>Order total: $'+o.total+'</div>'):'')+
+        (otherLinesHtml?('<div style="margin-top:4px">Other lines on this order (not Carroll stock):'+otherLinesHtml+'</div>'):'')+
+      '</div>'+
+      '</div></div>'+
+      '</div>';
+  }).join('');
+  body.innerHTML=html;
 }
 
 function toggleOrderSelection(cb){
