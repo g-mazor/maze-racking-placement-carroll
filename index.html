@@ -272,6 +272,14 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div id="packStationBody">Loading...</div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('packStationPanel').style.display='none'">Close</div>
 </div>
+<div id="countAllPalletsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:560px;margin:0 auto;background:#FFF;border:2px solid #8E44AD;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3200;max-height:85vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#6C3483;margin-bottom:4px">🔢 Count All Pallets</div>
+  <div id="countAllPalletsHeader" style="font-size:11px;color:#666;margin-bottom:8px"></div>
+  <div id="countAllPalletsRunningTotal" style="background:#F3EAF8;border-radius:6px;padding:8px 10px;font-size:14px;font-weight:700;color:#6C3483;margin-bottom:10px;text-align:center"></div>
+  <div id="countAllPalletsBody"></div>
+  <div style="text-align:center;margin-top:12px"><button class="btn" style="background:#8E44AD;color:#FFF" onclick="saveAllPalletCounts()">Save all counts</button></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('countAllPalletsPanel').style.display='none'">Close</div>
+</div>
 <div class="ww"><div class="wh">
 <div class="wl"><span>Bay 01 (packing end)</span><span>Bay 38/39 (offices end)</span></div>
 <div class="zt" id="fgz"></div>
@@ -3130,6 +3138,70 @@ function delFromCard(sku){
   });
 }
 
+// Shows every pallet location for a SKU as its own editable row, with a
+// live running total, so a bulk SKU (e.g. 30 pallets with different
+// quantities per pallet) can be counted properly in one pass instead of
+// one prompt() dialog per pallet with no visibility into the others.
+// Confirmed needed 18 Aug 2026: the old countFromCard flow made this
+// genuinely unworkable for large multi-pallet SKUs.
+function showCountAllPallets(sku){
+  requirePin(function(){
+    var locs=SLOC[sku]||[];
+    if(!locs.length){alert('This SKU is not placed anywhere yet.');return;}
+    var pallets=groupLocationsByPallet(locs);
+    window.countAllPalletsData={sku:sku,pallets:pallets};
+    var v=DATA.d[sku];
+    document.getElementById('countAllPalletsHeader').innerHTML='<strong>'+sku+'</strong>'+(v?' -- '+v[4]:'')+' -- '+pallets.length+' pallet'+(pallets.length!==1?'s':'');
+    var body=pallets.map(function(p,i){
+      var rep=p[0];
+      var cur=QTY[rep];
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin-bottom:4px;background:'+(i%2===0?'#F8F8F8':'#FFF')+';border-radius:4px">'+
+        '<div style="font-size:12px"><strong>#'+(i+1)+'</strong> '+fl(rep)+'</div>'+
+        '<input type="number" id="cap_'+i+'" value="'+(cur!=null?cur:'')+'" placeholder="qty" style="width:70px;padding:4px 6px;font-size:13px;border-radius:4px;border:1px solid #CCC;text-align:center" oninput="updateCountAllTotal()"/>'+
+        '</div>';
+    }).join('');
+    document.getElementById('countAllPalletsBody').innerHTML=body;
+    updateCountAllTotal();
+    document.getElementById('countAllPalletsPanel').style.display='block';
+  });
+}
+
+function updateCountAllTotal(){
+  var data=window.countAllPalletsData;
+  if(!data)return;
+  var total=0;
+  var enteredCount=0;
+  data.pallets.forEach(function(p,i){
+    var el=document.getElementById('cap_'+i);
+    if(!el)return;
+    var v=parseInt(el.value,10);
+    if(!isNaN(v)){total+=v;enteredCount++;}
+  });
+  document.getElementById('countAllPalletsRunningTotal').textContent='Running total: '+total+' units across '+enteredCount+' of '+data.pallets.length+' pallets entered';
+}
+
+function saveAllPalletCounts(){
+  var data=window.countAllPalletsData;
+  if(!data)return;
+  var changes=[];
+  data.pallets.forEach(function(p,i){
+    var el=document.getElementById('cap_'+i);
+    if(!el)return;
+    var v=parseInt(el.value,10);
+    if(isNaN(v)||v<0)return;
+    var rep=p[0];
+    if(QTY[rep]===v)return;
+    changes.push({loc:rep,qty:v});
+  });
+  if(!changes.length){alert('No changes to save.');return;}
+  changes.forEach(function(c){
+    applyC({type:'count',sku:data.sku,loc:c.loc,qty:c.qty},true);
+  });
+  si2('Saved '+changes.length+' pallet count'+(changes.length!==1?'s':'')+' for '+data.sku+'.');
+  document.getElementById('countAllPalletsPanel').style.display='none';
+  showR(data.sku);
+}
+
 function countFromCard(sku){
   requirePin(function(){
   var locs=SLOC[sku]||[];
@@ -3815,6 +3887,7 @@ function showR(sku){
   var placed=directLocs.length>0;
   var onlyInMixed=!placed&&mixedLocs.length>0;
   var locs=placed?sortLocationsByWalkPath(directLocs):[];
+  var palletGroupCount=placed?groupLocationsByPallet(directLocs).length:0;
   var abcBg={'A':'#E2EFDA','A-HV':'#D9EAD3','B':'#FFF2CC','C':'#FCE4E4','C-HV':'#FBE5D6'}[v[6]]||'#EEE';
   var abcFg={'A':'#375623','A-HV':'#1C4587','B':'#7F6000','C':'#9C0006','C-HV':'#833C00'}[v[6]]||'#444';
   var palBg=v[8]===3?'#FFC000':v[8]===2?'#FFE066':'#E8E8E8';
@@ -3864,7 +3937,7 @@ function showR(sku){
     '<div style="border-left:1px solid #DDD;padding-left:12px;font-size:12px;color:#555"><div><strong>$'+v[12].toLocaleString()+'</strong> 12M sales</div></div></div>'+
     '<div style="font-size:11px;color:#555;margin-top:4px">Lead time: <strong>'+(getLeadTime(key)!=null?getLeadTime(key)+' days':'not set')+'</strong> &nbsp; <a href="javascript:void(0)" onclick="setLeadTimeForSku(\''+key+'\')" style="color:#B9770E">\u23f1 Set lead time</a></div>'+
     (placed?
-      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button><button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
+      '<div class="rca"><button class="btn btn-blue" onclick="enterMoveModeCard(\''+key+'\')">Move</button><button class="btn btn-amber" onclick="enterAddModeCard(\''+key+'\')">+ Add extra pallet</button><button class="btn" style="background:#16A085;color:#FFF" onclick="duplicatePallet(\''+key+'\')">\ud83d\udd01 Duplicate</button><button class="btn" style="background:#8E44AD;color:#FFF" onclick="countFromCard(\''+key+'\')">\ud83d\udd22 Count stock</button>'+(palletGroupCount>1?'<button class="btn" style="background:#6C3483;color:#FFF" onclick="showCountAllPallets(\''+key+'\')">\ud83d\udd22 Count all '+palletGroupCount+' pallets</button>':'')+'<button class="btn btn-red" onclick="delFromCard(\''+key+'\')">Delete all pallets</button></div>'
       :onlyInMixed?
       '<div class="rca">'+mixedLocs.map(function(l){
         var idx=(MIXED_CONTENTS[l]||[]).findIndex(function(e){return mixedEntrySku(e)===key;});
