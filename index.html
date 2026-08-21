@@ -4919,14 +4919,11 @@ function fetchSalesStats(){
       window.lastSalesStatsHtml='--';
       window.lastSalesStatsMetaHtml=(data&&data.note)?data.note:'Could not load';
     } else {
-      var pctBar=data.pctOfLastYearMatched!=null?data.pctOfLastYearMatched:0;
-      var barPct=Math.min(100,pctBar);
       var yoy=data.pctChangeYoY;
       var arrow=data.salesUp===true?'<span style="color:#8CD98C">\u2b06\ufe0f</span>':data.salesUp===false?'<span style="color:#FF9999">\u2b07\ufe0f</span>':'';
       var yoyText=yoy!=null?(yoy>=0?'+':'')+yoy+'% vs same period last FY':'';
       window.lastSalesStatsHtml='$'+data.currentFYTotal.toLocaleString()+' '+arrow;
-      var barHtml='<div style="background:rgba(255,255,255,.25);border-radius:4px;height:6px;margin-top:4px;overflow:hidden"><div style="background:#8CD98C;height:100%;width:'+barPct+'%"></div></div>';
-      window.lastSalesStatsMetaHtml=(yoyText?'<strong>'+yoyText+'</strong> | ':'')+pctBar+'% of last FY total | '+data.pctOfYearElapsed+'% through FY | '+(data.checkedAt||'')+barHtml;
+      window.lastSalesStatsMetaHtml=(yoyText?'<strong>'+yoyText+'</strong> | ':'')+data.pctOfYearElapsed+'% through FY | '+(data.checkedAt||'');
     }
     if(disp)disp.innerHTML=window.lastSalesStatsHtml;
     if(meta)meta.innerHTML=window.lastSalesStatsMetaHtml;
