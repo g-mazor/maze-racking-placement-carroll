@@ -3900,10 +3900,20 @@ function showR(sku){
     (onlyInMixed?('Row '+mixedLocs[0][0]+' | Bay '+parseInt(mixedLocs[0].split('-')[1],10)+' | Level '+mixedLocs[0].split('-')[2]+' -- shares this pallet with other SKUs'):'Waiting to be placed on the racking');
   var countHtml='';
   if(placed){
-    var withCounts=locs.filter(function(l){return QTY[l]!=null;});
-    if(withCounts.length){
-      countHtml='<div style="font-size:11px;color:#555;margin-top:3px">Stock count: '+withCounts.map(function(l){return fl(l)+'='+QTY[l];}).join(', ')+'</div>';
-    }
+    var palletGroupsForCount=groupLocationsByPallet(locs);
+    var countedTotal=0;
+    var countedPallets=0;
+    var palletLines=palletGroupsForCount.map(function(p,i){
+      var rep=p[0];
+      var q=QTY[rep];
+      if(q!=null){countedTotal+=q;countedPallets++;}
+      return '#'+(i+1)+': '+(q!=null?q:'<span style="color:#B9770E">not counted</span>');
+    });
+    var uncountedPallets=palletGroupsForCount.length-countedPallets;
+    countHtml='<div style="font-size:11px;color:#555;margin-top:4px">Pallet counts: '+palletLines.join(' &nbsp;|&nbsp; ')+'</div>'+
+      '<div style="font-size:12px;font-weight:700;color:#374A5C;margin-top:3px">Total: '+countedTotal+' unit'+(countedTotal!==1?'s':'')+
+      (uncountedPallets>0?' across '+countedPallets+' of '+palletGroupsForCount.length+' pallets ('+uncountedPallets+' not yet counted)':' across all '+palletGroupsForCount.length+' pallet'+(palletGroupsForCount.length!==1?'s':''))+
+      '</div>';
   } else if(onlyInMixed){
     countHtml=mixedLocs.map(function(l){
       var others=(MIXED_CONTENTS[l]||[]).filter(function(e){return mixedEntrySku(e)!==key;}).map(mixedEntrySku);
