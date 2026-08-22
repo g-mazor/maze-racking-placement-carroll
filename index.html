@@ -4923,7 +4923,7 @@ function fetchSalesStats(){
       var arrow=data.salesUp===true?'<span style="color:#8CD98C">\u2b06\ufe0f</span>':data.salesUp===false?'<span style="color:#FF9999">\u2b07\ufe0f</span>':'';
       var yoyText=yoy!=null?(yoy>=0?'+':'')+yoy+'% vs same period last FY':'';
       window.lastSalesStatsHtml='$'+data.currentFYTotal.toLocaleString()+' '+arrow;
-      window.lastSalesStatsMetaHtml=(yoyText?'<strong>'+yoyText+'</strong> | ':'')+data.pctOfYearElapsed+'% through FY | '+(data.checkedAt||'');
+      window.lastSalesStatsMetaHtml=(yoyText?'<strong>'+yoyText+'</strong> | ':'')+(data.checkedAt||'');
     }
     if(disp)disp.innerHTML=window.lastSalesStatsHtml;
     if(meta)meta.innerHTML=window.lastSalesStatsMetaHtml;
