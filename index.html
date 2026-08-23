@@ -551,7 +551,8 @@ function fetchReplenishmentAssignInfo(sku){
       if(!task){box.innerHTML='';return;}
       var header='<div style="font-size:11px;font-weight:700;color:#A32D2D;margin-top:8px">\ud83d\ude9a Pick bay is empty -- needs replenishing</div>';
       if(task.assignedReserveLoc){
-        box.innerHTML=header+'<div style="font-size:11px;color:#1E8449;margin-top:2px">\u2705 Assigned: pallet at '+fl(task.assignedReserveLoc)+' -- the forklift page shows just this one, waiting for him to confirm the move.</div>';
+        box.innerHTML=header+'<div style="font-size:11px;color:#1E8449;margin-top:2px">\u2705 Assigned: pallet at '+fl(task.assignedReserveLoc)+' -- the forklift page shows just this one, waiting for him to confirm the move. '+
+          '<a href="javascript:void(0)" onclick="unassignReservePallet(\''+sku+'\')" style="color:#A32D2D">Remove assignment</a></div>';
         return;
       }
       if(!task.reserves.length){
@@ -581,6 +582,22 @@ function assignReservePallet(sku,reserveLoc){
         return;
       }
       si2('Assigned '+fl(reserveLoc)+' for replenishment -- forklift driver notified.');
+      fetchReplenishmentAssignInfo(sku);
+    }).catch(function(){
+      alert('Could not reach the server -- check your connection and try again.');
+    });
+  });
+}
+
+function unassignReservePallet(sku){
+  requirePin(function(){
+    if(!confirm('Remove this assignment? The forklift page will go back to showing all reserve pallets as options instead of just this one.'))return;
+    jsonpFetch(apiUrl('unassignreplenishment=1&sku='+encodeURIComponent(sku))).then(function(result){
+      if(!result||!result.ok){
+        alert('Could not remove assignment: '+(result&&result.error?result.error:'unknown error'));
+        return;
+      }
+      si2('Assignment removed for '+sku+'.');
       fetchReplenishmentAssignInfo(sku);
     }).catch(function(){
       alert('Could not reach the server -- check your connection and try again.');
