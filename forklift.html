@@ -487,7 +487,7 @@ function loadTasks() {
         if (!t.reserves.length) {
           reservesHtml = '<div class="no-reserves">\u26a0\ufe0f No reserve stock found elsewhere -- may need reordering.</div>';
         } else {
-          reservesHtml = '<div class="reserve-label">Tap where you\'re taking it from:</div>' +
+          reservesHtml = '<div class="reserve-label">' + (t.assignedReserveLoc ? '\u2705 Manager assigned this pallet -- tap to confirm:' : 'Tap where you\'re taking it from:') + '</div>' +
             t.reserves.map(function(r, ri) {
               return '<div class="reserve-option" onclick="confirmReplenish(' + ti + ',' + ri + ')">' +
                 '<span class="reserve-bay">' + r.bayCode + '</span><span class="reserve-qty">' + r.qty + ' units</span>' +

@@ -532,6 +532,62 @@ function fetchTruePickFaceInfo(sku){
   });
 }
 
+// Shows a list of reserve pallets a manager can pre-assign to an active
+// replenishment task for this SKU -- so the forklift page shows ONE
+// specific instruction instead of a menu of options. Only shown when
+// this SKU actually has an active "pick bay is empty" task right now.
+// Doesn't touch the map itself -- purely assigns which pallet the
+// forklift driver should bring; the map only updates once he confirms
+// the physical move on his own page. Confirmed needed 23 Aug 2026.
+function fetchReplenishmentAssignInfo(sku){
+  var box=document.getElementById('replenishmentAssignBox');
+  if(!box)return;
+  jsonpFetch(apiUrl('hasactivereplenishment=1&sku='+encodeURIComponent(sku))).then(function(data){
+    if(currentDetailSku!==sku)return;
+    if(!data||!data.hasActive){box.innerHTML='';return;}
+    return jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(taskData){
+      if(currentDetailSku!==sku)return;
+      var task=(taskData&&taskData.tasks||[]).filter(function(t){return t.sku===sku;})[0];
+      if(!task){box.innerHTML='';return;}
+      var header='<div style="font-size:11px;font-weight:700;color:#A32D2D;margin-top:8px">\ud83d\ude9a Pick bay is empty -- needs replenishing</div>';
+      if(task.assignedReserveLoc){
+        box.innerHTML=header+'<div style="font-size:11px;color:#1E8449;margin-top:2px">\u2705 Assigned: pallet at '+fl(task.assignedReserveLoc)+' -- the forklift page shows just this one, waiting for him to confirm the move.</div>';
+        return;
+      }
+      if(!task.reserves.length){
+        box.innerHTML=header+'<div style="font-size:11px;color:#888;margin-top:2px">No reserve pallets found on the map for this SKU.</div>';
+        return;
+      }
+      box.innerHTML=header+
+        '<div style="font-size:11px;color:#555;margin-top:2px">Choose which pallet the forklift driver should bring down:</div>'+
+        task.reserves.map(function(r){
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px;margin-top:3px;background:#FBEFEF;border-radius:4px;font-size:11px">'+
+            '<span>'+fl(r.loc)+' -- qty '+(r.qty!=null&&r.qty!==''?r.qty:'not counted')+'</span>'+
+            '<a href="javascript:void(0)" onclick="assignReservePallet(\''+sku+'\',\''+r.loc+'\')" style="color:#A32D2D;font-weight:700">Assign this pallet</a>'+
+            '</div>';
+        }).join('');
+    });
+  }).catch(function(){
+    if(currentDetailSku!==sku)return;
+    box.innerHTML='';
+  });
+}
+
+function assignReservePallet(sku,reserveLoc){
+  requirePin(function(){
+    jsonpFetch(apiUrl('assignreplenishment=1&sku='+encodeURIComponent(sku)+'&reserveloc='+encodeURIComponent(reserveLoc))).then(function(result){
+      if(!result||!result.ok){
+        alert('Could not assign: '+(result&&result.error?result.error:'unknown error'));
+        return;
+      }
+      si2('Assigned '+fl(reserveLoc)+' for replenishment -- forklift driver notified.');
+      fetchReplenishmentAssignInfo(sku);
+    }).catch(function(){
+      alert('Could not reach the server -- check your connection and try again.');
+    });
+  });
+}
+
 function saveUnitsPerPallet(sku){
   var input=document.getElementById('upInput');
   var units=parseInt(input.value,10);
@@ -3870,6 +3926,7 @@ function showR(sku){
     '<div id="unleashedStockBox" style="margin:6px 0;font-size:11px;color:#888">Loading live Unleashed stock...</div>'+
     '<div id="pickFaceBox"></div>'+
     '<div id="truePickFaceBox"></div>'+
+    '<div id="replenishmentAssignBox"></div>'+
     suggHtml+
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
@@ -3892,6 +3949,7 @@ function showR(sku){
   var pickFaceCandidateLocs=locs.concat(placed?[]:mixedLocs);
   if(pickFaceCandidateLocs.length){fetchPickFaceInfo(key,pickFaceCandidateLocs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
   fetchTruePickFaceInfo(key);
+  fetchReplenishmentAssignInfo(key);
 }
 
 // Entry point for searching "MIXED" -- always offers both starting a brand
