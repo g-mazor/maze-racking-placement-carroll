@@ -363,7 +363,8 @@ function renderResults(query) {
       : '<div class="not-placed">Not currently placed</div>';
     var pickFaceHtml = pickFaceLoc
       ? '<div class="pickface-row">\u2b50 Pick Bay: <strong>' + pickFaceCode + '</strong>' +
-        ' &nbsp;<button type="button" class="confirm-count-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '">\ud83d\udd22 Confirm count</button></div>'
+        ' &nbsp;<button type="button" class="confirm-count-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '">\ud83d\udd22 Confirm count</button>' +
+        ' &nbsp;<button type="button" class="empty-pickface-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '" style="background:#C0392B;color:#FFF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700">\ud83d\udea8 Just took the last one</button></div>'
       : '';
     return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + pickFaceHtml +
       '<div class="live-stock" data-sku="' + sku + '">' +
@@ -388,6 +389,28 @@ document.getElementById('results').addEventListener('click', function(e) {
   if (isNaN(qty) || qty < 0) { alert('Enter a whole number of 0 or more.'); return; }
   postRemoteChange({type: 'count', sku: sku, loc: loc, qty: qty, user: currentPicker, ts: Date.now()}).then(function() {
     QTY[loc] = qty;
+    var si = document.getElementById('si');
+    if (si && si.value.trim().length >= 2) renderResults(si.value);
+  });
+});
+
+// One-tap "I just took the last item from this pick bay" -- for while
+// pickers are still working off a PRINTED pick list (not the guided pick
+// flow on this page), so there's still an immediate way to flag a pick
+// bay as empty. Sends a plain 'count' of 0, which is exactly what
+// already triggers the manager's immediate depletion email and flags
+// this SKU on the forklift page's Replenishment task list -- reuses that
+// whole existing system, no new backend needed. Confirmed needed 23 Aug
+// 2026.
+document.getElementById('results').addEventListener('click', function(e) {
+  var ebtn = e.target.closest('.empty-pickface-btn');
+  if (!ebtn) return;
+  var sku = ebtn.getAttribute('data-sku');
+  var loc = ebtn.getAttribute('data-loc');
+  if (!confirm('Mark ' + sku + ' at ' + fl(loc) + ' as EMPTY right now? This notifies the manager immediately that it needs replenishing.')) return;
+  postRemoteChange({type: 'count', sku: sku, loc: loc, qty: 0, user: currentPicker, ts: Date.now()}).then(function() {
+    QTY[loc] = 0;
+    alert('Marked empty -- the manager has been notified.');
     var si = document.getElementById('si');
     if (si && si.value.trim().length >= 2) renderResults(si.value);
   });
