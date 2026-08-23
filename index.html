@@ -1222,6 +1222,68 @@ function enterManagerLogin(){
   si2('Logged in as '+name+' (manager)');
 }
 
+// Shown right after the site access code is validated on load: any
+// active replenishment task that still needs a specific pallet assigned,
+// so the manager sees it immediately instead of having to search for
+// each SKU one at a time. Each reserve pallet can be assigned directly
+// from within this popup -- no need to click through to the SKU's full
+// detail card first. Confirmed needed 23 Aug 2026 (re-added after
+// confirming the earlier hover-tooltip issue was unrelated -- it was the
+// map's own cell hover behavior, now removed separately).
+function checkPendingReplenishmentAssignments(){
+  jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
+    renderPendingReplenishPopup(data&&data.tasks||[]);
+  }).catch(function(){});
+}
+
+function renderPendingReplenishPopup(tasks){
+  var unassigned=tasks.filter(function(t){return !t.assignedReserveLoc;});
+  var popup=document.getElementById('pendingReplenishPopup');
+  if(!unassigned.length){
+    if(popup)popup.style.display='none';
+    return;
+  }
+  var html='<div style="text-align:center;font-weight:700;color:#A32D2D;margin-bottom:10px">\ud83d\ude9a '+unassigned.length+' pick bay'+(unassigned.length!==1?'s need':' needs')+' a replenishment pallet assigned</div>'+
+    unassigned.map(function(t,ti){
+      var reservesHtml=t.reserves.length
+        ? t.reserves.map(function(r){
+            return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px;margin-top:3px;background:#FFF;border-radius:4px;font-size:11px">'+
+              '<span>'+fl(r.loc)+' -- qty '+(r.qty!=null&&r.qty!==''?r.qty:'not counted')+'</span>'+
+              '<a href="javascript:void(0)" onclick="assignReservePalletFromPopup(\''+t.sku+'\',\''+r.loc+'\')" style="color:#A32D2D;font-weight:700">Assign</a>'+
+              '</div>';
+          }).join('')
+        : '<div style="font-size:11px;color:#888;margin-top:3px">No reserve pallets found on the map for this SKU.</div>';
+      return '<div style="background:#FBEFEF;border:1px solid #E8B4B4;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px">'+
+        '<div style="cursor:pointer" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\';showR(\''+t.sku+'\')"><strong>'+t.sku+'</strong> -- '+(t.desc||'')+'<br>Pick bay '+t.pickBayCode+' is empty</div>'+
+        reservesHtml+
+        '</div>';
+    }).join('')+
+    '<div style="text-align:center;margin-top:8px"><button class="btn" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\'">Dismiss</button></div>';
+  if(!popup){
+    popup=document.createElement('div');
+    popup.id='pendingReplenishPopup';
+    popup.style.cssText='position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #A32D2D;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:4000;max-height:80vh;overflow-y:auto';
+    document.body.appendChild(popup);
+  }
+  popup.innerHTML=html;
+  popup.style.display='block';
+}
+
+function assignReservePalletFromPopup(sku,reserveLoc){
+  requirePin(function(){
+    jsonpFetch(apiUrl('assignreplenishment=1&sku='+encodeURIComponent(sku)+'&reserveloc='+encodeURIComponent(reserveLoc))).then(function(result){
+      if(!result||!result.ok){
+        alert('Could not assign: '+(result&&result.error?result.error:'unknown error'));
+        return;
+      }
+      si2('Assigned '+fl(reserveLoc)+' for replenishment -- forklift driver notified.');
+      checkPendingReplenishmentAssignments(); // refresh the popup, removing this task now that it's assigned
+    }).catch(function(){
+      alert('Could not reach the server -- check your connection and try again.');
+    });
+  });
+}
+
 function exitManagerMode(){
   if(currentManager)logoutGreeting(currentManager);
   currentManager=null;
@@ -5047,6 +5109,7 @@ function fetchAllWarehousesStockValue(){
   fetchSalesStats();
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
+  if(ACCESS_CODE)checkPendingReplenishmentAssignments();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
