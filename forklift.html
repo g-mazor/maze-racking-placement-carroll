@@ -526,9 +526,8 @@ function confirmReplenish(taskIndex, reserveIndex) {
   });
 }
 
-// Refresh automatically every 30 seconds so newly-flagged pick bays show
-// up without the driver needing to tap Refresh themselves.
-setInterval(function() { if (accessCode) loadTasks(); }, 30000);
+// Auto-refresh removed per request 23 Aug 2026 -- only refreshes when the
+// driver taps the Refresh button or reloads the page.
 </script>
 </body>
 </html>

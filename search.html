@@ -958,16 +958,8 @@ function markOrderPacked(orderNumber) {
 
 loadData();
 
-// Keep data current automatically -- re-fetches every 60 seconds in the
-// background so pickers see manager changes without needing to reload the
-// page themselves. Re-renders the current search if one is in progress.
-setInterval(function() {
-  loadData();
-  var currentQuery = document.getElementById('si').value;
-  if (currentQuery.trim().length >= 2) {
-    setTimeout(function() { renderResults(currentQuery); }, 500);
-  }
-}, 60000);
+// Auto-refresh removed per request 23 Aug 2026 -- only refreshes when the
+// picker reloads the page themselves.
 </script>
 </body>
 </html>
