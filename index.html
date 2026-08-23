@@ -1220,6 +1220,34 @@ function enterManagerLogin(){
   loginGreeting(name);
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='';});
   si2('Logged in as '+name+' (manager)');
+  checkPendingReplenishmentAssignments();
+}
+
+// Shown right after manager login: any active replenishment task that
+// still needs a specific pallet assigned (see assignReservePallet), so
+// the manager sees it immediately instead of having to search for each
+// SKU one at a time and risk missing one. Confirmed needed 23 Aug 2026.
+function checkPendingReplenishmentAssignments(){
+  jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
+    var unassigned=(data&&data.tasks||[]).filter(function(t){return !t.assignedReserveLoc;});
+    if(!unassigned.length)return;
+    var html='<div style="text-align:center;font-weight:700;color:#A32D2D;margin-bottom:8px">\ud83d\ude9a '+unassigned.length+' pick bay'+(unassigned.length!==1?'s need':' needs')+' a replenishment pallet assigned</div>'+
+      unassigned.map(function(t){
+        return '<div style="background:#FBEFEF;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\';showR(\''+t.sku+'\')">'+
+          '<strong>'+t.sku+'</strong> -- '+(t.desc||'')+'<br>Pick bay '+t.pickBayCode+' is empty -- '+t.reserves.length+' reserve pallet'+(t.reserves.length!==1?'s':'')+' available'+
+          '</div>';
+      }).join('')+
+      '<div style="text-align:center;margin-top:8px"><button class="btn" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\'">Dismiss</button></div>';
+    var popup=document.getElementById('pendingReplenishPopup');
+    if(!popup){
+      popup=document.createElement('div');
+      popup.id='pendingReplenishPopup';
+      popup.style.cssText='position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #A32D2D;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:4000;max-height:80vh;overflow-y:auto';
+      document.body.appendChild(popup);
+    }
+    popup.innerHTML=html;
+    popup.style.display='block';
+  }).catch(function(){});
 }
 
 function exitManagerMode(){
