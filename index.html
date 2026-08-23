@@ -5124,12 +5124,15 @@ function fetchAllWarehousesStockValue(){
   jsonpFetch(apiUrl('allwarehousesstockvaluelive=1')).then(function(data){
     var disp=document.getElementById('allWhStockValueDisplay');
     var meta=document.getElementById('allWhStockValueMeta');
-    if(!data||data.totalValue==null){
+    if(!data||data.combinedValue==null){
       window.lastAllWhStockValueHtml='--';
       window.lastAllWhStockValueMetaHtml=(data&&data.note)?data.note:'Could not load';
     } else {
-      window.lastAllWhStockValueHtml='$'+Math.round(data.totalValue).toLocaleString();
-      window.lastAllWhStockValueMetaHtml=(data.skuCount||0)+' SKUs | live as of '+(data.checkedAt||'');
+      window.lastAllWhStockValueHtml='$'+Math.round(data.combinedValue).toLocaleString();
+      var breakdown=(data.warehouses||[]).map(function(w){
+        return w.name+': $'+Math.round(w.totalValue).toLocaleString();
+      }).join(' | ');
+      window.lastAllWhStockValueMetaHtml=breakdown+'<br>'+(data.combinedSkuCount||0)+' SKUs total | live as of '+(data.checkedAt||'');
     }
     if(disp)disp.innerHTML=window.lastAllWhStockValueHtml;
     if(meta)meta.innerHTML=window.lastAllWhStockValueMetaHtml;
