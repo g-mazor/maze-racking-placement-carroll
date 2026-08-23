@@ -1271,7 +1271,10 @@ function renderPendingReplenishPopup(tasks){
           }).join('')
         : '<div style="font-size:11px;color:#888;margin-top:3px">No reserve pallets found on the map for this SKU.</div>';
       return '<div style="background:#FBEFEF;border:1px solid #E8B4B4;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="cursor:pointer" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\';showR(\''+t.sku+'\')"><strong>'+t.sku+'</strong> -- '+(t.desc||'')+'<br>Pick bay '+t.pickBayCode+' is empty</div>'+
+        '<a href="javascript:void(0)" onclick="dismissReplenishmentTask(\''+t.sku+'\',\''+t.pickBayLoc+'\')" style="color:#999;font-size:10px;text-decoration:underline;white-space:nowrap;margin-left:8px">\ud83d\uddd1\ufe0f Delete this task</a>'+
+        '</div>'+
         reservesHtml+
         '</div>';
     }).join('')+
@@ -1295,6 +1298,26 @@ function assignReservePalletFromPopup(sku,reserveLoc){
       }
       si2('Assigned '+fl(reserveLoc)+' for replenishment -- forklift driver notified.');
       checkPendingReplenishmentAssignments(); // refresh the popup, removing this task now that it's assigned
+    }).catch(function(){
+      alert('Could not reach the server -- check your connection and try again.');
+    });
+  });
+}
+
+// Fully removes a replenishment task from both this popup and the
+// forklift page's task list -- for when the manager wants to handle it
+// manually through the map instead of via the assign/forklift workflow.
+// Confirmed needed 23 Aug 2026.
+function dismissReplenishmentTask(sku,pickBayLoc){
+  requirePin(function(){
+    if(!confirm('Delete this replenishment task for '+sku+'? It will no longer show up here or on the forklift page -- you\'ll need to handle it manually through the map.'))return;
+    jsonpFetch(apiUrl('dismissreplenishment=1&sku='+encodeURIComponent(sku)+'&pickbayloc='+encodeURIComponent(pickBayLoc))).then(function(result){
+      if(!result||!result.ok){
+        alert('Could not delete task: '+(result&&result.error?result.error:'unknown error'));
+        return;
+      }
+      si2('Replenishment task deleted for '+sku+'.');
+      checkPendingReplenishmentAssignments(); // refresh the popup, removing this task
     }).catch(function(){
       alert('Could not reach the server -- check your connection and try again.');
     });
