@@ -1742,8 +1742,6 @@ function mkCell(loc){
     var bcell=document.createElement('div');bcell.id='c_'+loc;
     bcell.className='bc blocked-safety';bcell.setAttribute('data-loc',loc);
     bcell.textContent='';
-    bcell.addEventListener('mouseenter',function(e){var tt=document.getElementById('tt');tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- '+BLOCKED_LOCATIONS[loc]+' -- do not place pallets here';tt.style.display='block';posTT(e);});
-    bcell.addEventListener('mouseleave',hideTT);
     bcell.addEventListener('click',function(){alert('\ud83d\udea8 '+fl(loc)+' is blocked: '+BLOCKED_LOCATIONS[loc]+'. Pallets cannot be placed here.');});
     return bcell;
   }
@@ -1755,8 +1753,6 @@ function mkCell(loc){
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
     // draggable removed entirely -- it caused unreliable taps on some tablets/phones
     // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
-    cell.addEventListener('mouseenter',function(e){showTT(e,loc,sku,v);});
-    cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onOcc(loc,sku,e);});
     cell.addEventListener('dragstart',function(ev){
       dragSku=sku;dragFrom=(SLOC[sku]||[loc]).slice();
@@ -1766,8 +1762,6 @@ function mkCell(loc){
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
-    cell.addEventListener('mouseenter',function(e){if(ttSticky&&loc!==ttPinnedLoc)return;var tt=document.getElementById('tt');var h=getBayHeight(loc);tt.style.pointerEvents='none';tt.textContent=fl(loc)+' -- Empty'+(h?' -- height '+h:' -- height not set yet');tt.style.display='block';posTT(e);});
-    cell.addEventListener('mouseleave',hideTT);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
     cell.addEventListener('dragover',function(ev){if(dragSku){ev.preventDefault();cell.classList.add('dt');}});
     cell.addEventListener('dragleave',function(){cell.classList.remove('dt');});
