@@ -1246,6 +1246,12 @@ function checkPendingReplenishmentAssignments(){
     }
     popup.innerHTML=html;
     popup.style.display='block';
+    // Suppress any tooltip that the layout shift from inserting this
+    // popup might have triggered as a side effect (confirmed 23 Aug
+    // 2026: the earlier page-load-time suppression wasn't enough, since
+    // this runs later, after an async fetch resolves).
+    if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
+    ttSticky=false;ttPinnedLoc=null;
   }).catch(function(){});
 }
 
@@ -5088,6 +5094,13 @@ function fetchAllWarehousesStockValue(){
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
   if(ACCESS_CODE)checkPendingReplenishmentAssignments();
+  // Catch-all: re-suppress a couple seconds later too, in case ANY of the
+  // async fetches above (not just the replenishment popup) causes a
+  // layout shift that triggers a stray hover event once it resolves.
+  setTimeout(function(){
+    if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
+    ttSticky=false;ttPinnedLoc=null;
+  },2000);
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
