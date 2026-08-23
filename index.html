@@ -1220,7 +1220,6 @@ function enterManagerLogin(){
   loginGreeting(name);
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='';});
   si2('Logged in as '+name+' (manager)');
-  checkPendingReplenishmentAssignments();
 }
 
 // Shown right after manager login: any active replenishment task that
@@ -5081,6 +5080,7 @@ function fetchAllWarehousesStockValue(){
   fetchSalesStats();
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
+  if(ACCESS_CODE)checkPendingReplenishmentAssignments();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
