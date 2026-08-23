@@ -1222,39 +1222,6 @@ function enterManagerLogin(){
   si2('Logged in as '+name+' (manager)');
 }
 
-// Shown right after manager login: any active replenishment task that
-// still needs a specific pallet assigned (see assignReservePallet), so
-// the manager sees it immediately instead of having to search for each
-// SKU one at a time and risk missing one. Confirmed needed 23 Aug 2026.
-function checkPendingReplenishmentAssignments(){
-  jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
-    var unassigned=(data&&data.tasks||[]).filter(function(t){return !t.assignedReserveLoc;});
-    if(!unassigned.length)return;
-    var html='<div style="text-align:center;font-weight:700;color:#A32D2D;margin-bottom:8px">\ud83d\ude9a '+unassigned.length+' pick bay'+(unassigned.length!==1?'s need':' needs')+' a replenishment pallet assigned</div>'+
-      unassigned.map(function(t){
-        return '<div style="background:#FBEFEF;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\';showR(\''+t.sku+'\')">'+
-          '<strong>'+t.sku+'</strong> -- '+(t.desc||'')+'<br>Pick bay '+t.pickBayCode+' is empty -- '+t.reserves.length+' reserve pallet'+(t.reserves.length!==1?'s':'')+' available'+
-          '</div>';
-      }).join('')+
-      '<div style="text-align:center;margin-top:8px"><button class="btn" onclick="document.getElementById(\'pendingReplenishPopup\').style.display=\'none\'">Dismiss</button></div>';
-    var popup=document.getElementById('pendingReplenishPopup');
-    if(!popup){
-      popup=document.createElement('div');
-      popup.id='pendingReplenishPopup';
-      popup.style.cssText='position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #A32D2D;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:4000;max-height:80vh;overflow-y:auto';
-      document.body.appendChild(popup);
-    }
-    popup.innerHTML=html;
-    popup.style.display='block';
-    // Suppress any tooltip that the layout shift from inserting this
-    // popup might have triggered as a side effect (confirmed 23 Aug
-    // 2026: the earlier page-load-time suppression wasn't enough, since
-    // this runs later, after an async fetch resolves).
-    if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
-    ttSticky=false;ttPinnedLoc=null;
-  }).catch(function(){});
-}
-
 function exitManagerMode(){
   if(currentManager)logoutGreeting(currentManager);
   currentManager=null;
@@ -5082,25 +5049,10 @@ function fetchAllWarehousesStockValue(){
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
-  // Explicitly suppress any tooltip that might have been triggered by the
-  // cursor resting over a cell as it rendered during grid construction --
-  // confirmed needed 23 Aug 2026: a stray cell tooltip was popping up on
-  // load, unrelated to anything the user actually clicked or hovered on
-  // purpose.
-  if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
-  ttSticky=false;ttPinnedLoc=null;
   fetchCarrollStockValue();
   fetchSalesStats();
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
-  if(ACCESS_CODE)checkPendingReplenishmentAssignments();
-  // Catch-all: re-suppress a couple seconds later too, in case ANY of the
-  // async fetches above (not just the replenishment popup) causes a
-  // layout shift that triggers a stray hover event once it resolves.
-  setTimeout(function(){
-    if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
-    ttSticky=false;ttPinnedLoc=null;
-  },2000);
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
