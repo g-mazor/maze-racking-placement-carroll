@@ -5076,6 +5076,13 @@ function fetchAllWarehousesStockValue(){
   document.querySelectorAll('.public-hide').forEach(function(el){el.style.display='none';});
   try{await buildIdx();}catch(e){console.error('buildIdx failed, showing an empty map instead of a blank page:',e);}
   bFG();bMain();buildStats();
+  // Explicitly suppress any tooltip that might have been triggered by the
+  // cursor resting over a cell as it rendered during grid construction --
+  // confirmed needed 23 Aug 2026: a stray cell tooltip was popping up on
+  // load, unrelated to anything the user actually clicked or hovered on
+  // purpose.
+  if(typeof tt!=='undefined'&&tt){tt.style.display='none';}
+  ttSticky=false;ttPinnedLoc=null;
   fetchCarrollStockValue();
   fetchSalesStats();
   fetchOrdersToPickSummary();
