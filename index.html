@@ -3518,36 +3518,40 @@ function ackReorderAlert(sku,currentQty){
   showStockAlerts();
 }
 
+// Shows every SKU that's physically placed somewhere at Carroll but
+// currently shows ZERO stock in Unleashed -- a genuine discrepancy worth
+// investigating (either it already sold/moved in Unleashed but the map
+// wasn't updated, or there's a sync issue). Shows both the map's own
+// tracked count and Unleashed's count side by side, with Unleashed
+// emphasized as the more important figure to trust. Reads a cached list
+// (refreshed hourly in the background) rather than a slow live sweep.
+// Replaces the old ground-level-replenish/reorder-soon alerts entirely,
+// per request 23 Aug 2026.
 function showStockAlerts(){
-  var replenish=computeReplenishAlerts(5).filter(function(a){
-    var acked=getAckedQty(a.sku,'ack_replenish');
-    return acked===undefined||acked!==a.level1Qty;
-  });
-  var reorder=computeReorderAlerts(14).filter(function(a){
-    var acked=getAckedQty(a.sku,'ack_reorder');
-    return acked===undefined||acked!==a.totalQty;
-  });
-
-  var html='<div style="font-weight:700;color:#B9770E;margin-bottom:6px">\ud83d\udce6 Replenish (ground level low)</div>';
-  html+=replenish.length?replenish.map(function(a){
-    return '<div style="background:#FFF3CD;border:1px solid #F39C12;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
-      '<strong>'+a.sku+'</strong> -- '+a.desc+'<br>Ground level: '+a.level1Qty+' left'+
-      (a.hasReserve?' -- <span style="color:#1E8449;font-weight:700">'+a.reserveQty+' in reserve, move down</span>':' -- <span style="color:#A32D2D;font-weight:700">no reserve stock -- needs reorder</span>')+
-      '<div style="text-align:right;margin-top:4px"><button class="btn" style="font-size:10px;padding:4px 8px" onclick="ackReplenishAlert(\''+a.sku+'\','+a.level1Qty+')">Acknowledge</button></div>'+
-      '</div>';
-  }).join(''):'<div style="font-size:12px;color:#777;margin-bottom:10px">Nothing needs replenishing right now.</div>';
-
-  html+='<div style="font-weight:700;color:#A32D2D;margin-bottom:6px;margin-top:14px">\u23f1 Reorder soon (lead time)</div>';
-  html+=reorder.length?reorder.map(function(a){
-    return '<div style="background:#FDEDEC;border:1px solid #E74C3C;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
-      '<strong>'+a.sku+'</strong> -- '+a.desc+'<br>'+a.totalQty+' left, using '+a.dailyRate.toFixed(1)+'/day -- <strong>'+a.daysLeft+' days of stock</strong> (lead time '+a.leadTime+' days)'+
-      '<div style="text-align:right;margin-top:4px"><button class="btn" style="font-size:10px;padding:4px 8px" onclick="ackReorderAlert(\''+a.sku+'\','+a.totalQty+')">Acknowledge</button></div>'+
-      '</div>';
-  }).join(''):'<div style="font-size:12px;color:#777">Nothing needs reordering right now (only SKUs with a lead time set are checked).</div>';
-
-  html+='<div style="text-align:center;margin-top:12px"><button class="btn btn-blue" onclick="sendStockAlertEmail()">\ud83d\udce7 Send alert email now</button></div>';
-  document.getElementById('stockAlertsBody').innerHTML=html;
+  document.getElementById('stockAlertsBody').innerHTML='Loading...';
   document.getElementById('stockAlertsPanel').style.display='block';
+  jsonpFetch(apiUrl('zerostockdetail=1')).then(function(data){
+    var body=document.getElementById('stockAlertsBody');
+    var items=(data&&data.items)||[];
+    if(!items.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">No SKUs currently placed at Carroll show zero stock in Unleashed.'+(data&&data.checkedAt?' <br>Last checked: '+data.checkedAt:'')+(data&&data.note?'<br>'+data.note:'')+'</div>';
+      return;
+    }
+    var html='<div style="font-weight:700;color:#A32D2D;margin-bottom:8px">\u26a0\ufe0f '+items.length+' SKU'+(items.length!==1?'s':'')+' placed at Carroll but showing ZERO in Unleashed</div>';
+    if(data.checkedAt)html+='<div style="font-size:11px;color:#888;margin-bottom:8px">Last checked: '+data.checkedAt+'</div>';
+    html+=items.map(function(item){
+      return '<div style="background:#FDEDEC;border:1px solid #E8B4B4;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'stockAlertsPanel\').style.display=\'none\';showR(\''+item.sku+'\')">'+
+        '<strong>'+item.sku+'</strong>'+(item.desc?' -- '+item.desc:'')+'<br>'+
+        'Map shows: '+item.mapQty+' &nbsp;|&nbsp; <strong style="color:#A32D2D">Unleashed shows: '+item.unleashedQty+'</strong>'+
+        '</div>';
+    }).join('');
+    if(data.errors&&data.errors.length){
+      html+='<div style="font-size:11px;color:#999;margin-top:6px">'+data.errors.length+' SKU(s) could not be checked last run.</div>';
+    }
+    body.innerHTML=html;
+  }).catch(function(){
+    document.getElementById('stockAlertsBody').innerHTML='<div style="font-size:12px;color:#999">Could not load.</div>';
+  });
 }
 
 // Fetches and renders this week's Cycle Count list -- a rotating batch of
