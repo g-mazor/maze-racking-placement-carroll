@@ -1247,6 +1247,51 @@ function enterManagerLogin(){
 // detail card first. Confirmed needed 23 Aug 2026 (re-added after
 // confirming the earlier hover-tooltip issue was unrelated -- it was the
 // map's own cell hover behavior, now removed separately).
+// Shown right after the site access code is validated on load: any
+// replenishment tasks the forklift driver has completed since the
+// manager last checked -- so the manager can review what changed even
+// without being present when it happened. Uses localStorage (not
+// sessionStorage) so "since I last checked" persists across browser
+// restarts, not just within one tab session. Confirmed needed 23 Aug
+// 2026.
+function checkRecentlyCompletedReplenishments(){
+  var lastChecked = Number(localStorage.getItem('lastReplenishmentCheckTs')) || 0;
+  if(!lastChecked){
+    // First time ever on this browser -- just establish a starting point,
+    // don't dump every historical completion that's ever happened.
+    jsonpFetch(apiUrl('recentreplenishments=1&since=0')).then(function(data){
+      if(data&&data.serverNowMs)localStorage.setItem('lastReplenishmentCheckTs', String(data.serverNowMs));
+    }).catch(function(){});
+    return;
+  }
+  jsonpFetch(apiUrl('recentreplenishments=1&since='+lastChecked)).then(function(data){
+    var completed=(data&&data.completed)||[];
+    if(data&&data.serverNowMs){
+      localStorage.setItem('lastReplenishmentCheckTs', String(data.serverNowMs));
+    }
+    if(!completed.length)return;
+    var html='<div style="text-align:center;font-weight:700;color:#1E8449;margin-bottom:8px">\u2705 '+completed.length+' replenishment'+(completed.length!==1?'s':'')+' completed by the forklift driver</div>';
+    html+=completed.map(function(c){
+      return '<div style="background:#EAF7EE;border:1px solid #A9DFBF;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px;cursor:pointer" onclick="document.getElementById(\'recentReplenishPopup\').style.display=\'none\';showR(\''+c.sku+'\')">'+
+        '<strong>'+c.sku+'</strong>'+(c.desc?' -- '+c.desc:'')+'<br>'+
+        (c.assignedReserveLoc?'Moved '+fl(c.assignedReserveLoc)+' \u2192 ':'Replenished ')+c.pickBayCode+
+        '<div style="font-size:10px;color:#888;margin-top:2px">Completed: '+c.resolvedAt+'</div>'+
+        '</div>';
+    }).join('')+
+    '<div style="text-align:center;margin-top:8px"><button class="btn" onclick="document.getElementById(\'recentReplenishPopup\').style.display=\'none\'">Dismiss</button></div>';
+
+    var popup=document.getElementById('recentReplenishPopup');
+    if(!popup){
+      popup=document.createElement('div');
+      popup.id='recentReplenishPopup';
+      popup.style.cssText='position:fixed;top:70px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #1E8449;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:4001;max-height:75vh;overflow-y:auto';
+      document.body.appendChild(popup);
+    }
+    popup.innerHTML=html;
+    popup.style.display='block';
+  }).catch(function(){});
+}
+
 function checkPendingReplenishmentAssignments(){
   jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
     renderPendingReplenishPopup(data&&data.tasks||[]);
@@ -5157,6 +5202,7 @@ function fetchAllWarehousesStockValue(){
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
   if(ACCESS_CODE)checkPendingReplenishmentAssignments();
+  if(ACCESS_CODE)checkRecentlyCompletedReplenishments();
   setInterval(function(){pollSync(false);},SYNC_POLL_MS);
   setInterval(checkForPickListUpdate,5000);
 })();
