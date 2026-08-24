@@ -175,6 +175,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <div style="border-top:1px solid #EEE;margin:4px 0"></div>
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#943126;color:#FFF" onclick="closeSettingsPanel();showActivePickLists()">🗑️ Delete Pick List</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Carroll Stock to Dispatch</button>
@@ -230,6 +231,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="stockAlertsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #B9770E;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div id="stockAlertsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('stockAlertsPanel').style.display='none'">Close</div>
+</div>
+<div id="activePickListsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #943126;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#943126;margin-bottom:10px">🗑️ Active Pick Lists</div>
+  <div id="activePickListsBody"></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('activePickListsPanel').style.display='none'">Close</div>
 </div>
 <div id="pickerStatsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
@@ -3281,9 +3287,9 @@ function getPickLists(){
 }
 
 // The picker's current list to work from: their most recently assigned list
-// that isn't finished yet.
+// that isn't finished (or deleted by a manager) yet.
 function getActivePickListFor(picker){
-  var lists=getPickLists().filter(function(pl){return pl.assignedTo===picker&&pl.status!=='complete';});
+  var lists=getPickLists().filter(function(pl){return pl.assignedTo===picker&&pl.status!=='complete'&&pl.status!=='deleted';});
   return lists.length?lists[0]:null;
 }
 
@@ -3572,6 +3578,39 @@ function ackReorderAlert(sku,currentQty){
 // (refreshed hourly in the background) rather than a slow live sweep.
 // Replaces the old ground-level-replenish/reorder-soon alerts entirely,
 // per request 23 Aug 2026.
+// Shows every currently active (not complete, not already deleted) pick
+// list, so a manager can delete one that's stuck, wrong, or no longer
+// needed -- even if the picker has already started working through it.
+// Confirmed needed 23 Aug 2026.
+function showActivePickLists(){
+  var body=document.getElementById('activePickListsBody');
+  var lists=getPickLists().filter(function(pl){return pl.status!=='complete'&&pl.status!=='deleted';});
+  if(!lists.length){
+    body.innerHTML='<div style="font-size:12px;color:#777">No active pick lists right now.</div>';
+  } else {
+    body.innerHTML=lists.map(function(pl){
+      var pickedCount=pl.items.filter(function(it){return it.picked;}).length;
+      return '<div style="background:#FBEFEF;border:1px solid #E8B4B4;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'
+        +'<div><strong>'+(pl.assignedTo||'Unassigned')+'</strong> &nbsp;|&nbsp; '+pickedCount+' of '+pl.items.length+' picked</div>'
+        +'<div style="font-size:10px;color:#888;margin-top:2px">List ID: '+pl.id+'</div>'
+        +'<div style="text-align:right;margin-top:4px"><button class="btn btn-red" style="font-size:11px;padding:4px 10px" onclick="deletePickList(\''+pl.id+'\')">Delete this list</button></div>'
+        +'</div>';
+    }).join('');
+  }
+  document.getElementById('activePickListsPanel').style.display='block';
+}
+
+function deletePickList(id){
+  requirePin(function(){
+    if(!confirm('Delete this pick list? The picker will no longer see it, and any items not yet picked will need to be picked another way.'))return;
+    var pl=getPickLists().find(function(p){return p.id===id;});
+    if(!pl)return;
+    applyC({type:'picklist_save',id:id,contents:{items:pl.items,assignedTo:pl.assignedTo,status:'deleted'},ts:Date.now()},true);
+    si2('Pick list deleted.');
+    showActivePickLists();
+  });
+}
+
 function showStockAlerts(){
   document.getElementById('stockAlertsBody').innerHTML='Loading...';
   document.getElementById('stockAlertsPanel').style.display='block';
