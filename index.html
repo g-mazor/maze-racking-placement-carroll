@@ -176,6 +176,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#943126;color:#FFF" onclick="closeSettingsPanel();showActivePickLists()">🗑️ Delete Pick List</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B03A2E;color:#FFF" onclick="closeSettingsPanel();showActiveReplenishmentTasks()">🗑️ Delete Replenishment Task</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#185FA5;color:#FFF" onclick="closeSettingsPanel();showOpenOrders()">📋 Carroll Stock to Dispatch</button>
@@ -236,6 +237,11 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
   <div style="font-size:13px;font-weight:700;color:#943126;margin-bottom:10px">🗑️ Active Pick Lists</div>
   <div id="activePickListsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('activePickListsPanel').style.display='none'">Close</div>
+</div>
+<div id="activeReplenishmentPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #B03A2E;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#B03A2E;margin-bottom:10px">🗑️ Active Replenishment Tasks</div>
+  <div id="activeReplenishmentBody"></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('activeReplenishmentPanel').style.display='none'">Close</div>
 </div>
 <div id="pickerStatsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #2980B9;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1F3864;margin-bottom:10px">Picker Stats</div>
@@ -1368,7 +1374,14 @@ function dismissReplenishmentTask(sku,pickBayLoc){
         return;
       }
       si2('Replenishment task deleted for '+sku+'.');
-      checkPendingReplenishmentAssignments(); // refresh the popup, removing this task
+      // Refreshes whichever panel is actually open -- the login popup, or
+      // the Settings-based Active Replenishment Tasks panel -- rather
+      // than assuming which one called this, and rather than the caller
+      // chaining a refresh immediately (which would race ahead of this
+      // async delete actually finishing).
+      var replPanel=document.getElementById('activeReplenishmentPanel');
+      if(replPanel&&replPanel.style.display==='block')showActiveReplenishmentTasks();
+      else checkPendingReplenishmentAssignments();
     }).catch(function(){
       alert('Could not reach the server -- check your connection and try again.');
     });
@@ -3582,6 +3595,34 @@ function ackReorderAlert(sku,currentQty){
 // list, so a manager can delete one that's stuck, wrong, or no longer
 // needed -- even if the picker has already started working through it.
 // Confirmed needed 23 Aug 2026.
+// Shows every currently active replenishment task (whether a pallet has
+// been assigned or not), each with a delete option -- lets the manager
+// correct a mistake, e.g. a picker accidentally tapping "Just took the
+// last one" on the wrong SKU, creating a task that shouldn't exist and
+// can't otherwise be undone or reassigned. Confirmed needed 23 Aug 2026.
+function showActiveReplenishmentTasks(){
+  var body=document.getElementById('activeReplenishmentBody');
+  body.innerHTML='Loading...';
+  document.getElementById('activeReplenishmentPanel').style.display='block';
+  jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
+    var tasks=(data&&data.tasks)||[];
+    if(!tasks.length){
+      body.innerHTML='<div style="font-size:12px;color:#777">No active replenishment tasks right now.</div>';
+      return;
+    }
+    body.innerHTML=tasks.map(function(t){
+      return '<div style="background:#FBEFEF;border:1px solid #E8B4B4;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div><strong>'+t.sku+'</strong> -- '+(t.desc||'')+'<br>Pick bay '+t.pickBayCode+' is empty'
+        +(t.assignedReserveLoc?' -- assigned: '+fl(t.assignedReserveLoc):' -- not yet assigned')+'</div>'
+        +'<a href="javascript:void(0)" onclick="dismissReplenishmentTask(\''+t.sku+'\',\''+t.pickBayLoc+'\')" style="color:#999;font-size:10px;text-decoration:underline;white-space:nowrap;margin-left:8px">\ud83d\uddd1\ufe0f Delete</a>'
+        +'</div></div>';
+    }).join('');
+  }).catch(function(){
+    body.innerHTML='<div style="font-size:12px;color:#999">Could not load.</div>';
+  });
+}
+
 function showActivePickLists(){
   var body=document.getElementById('activePickListsBody');
   var lists=getPickLists().filter(function(pl){return pl.status!=='complete'&&pl.status!=='deleted';});
