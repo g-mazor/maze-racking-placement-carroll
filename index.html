@@ -498,6 +498,64 @@ function fetchPickFaceInfo(sku,locs){
   });
 }
 
+// Shows a SKU's permanent "home" pick face location -- separate from
+// whatever's currently occupying that spot. Lets a manager reserve a
+// location for a SKU that's out of stock so excess stock from other
+// products can temporarily use the space, without losing track of where
+// the original SKU belongs when new stock arrives. Confirmed needed 23
+// Aug 2026.
+function fetchPickFaceHomeInfo(sku){
+  var box=document.getElementById('pickFaceHomeBox');
+  if(!box)return;
+  jsonpFetch(apiUrl('getpickfacehome=1&sku='+encodeURIComponent(sku))).then(function(homeData){
+    if(currentDetailSku!==sku)return;
+    if(homeData&&homeData.loc){
+      box.innerHTML='<div style="font-size:11px;margin-top:4px;padding:6px 8px;background:#EAF2F8;border-radius:4px">'+
+        '\ud83c\udfe0 <strong>Home pick face: '+fl(homeData.loc)+'</strong>'+
+        ' &nbsp;<a href="javascript:void(0)" onclick="clearPickFaceHome(\''+sku+'\')" style="color:#A32D2D">Clear</a>'+
+        '<div style="font-size:10px;color:#888;margin-top:2px">If this spot is temporarily holding a different product, put this SKU back here once new stock arrives.</div>'+
+        '</div>';
+      return;
+    }
+    // No home set yet -- check if this SKU currently has a pick face at
+    // all, so we can offer to set THAT as the home.
+    return jsonpFetch(apiUrl('pickfaces=1')).then(function(pfData){
+      if(currentDetailSku!==sku)return;
+      var currentLoc=pfData&&pfData.map?pfData.map[sku]:null;
+      if(!currentLoc){box.innerHTML='';return;}
+      box.innerHTML='<div style="font-size:11px;margin-top:4px">'+
+        '<a href="javascript:void(0)" onclick="setPickFaceHome(\''+sku+'\',\''+currentLoc+'\')" style="color:#16A085">\ud83d\udccc Set '+fl(currentLoc)+' as this SKU\'s permanent home</a>'+
+        '</div>';
+    });
+  }).catch(function(){
+    if(currentDetailSku!==sku)return;
+    box.innerHTML='';
+  });
+}
+
+function setPickFaceHome(sku,loc){
+  requirePin(function(){
+    var v=DATA.d[sku];
+    var desc=v?v[4]:'';
+    jsonpFetch(apiUrl('setpickfacehome=1&sku='+encodeURIComponent(sku)+'&loc='+encodeURIComponent(loc)+'&bay='+encodeURIComponent(fl(loc))+'&desc='+encodeURIComponent(desc))).then(function(result){
+      if(!result||!result.ok){alert('Could not set home location.');return;}
+      si2('Home pick face set for '+sku+'.');
+      fetchPickFaceHomeInfo(sku);
+    }).catch(function(){alert('Could not reach the server -- check your connection and try again.');});
+  });
+}
+
+function clearPickFaceHome(sku){
+  requirePin(function(){
+    if(!confirm('Clear the home pick face for '+sku+'? The system will no longer remember a reserved spot for this SKU.'))return;
+    jsonpFetch(apiUrl('clearpickfacehome=1&sku='+encodeURIComponent(sku))).then(function(result){
+      if(!result||!result.ok){alert('Could not clear home location.');return;}
+      si2('Home pick face cleared for '+sku+'.');
+      fetchPickFaceHomeInfo(sku);
+    }).catch(function(){alert('Could not reach the server -- check your connection and try again.');});
+  });
+}
+
 function togglePickFace(sku,loc,makeCurrent){
   requirePin(function(){
     applyC({type:'setpickface',sku:sku,loc:loc,qty:makeCurrent?1:0},true);
@@ -2445,6 +2503,17 @@ function showEmptyInfo(loc,e){
     '<a href="javascript:void(0)" onclick="setBaySlotCount(\''+row+'\','+bay+','+lvl+')" style="color:#BA7517">\ud83d\udd27 Change slots at this level</a>';
   tt.style.display='block';posTT(e);
   ttSticky=true;ttPinnedLoc=loc;
+  // Warns if this empty spot is actually reserved as another SKU's home
+  // pick face -- so a manager sees this BEFORE deciding to place
+  // something else here, rather than the placement flow silently
+  // overwriting a reserved spot with no warning at all. Confirmed needed
+  // 23 Aug 2026.
+  jsonpFetch(apiUrl('pickfacehomeowner=1&loc='+encodeURIComponent(loc))).then(function(owner){
+    if(ttPinnedLoc!==loc)return; // tooltip moved on already
+    if(owner&&owner.sku){
+      tt.innerHTML+='<div style="margin-top:4px;padding:4px 6px;background:#FFF3CD;border-radius:4px;color:#7D3C00">\ud83c\udfe0 Reserved as home pick face for <strong>'+owner.sku+'</strong>'+(owner.desc?' -- '+owner.desc:'')+'. Temporary use only -- move this SKU back once new stock arrives.</div>';
+    }
+  }).catch(function(){});
 }
 
 function startPlaceAtLocation(loc){
@@ -4152,6 +4221,7 @@ function showR(sku){
     '<div id="pickFaceBox"></div>'+
     '<div id="truePickFaceBox"></div>'+
     '<div id="replenishmentAssignBox"></div>'+
+    '<div id="pickFaceHomeBox"></div>'+
     suggHtml+
     '<div class="pr"><div class="pb"><div class="pv" style="color:#1F3864">'+v[7].toFixed(1)+'</div><div class="pl">picks / day</div></div>'+
     '<div class="pb"><div class="pv" style="color:#185FA5">'+Math.round(mp)+'</div><div class="pl">picks / month</div></div>'+
@@ -4175,6 +4245,7 @@ function showR(sku){
   if(pickFaceCandidateLocs.length){fetchPickFaceInfo(key,pickFaceCandidateLocs);}else{var pfb=document.getElementById('pickFaceBox');if(pfb)pfb.innerHTML='';}
   fetchTruePickFaceInfo(key);
   fetchReplenishmentAssignInfo(key);
+  fetchPickFaceHomeInfo(key);
 }
 
 // Entry point for searching "MIXED" -- always offers both starting a brand
