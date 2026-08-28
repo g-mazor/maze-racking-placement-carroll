@@ -305,7 +305,19 @@ var RCOL={A:'#8AC640',AA:'#8AC640',AAA:'#8AC640',B:'#8AC640',C:'#8AC640',D:'#8AC
 var RFCOL={A:'#111',AA:'#111',AAA:'#111',B:'#111',C:'#111',D:'#111',E:'#111',F:'#111',G:'#111',H:'#111'};
 var RI={A:'Row A - Compost (168 SKUs, 39 bays, 3 levels)',AA:'Row AA - double-deep pair behind Row A (39 bays, 3 levels)',AAA:'Row AAA - Lower Area (40 bays, 5 levels, 2 pallet spaces per bay)',B:'Row B - Keter Group (135 SKUs, 38 bays, 4 levels)',C:'Row C - Keter Group (84 SKUs, 38 bays, 4 levels)',D:'Row D - Keter Group (84 SKUs, 38 bays, 4 levels)',E:'Row E - Sheds + Canopia (85 SKUs, 38 bays, 4 levels)',F:'Row F - Empty (4 bays, 3 slots, 4 levels)',G:'Row G - Canopia + Greenhouses (13 bays, 3 slots, 4 levels)',H:'Row H - Storage Boxes (12 bays, 2 slots, 3 levels)'};
 
-var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
+var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},PALLET_GROUP={},CHANGES=[],LOG=[],mode='normal',addTgt=null,addSpaces=null,currentSuggestion=null,moveSku=null,moveSourceLoc=null,moveSourceGroup=null,dragSku=null,dragFrom=null,hi=[],mCb=null,dupQueueRemaining=0,dupQueueQty=null,singleAddQty=null,moveTargetLoc=null;
+// PALLET_GROUP tracks which locations were placed together as ONE real
+// physical pallet (the set of locations targeted by a single 'add' event,
+// carried forward through any 'move'), independent of which bay/level they
+// land in. This is the ground truth for "how many pallets does this SKU
+// really have" -- confirmed needed 28 Aug 2026: several single-space
+// pallets of the same SKU placed on different sides of the same bay+level
+// (e.g. 17213888, 3 separate pallets across sides 1/2/3) were being
+// miscounted as ONE multi-space pallet by groupLocationsByPallet, which
+// previously had no way to tell that apart from a genuinely oversized item
+// spanning multiple sides. Locations with no tracked group (legacy data
+// placed before this was added) fall back to the old bay+level heuristic
+// inside groupLocationsByPallet itself, so nothing breaks for existing data.
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
@@ -313,18 +325,23 @@ var LS='maze_wh_v2';
 var lastSyncJSON=null;var SYNC_POLL_MS=6000;
 
 function fl(loc){var p=loc.split('-');return p[0]+'-B'+parseInt(p[1],10)+'-L'+p[2];}
-// Groups a flat list of locations into real physical pallets -- locations
-// at the SAME bay+level (different sides, e.g. L and R) are one multi-space
-// pallet, not two separate ones. Locations at different bays/levels are
-// genuinely separate pallets. Used anywhere the user needs to pick "which
-// pallet" for move/delete/count, so a multi-space item is offered as one
-// choice instead of one per side.
+// Groups a flat list of locations into real physical pallets. Primarily
+// uses PALLET_GROUP -- the real placement history of which locations were
+// added together as one pallet (see applyC) -- so a genuinely oversized
+// item spanning 2-3 sides is one group, while several single-space pallets
+// that happen to share a bay+level (e.g. 3 pallets on sides 1/2/3) are
+// correctly kept as separate groups. Falls back to the old same-bay+level
+// heuristic ONLY for locations with no tracked group at all (legacy data
+// placed before this tracking existed) -- confirmed needed 28 Aug 2026,
+// see PALLET_GROUP comment above. Used anywhere the user needs to pick
+// "which pallet" for move/delete/count, and for the SKU detail card's
+// pallet count.
 function groupLocationsByPallet(locs){
   var groups={};
   var order=[];
   locs.forEach(function(loc){
     var p=loc.split('-');
-    var key=p[0]+'-'+p[1]+'-'+p[2];
+    var key=PALLET_GROUP[loc]||('legacy:'+p[0]+'-'+p[1]+'-'+p[2]);
     if(!groups[key]){groups[key]=[];order.push(key);}
     groups[key].push(loc);
   });
@@ -1143,7 +1160,7 @@ async function buildIdx(){
 function applyC(c,rec){
   if(c.sku!=null)c.sku=String(c.sku);
   if(c.type==='delete'){
-    c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];});
+    c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];delete PALLET_GROUP[l];});
     if(SLOC[c.sku]){
       SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.fl.indexOf(l)<0;});
       if(SLOC[c.sku].length===0)delete SLOC[c.sku];
@@ -1151,13 +1168,25 @@ function applyC(c,rec){
   }
   else if(c.type==='move'){
     var movedMixed=c.fl.length===1?MIXED_CONTENTS[c.fl[0]]:null;
-    c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];});
-    c.tl.forEach(function(l){LOC[l]=c.sku;});
+    // Carry the pallet's real group identity across the move -- it's still
+    // the same physical pallet, just at a new location. Falls back to a
+    // fresh group id if the source had none tracked (legacy data).
+    var movedGroupId=null;
+    for(var mgi=0;mgi<c.fl.length;mgi++){if(PALLET_GROUP[c.fl[mgi]]){movedGroupId=PALLET_GROUP[c.fl[mgi]];break;}}
+    if(!movedGroupId)movedGroupId=genId();
+    c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];delete PALLET_GROUP[l];});
+    c.tl.forEach(function(l){LOC[l]=c.sku;PALLET_GROUP[l]=movedGroupId;});
     var remainingAfterMove=(SLOC[c.sku]||[]).filter(function(l){return c.fl.indexOf(l)<0;});
     SLOC[c.sku]=remainingAfterMove.concat(c.tl);
     if(movedMixed&&c.tl.length===1)MIXED_CONTENTS[c.tl[0]]=movedMixed;
   }
   else if(c.type==='add'){
+    // Every location targeted by ONE 'add' event is the SAME real physical
+    // pallet (whether that's 1 space or several) -- give them all one
+    // shared group id so groupLocationsByPallet can tell this apart from
+    // several different single-space pallets that just happen to land on
+    // the same bay+level.
+    var newGroupId=genId();
     c.tl.forEach(function(l){
       var prevSku=LOC[l];
       if(prevSku&&prevSku!==c.sku&&SLOC[prevSku]){
@@ -1165,6 +1194,7 @@ function applyC(c,rec){
         if(SLOC[prevSku].length===0)delete SLOC[prevSku];
       }
       LOC[l]=c.sku;
+      PALLET_GROUP[l]=newGroupId;
     });
     if(!SLOC[c.sku])SLOC[c.sku]=[];
     c.tl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});
@@ -1520,9 +1550,9 @@ function undoLast(){
   if(!CHANGES.length){alert('Nothing to undo.');return;}
   var c=CHANGES.pop();
   var inverse=null;
-  if(c.type==='delete'){c.fl.forEach(function(l){LOC[l]=c.sku;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.fl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
-  else if(c.type==='move'){c.tl.forEach(function(l){delete LOC[l];});c.fl.forEach(function(l){LOC[l]=c.sku;});var remainingAfterUndo=(SLOC[c.sku]||[]).filter(function(l){return c.tl.indexOf(l)<0;});SLOC[c.sku]=remainingAfterUndo.concat(c.fl);inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
-  else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl,user:currentUser};}
+  if(c.type==='delete'){var undoAddGroupId=genId();c.fl.forEach(function(l){LOC[l]=c.sku;PALLET_GROUP[l]=undoAddGroupId;});if(!SLOC[c.sku])SLOC[c.sku]=[];c.fl.forEach(function(l){if(SLOC[c.sku].indexOf(l)<0)SLOC[c.sku].push(l);});inverse={type:'add',sku:c.sku,tl:c.fl,user:currentUser};}
+  else if(c.type==='move'){var undoMoveGroupId=null;for(var umgi=0;umgi<c.tl.length;umgi++){if(PALLET_GROUP[c.tl[umgi]]){undoMoveGroupId=PALLET_GROUP[c.tl[umgi]];break;}}if(!undoMoveGroupId)undoMoveGroupId=genId();c.tl.forEach(function(l){delete LOC[l];delete PALLET_GROUP[l];});c.fl.forEach(function(l){LOC[l]=c.sku;PALLET_GROUP[l]=undoMoveGroupId;});var remainingAfterUndo=(SLOC[c.sku]||[]).filter(function(l){return c.tl.indexOf(l)<0;});SLOC[c.sku]=remainingAfterUndo.concat(c.fl);inverse={type:'move',sku:c.sku,fl:c.tl,tl:c.fl,user:currentUser};}
+  else if(c.type==='add'){c.tl.forEach(function(l){delete LOC[l];delete PALLET_GROUP[l];});if(SLOC[c.sku])SLOC[c.sku]=SLOC[c.sku].filter(function(l){return c.tl.indexOf(l)<0;});inverse={type:'delete',sku:c.sku,fl:c.tl,user:currentUser};}
   LOG.shift();updLog();rebuildMap();si2('Undone');
   lastSyncJSON=JSON.stringify(CHANGES);
   try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
