@@ -1955,23 +1955,35 @@ function buildStats(){
   // it as "1 SKU" badly undercounts rows with several mixed pallets.
   // Expand into the actual distinct SKUs inside, per row and overall.
   var totalDistinctSkus={};
+  // Count a SKU in EVERY row it actually occupies, not just the row of its
+  // first location. Fixed 04 Sep 2026: this used rowOf(locs[0]), so a SKU with
+  // pallets in two rows was credited to one and invisible in the other. Row A
+  // and Row AA are a double-deep pair holding the same SKUs, so Row A was
+  // reporting almost nothing.
+  var perRowSkus={};
+  function noteRowSku(row,sku){
+    if(!rStats[row])return;
+    if(!perRowSkus[row])perRowSkus[row]={};
+    perRowSkus[row][sku]=true;
+  }
   Object.keys(SLOC).forEach(function(sku){
     var locs=SLOC[sku];
     if(!locs||!locs.length)return;
-    var r=rowOf(locs[0]);
     if(isMixedSku(sku)){
-      var inThisPallet={};
       locs.forEach(function(l){
+        var lr=rowOf(l);
         (MIXED_CONTENTS[l]||[]).forEach(function(e){
           var s=mixedEntrySku(e);
-          if(s){inThisPallet[s]=true;totalDistinctSkus[s]=true;}
+          if(s){noteRowSku(lr,s);totalDistinctSkus[s]=true;}
         });
       });
-      if(rStats[r])rStats[r].skus+=Object.keys(inThisPallet).length;
     } else {
-      if(rStats[r])rStats[r].skus++;
+      locs.forEach(function(l){noteRowSku(rowOf(l),sku);});
       totalDistinctSkus[sku]=true;
     }
+  });
+  Object.keys(perRowSkus).forEach(function(r){
+    rStats[r].skus=Object.keys(perRowSkus[r]).length;
   });
   var empty=totalCap-totalOcc;
   var totalSkusPlaced=Object.keys(totalDistinctSkus).length;
