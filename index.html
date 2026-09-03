@@ -5,9 +5,11 @@
 <meta name="color-scheme" content="light only">
 <meta name="theme-color" content="#FFFFFF">
 <style>html{color-scheme:light only;background:#F2F4F7}.lower-area{display:flex;gap:10px;align-items:flex-start}
+/* Stacked on narrow screens. column-reverse keeps Row X on the LEFT on a
+   wide screen (it comes first in the DOM) while putting it UNDERNEATH Row AAA
+   when the two stack -- 60 bays side by side does not fit a phone. */
 @media (max-width:1000px){
-  .lower-area{display:block}
-  .lower-area>.fb{margin-bottom:8px}
+  .lower-area{flex-direction:column-reverse;align-items:stretch}
 }
 </style>
 <meta name="viewport" content="width=device-width,initial-scale=1">
