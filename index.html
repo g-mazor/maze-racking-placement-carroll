@@ -4,7 +4,12 @@
 <meta charset="UTF-8">
 <meta name="color-scheme" content="light only">
 <meta name="theme-color" content="#FFFFFF">
-<style>html{color-scheme:light only;background:#F2F4F7}</style>
+<style>html{color-scheme:light only;background:#F2F4F7}.lower-area{display:flex;gap:10px;align-items:flex-start}
+@media (max-width:1000px){
+  .lower-area{display:block}
+  .lower-area>.fb{margin-bottom:8px}
+}
+</style>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Maze Warehouse Map</title>
 <style>
@@ -2211,7 +2216,7 @@ function bMain(){
   m.appendChild(aisleMarker('picker'));
   m.appendChild(makeGroup('Row A + AA (double-deep pair)',['A','AA']));
   var lower=document.createElement('div');
-  lower.style.cssText='display:flex;gap:10px;align-items:flex-start';
+  lower.className='lower-area';
   var xb=document.createElement('div');xb.className='fb';xb.style.flex='20';xb.style.minWidth='0';
   var xt=document.createElement('div');xt.className='ft';xt.textContent='Row X - Lower Area (20 bays x 2 slots x 5 levels)';
   xb.appendChild(xt);buildRow('X',xb);lower.appendChild(xb);
