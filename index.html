@@ -1929,7 +1929,7 @@ function buildStats(){
   var grid=document.getElementById('sg');
   var gridRows=document.getElementById('sgRows');
   var hRows='';
-  var rStats={A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},AAA:{fc:'#1F3864',bg:'#B8CEDD',l:'Row AAA - Lower Area'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
+  var rStats={X:{fc:'#1F3864',bg:'#C7D8E4',l:'Row X - Lower Area'},A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},AAA:{fc:'#1F3864',bg:'#B8CEDD',l:'Row AAA - Lower Area'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
     for(var bay=1;bay<=sp.b;bay++){
