@@ -329,7 +329,7 @@ var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
-var lastSyncJSON=null;var SYNC_POLL_MS=6000;
+var lastSyncJSON=null;var SYNC_POLL_MS=45000;
 
 function fl(loc){var p=loc.split('-');return p[0]+'-B'+parseInt(p[1],10)+'-L'+p[2];}
 // Groups a flat list of locations into real physical pallets. Primarily
@@ -5411,7 +5411,7 @@ function fetchAllWarehousesStockValue(){
   fetchAllWarehousesStockValue();
   if(ACCESS_CODE)checkPendingReplenishmentAssignments();
   if(ACCESS_CODE)checkRecentlyCompletedReplenishments();
-  setInterval(function(){pollSync(false);},SYNC_POLL_MS);
+  setInterval(function(){if(document.hidden)return;pollSync(false);},SYNC_POLL_MS);document.addEventListener('visibilitychange',function(){if(!document.hidden)pollSync(false);});
   setInterval(checkForPickListUpdate,5000);
 })();
 
