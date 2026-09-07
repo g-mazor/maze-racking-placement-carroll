@@ -3894,6 +3894,7 @@ function showOpenOrders(){
     }
     lastOpenOrdersData=data.orders;
     window.dispatchStatusFilter=window.dispatchStatusFilter||'active';
+    window.openOrdersSelectionInitialised=false;
     renderOpenOrdersBody(data.checkedAt);
   }).catch(function(){
     document.getElementById('openOrdersBody').innerHTML='<div style="font-size:12px;color:#999">Could not load open orders.</div>';
@@ -3905,12 +3906,28 @@ function showOpenOrders(){
 // Aug 2026: backorders aren't actionable right now (nothing to pick), so
 // seeing them mixed into the main dispatch list was noise.
 function renderOpenOrdersBody(checkedAt){
+  window.lastOpenOrdersCheckedAt=checkedAt||window.lastOpenOrdersCheckedAt||'';
   var body=document.getElementById('openOrdersBody');
   var allOrders=lastOpenOrdersData||[];
   var activeOrders=allOrders.filter(function(o){return o.orderStatus!=='Backordered';});
   var backorderedOrders=allOrders.filter(function(o){return o.orderStatus==='Backordered';});
   var orders=window.dispatchStatusFilter==='backordered'?backorderedOrders:activeOrders;
-  selectedOrderNumbers=new Set(orders.map(function(o){return o.orderNumber;})); // all selected by default, within the current tab only
+  // Selection is kept across BOTH tabs. It used to be rebuilt from the
+  // visible tab on every render, so switching to Backordered wiped the
+  // Active picks and generating a list dropped them. Now every order is
+  // selected once when the panel first loads, and switching tabs only
+  // changes what is DISPLAYED, never what is selected.
+  if(!window.openOrdersSelectionInitialised){
+    selectedOrderNumbers=new Set(allOrders.map(function(o){return o.orderNumber;}));
+    window.openOrdersSelectionInitialised=true;
+  } else {
+    // Drop anything no longer in the fetched data (order dispatched, status changed).
+    var stillPresent={};
+    allOrders.forEach(function(o){stillPresent[o.orderNumber]=true;});
+    Array.from(selectedOrderNumbers).forEach(function(n){
+      if(!stillPresent[n])selectedOrderNumbers.delete(n);
+    });
+  }
 
   var tabsHtml='<div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">'+
     '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter!=='backordered'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'active\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Active ('+activeOrders.length+')</button>'+
@@ -3931,7 +3948,13 @@ function renderOpenOrdersBody(checkedAt){
     '<a href="javascript:void(0)" onclick="setAllOrderSelection(true)">Select all</a>'+
     '<a href="javascript:void(0)" onclick="setAllOrderSelection(false)">Select none</a>'+
     '</div>';
-  html+='<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List from Selected Orders</button></div>';
+  var totalSelected=selectedOrderNumbers.size;
+  var selectedHere=orders.filter(function(o){return selectedOrderNumbers.has(o.orderNumber);}).length;
+  var crossTabNote=(totalSelected>selectedHere)
+    ? '<div style="text-align:center;font-size:11px;color:#6C3483;margin-bottom:4px">'
+      +(totalSelected-selectedHere)+' more selected on the other tab -- all '+totalSelected+' will be included</div>'
+    : '';
+  html+=crossTabNote+'<div style="text-align:center;margin-bottom:10px"><button class="btn btn-green" style="font-size:12px" onclick="generatePickListFromOpenOrders()">📋 Generate Pick List ('+totalSelected+' order'+(totalSelected!==1?'s':'')+')</button></div>';
   html+=orders.map(function(o,idx){
     var linesHtml=o.lines.map(function(l){
       var statusBadge=l.placed?'':' <span style="color:#B9770E;font-weight:700">(not placed yet)</span>';
@@ -3945,7 +3968,7 @@ function renderOpenOrdersBody(checkedAt){
     var detailId='ordDetail'+idx;
     return '<div style="background:#EAF2FB;border:1px solid #B7D3EE;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">'+
       '<div style="display:flex;gap:6px;align-items:flex-start">'+
-      '<input type="checkbox" class="order-select-cb" data-order="'+o.orderNumber+'" checked onclick="toggleOrderSelection(this)" style="margin-top:3px">'+
+      '<input type="checkbox" class="order-select-cb" data-order="'+o.orderNumber+'"'+(selectedOrderNumbers.has(o.orderNumber)?' checked':'')+' onclick="toggleOrderSelection(this)" style="margin-top:3px">'+
       '<div style="flex:1">'+
       '<strong>'+o.orderNumber+'</strong> -- '+o.orderDate+' -- '+(o.customerName||'')+
       ' <span style="font-size:10px;color:#777">('+o.orderStatus+')</span>'+
@@ -3976,11 +3999,14 @@ function toggleOrderSelection(cb){
 }
 
 function setAllOrderSelection(selectAll){
+  // Applies to the tab currently on screen. Selections on the other tab are
+  // left alone -- the button label shows the combined total.
   document.querySelectorAll('.order-select-cb').forEach(function(cb){
     cb.checked=selectAll;
     var order=cb.getAttribute('data-order');
     if(selectAll)selectedOrderNumbers.add(order);else selectedOrderNumbers.delete(order);
   });
+  renderOpenOrdersBody(window.lastOpenOrdersCheckedAt||'');
 }
 
 function toggleOrderDetail(id){
