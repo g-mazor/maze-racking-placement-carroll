@@ -846,6 +846,32 @@ function guidedPickStockCount(loc, sku) {
   });
 }
 
+
+// How much of this SKU sits somewhere OTHER than the location being picked.
+// Used to tell a picker who came up short whether a refill is possible.
+function reserveStockFor_(sku, excludeLoc) {
+  var locs = (SLOC[sku] || []).filter(function(l) { return l !== excludeLoc; });
+  var total = 0;
+  locs.forEach(function(l) { total += (QTY[l] != null ? QTY[l] : 0); });
+  return { total: total, locs: locs };
+}
+
+// Flags the pick face as empty. Sends a plain 'count' of 0 -- the same event
+// the manager map and the forklift page's replenishment list already react
+// to, so this reuses the existing system rather than adding a new one.
+function requestReplenish_(sku, loc) {
+  if (!confirm('Mark ' + sku + ' at ' + fl(loc) + ' as EMPTY and ask a forklift driver to refill it?')) return;
+  postRemoteChange({type: 'count', sku: sku, loc: loc, qty: 0, user: currentPicker, ts: Date.now()})
+    .then(function() {
+      QTY[loc] = 0;
+      var msg = document.getElementById('guidedMsg');
+      if (msg) msg.innerHTML = '<span style="color:#1E8449">Pick face flagged as empty. It is now on the forklift replenishment list.</span>';
+    })
+    .catch(function() {
+      alert('Could not flag it just now -- check your connection and try again.');
+    });
+}
+
 // Step 2: confirm the quantity actually picked, sends the matching 'pick'
 // event so stock counts decrement exactly as they would from the main app,
 // and re-saves the picklist with progress -- mirrors the main app's
@@ -872,7 +898,25 @@ function confirmGuidedPick() {
   var mismatch = entered !== remainingNeeded;
   if (mismatch && !guidedPickState.confirmingMismatch) {
     guidedPickState.confirmingMismatch = true;
-    msg.innerHTML = '<span style="color:#A32D2D">\u26a0\ufe0f Expected ' + remainingNeeded + ', you entered ' + entered + '. Tap Confirm pick again if that\'s correct, or fix the number.</span>';
+    // Short pick: say what is sitting in reserve for this SKU and offer to
+    // flag the pick face empty, so the picker isn't left guessing whether
+    // more exists elsewhere in the building.
+    var shortBy = remainingNeeded - entered;
+    var reserveNote = '';
+    if (shortBy > 0) {
+      var res = reserveStockFor_(item.sku, item.loc);
+      if (res.total > 0) {
+        reserveNote = '<div style="margin-top:6px;padding:6px 8px;background:#EAF6EC;border-left:3px solid #1E8449;font-size:12px;color:#145A32">'
+          + '<strong>' + res.total + ' more in reserve</strong> at ' + res.locs.map(fl).join(', ')
+          + '<br><button class="btn" style="margin-top:5px;font-size:11px;padding:4px 8px"'
+          + ' onclick="requestReplenish_(\'' + item.sku + '\',\'' + item.loc + '\')">'
+          + 'Pick face empty - ask forklift to refill</button></div>';
+      } else {
+        reserveNote = '<div style="margin-top:6px;padding:6px 8px;background:#FDEDEC;border-left:3px solid #A32D2D;font-size:12px;color:#7B241C">'
+          + 'No reserve stock found for this SKU anywhere else on the map.</div>';
+      }
+    }
+    msg.innerHTML = '<span style="color:#A32D2D">\u26a0\ufe0f Expected ' + remainingNeeded + ', you entered ' + entered + '. Tap Confirm pick again if that\'s correct, or fix the number.</span>' + reserveNote;
     return;
   }
   var remaining = Math.max(0, currentQty - entered);
