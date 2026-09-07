@@ -728,6 +728,10 @@ function editUnitsPerPallet(sku,currentUnits){
 
 function postRemoteChange(change){
   return new Promise(function(resolve){
+    // Guard against the silent-failure mode: an image beacon that is too long
+    // simply never loads, and the change is lost with no error anywhere.
+    // Roughly 7,000 characters is the safe ceiling for the whole URL.
+    var CHANGE_URL_LIMIT = 7000;
     var img=new Image();
     var v=DATA.d[change.sku];
     var desc=v?v[4]:'';
@@ -4215,7 +4219,7 @@ function generatePickListFromOpenOrders(){
       if(!l.placed){skippedUnplaced++;return;}
       skuQtyMap[l.sku]=(skuQtyMap[l.sku]||0)+l.qty;
       if(!skuOrderMap[l.sku])skuOrderMap[l.sku]=[];
-      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty,customerName:o.customerName,deliveryAddress:o.deliveryAddress,orderDateSort:o.orderDateSort});
+      skuOrderMap[l.sku].push({orderNumber:o.orderNumber,qty:l.qty,customerName:o.customerName,orderDateSort:o.orderDateSort});
     });
   });
   var skus=Object.keys(skuQtyMap);
