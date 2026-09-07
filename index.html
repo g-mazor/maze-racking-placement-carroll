@@ -3911,7 +3911,12 @@ function renderOpenOrdersBody(checkedAt){
   var allOrders=lastOpenOrdersData||[];
   var activeOrders=allOrders.filter(function(o){return o.orderStatus!=='Backordered';});
   var backorderedOrders=allOrders.filter(function(o){return o.orderStatus==='Backordered';});
-  var orders=window.dispatchStatusFilter==='backordered'?backorderedOrders:activeOrders;
+  // Three views now. 'all' is the default: a consolidated pick list needs
+  // regular parked orders AND backorders together, because the same SKU is
+  // usually spread across both and should be picked in one trip.
+  if(!window.dispatchStatusFilter)window.dispatchStatusFilter='all';
+  var orders=window.dispatchStatusFilter==='backordered'?backorderedOrders
+            :(window.dispatchStatusFilter==='active'?activeOrders:allOrders);
   // Selection is kept across BOTH tabs. It used to be rebuilt from the
   // visible tab on every render, so switching to Backordered wiped the
   // Active picks and generating a list dropped them. Now every order is
@@ -3930,7 +3935,8 @@ function renderOpenOrdersBody(checkedAt){
   }
 
   var tabsHtml='<div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">'+
-    '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter!=='backordered'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'active\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Active ('+activeOrders.length+')</button>'+
+    '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter==='all'?'background:#1E8449;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'all\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">All ('+allOrders.length+')</button>'+
+    '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter==='active'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'active\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Active ('+activeOrders.length+')</button>'+
     '<button class="btn" style="font-size:11px;padding:5px 10px;'+(window.dispatchStatusFilter==='backordered'?'background:#6C3483;color:#FFF':'background:#EEE;color:#444')+'" onclick="window.dispatchStatusFilter=\'backordered\';renderOpenOrdersBody(\''+(checkedAt||'')+'\')">Backordered ('+backorderedOrders.length+')</button>'+
     '</div>';
 
@@ -3939,7 +3945,7 @@ function renderOpenOrdersBody(checkedAt){
     return;
   }
   if(!orders.length){
-    body.innerHTML=tabsHtml+'<div style="font-size:12px;color:#777">No '+(window.dispatchStatusFilter==='backordered'?'backordered':'active')+' orders right now.</div>';
+    body.innerHTML=tabsHtml+'<div style="font-size:12px;color:#777">No '+(window.dispatchStatusFilter==='backordered'?'backordered':(window.dispatchStatusFilter==='active'?'active':'open'))+' orders right now.</div>';
     return;
   }
   var html='<div style="font-size:11px;color:#777;margin-bottom:8px">Checked '+(checkedAt||'')+' -- <strong>'+orders.length+'</strong> order(s), oldest first</div>';
