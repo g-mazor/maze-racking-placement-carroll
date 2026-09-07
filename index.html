@@ -752,7 +752,16 @@ function postRemoteChange(change){
     var timer=setTimeout(function(){resolve(false);},8000);
     img.onload=function(){clearTimeout(timer);resolve(true);};
     img.onerror=function(){clearTimeout(timer);resolve(false);};
-    img.src=apiUrl(params);
+    var fullUrl=apiUrl(params);
+    if(fullUrl.length>CHANGE_URL_LIMIT){
+      // Too long to send as an image beacon. A beacon that never loads fails
+      // silently, which is how a whole pick list was lost -- so say so.
+      console.error('Change too large to save ('+fullUrl.length+' chars):',change.type,change.id||change.sku);
+      alert('This is too large to save in one go ('+Math.round(fullUrl.length/1000)+'kB).\n\nNothing has been saved. Split it into two smaller pick lists and try again.');
+      resolve(false);
+      return;
+    }
+    img.src=fullUrl;
   });
 }
 
