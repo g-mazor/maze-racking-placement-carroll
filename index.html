@@ -3257,6 +3257,30 @@ function blockAwareRoute(items,startLoc){
 // that are all in the same reversed row, re-sort just that run by
 // descending bay number, leaving which row gets visited when (chosen by
 // the real distance model) untouched.
+// Walks each row in the opposite direction to the one before it, so the
+// picker ends one row where the next one starts instead of doubling back the
+// full length of the aisle. Starts descending (38 -> 1), then 1 -> 38, and so
+// on. Replaces the old fixed E/F/G-only reversal.
+function enforceSnakeRowDirection(route){
+  var result=route.slice();
+  var i=0, descending=true;
+  while(i<result.length){
+    var row=result[i].loc.split('-')[0];
+    var j=i;
+    while(j<result.length&&result[j].loc.split('-')[0]===row)j++;
+    var segment=result.slice(i,j).sort(function(a,b){
+      var ba=parseInt(a.loc.split('-')[1],10);
+      var bb=parseInt(b.loc.split('-')[1],10);
+      if(isNaN(ba)||isNaN(bb))return 0;
+      return descending?(bb-ba):(ba-bb);
+    });
+    for(var k=0;k<segment.length;k++)result[i+k]=segment[k];
+    descending=!descending;
+    i=j;
+  }
+  return result;
+}
+
 function enforceReversedRowDirection(route){
   var result=route.slice();
   var i=0;
@@ -3358,7 +3382,7 @@ function previewPickList(){
   var unresolvable=items.filter(function(it){return !it.loc;});
   var START_LOC='A-01-1-L'; // proxy for the picker's actual start point near bay 1/Row AA
   resolvable=blockAwareRoute(resolvable,START_LOC);
-  resolvable=enforceReversedRowDirection(resolvable);
+  resolvable=enforceSnakeRowDirection(resolvable);
   var ordered=resolvable.concat(unresolvable);
   lastPickListPreview=resolvable;
 
@@ -3792,13 +3816,9 @@ function printPickList(id){
   if(!pl){alert('Could not find that pick list.');return;}
 
   // Walk order: same as the picker sees, so the printed sheet matches the app.
-  var items=pl.items.slice().sort(function(a,b){
-    var ra=rowOf(a.loc),rb=rowOf(b.loc);
-    if(ra!==rb)return ra<rb?-1:1;
-    var ba=parseInt(a.loc.split('-')[1],10),bb=parseInt(b.loc.split('-')[1],10);
-    if(ba!==bb)return ba-bb;
-    return a.loc<b.loc?-1:1;
-  });
+  // Already stored in walk order by the router -- re-sorting here would print
+  // a different sequence from the one the picker follows on screen.
+  var items=pl.items.slice();
 
   var when=new Date().toLocaleString('en-AU');
   var rows=items.map(function(it,i){
