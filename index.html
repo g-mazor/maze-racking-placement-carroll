@@ -2298,7 +2298,7 @@ function buildContainerRows(){
   var PER_LINE=12;
   for(var n=1;n<=CONTAINER_COUNT;n+=PER_LINE){
     var line=document.createElement('div');
-    line.style.cssText='display:flex;gap:10px;align-items:flex-start;margin-bottom:12px';
+    line.style.cssText='display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap';
     for(var k=0;k<PER_LINE&&(n+k)<=CONTAINER_COUNT;k++){
       line.appendChild(buildOneContainer(n+k));
     }
@@ -2309,8 +2309,11 @@ function buildContainerRows(){
 function buildOneContainer(num){
   var row='CON'+num;
   var box=document.createElement('div');
-  box.style.cssText='flex:1;min-width:0;background:#FDF8F0;border:1.5px solid #B7791F;'
-    +'border-radius:6px;padding:4px 5px 5px';
+  // Fixed width, not flex: a container is two pallets wide, so it should be
+  // two pallets wide on screen. Letting it stretch made container pallets
+  // look bigger than racking pallets.
+  box.style.cssText='width:64px;flex:0 0 auto;background:#FDF8F0;border:1.5px solid #B7791F;'
+    +'border-radius:5px;padding:3px 4px 4px';
 
   var t=document.createElement('div');
   t.style.cssText='font-size:11px;font-weight:700;color:#7A4E0A;text-align:center;margin-bottom:3px';
@@ -2319,15 +2322,15 @@ function buildOneContainer(num){
 
   var hd=document.createElement('div');
   hd.style.cssText='display:flex;gap:2px;font-size:8px;color:#8A6A34;margin-bottom:2px';
-  hd.innerHTML='<div style="width:12px"></div>'
+  hd.innerHTML='<div style="width:9px"></div>'
     +'<div style="flex:1;text-align:center">L</div><div style="flex:1;text-align:center">R</div>';
   box.appendChild(hd);
 
   for(var pos=1;pos<=10;pos++){
     var r=document.createElement('div');
-    r.style.cssText='display:flex;gap:2px;margin-bottom:2px;align-items:stretch';
+    r.style.cssText='display:flex;gap:1px;margin-bottom:1px;align-items:center';
     var lbl=document.createElement('div');
-    lbl.style.cssText='width:12px;font-size:8px;color:#8A6A34;display:flex;align-items:center;justify-content:center';
+    lbl.style.cssText='width:9px;font-size:7px;color:#8A6A34;display:flex;align-items:center;justify-content:center;flex:0 0 auto';
     lbl.textContent=pos;
     r.appendChild(lbl);
     ['L','R'].forEach(function(side){
@@ -2335,6 +2338,8 @@ function buildOneContainer(num){
       var c=mkCell(loc);
       c.style.flex='1';
       c.style.minWidth='0';
+      c.style.height='21px';        // same as .be / .bc in the racking
+      c.style.minHeight='21px';
       r.appendChild(c);
     });
     box.appendChild(r);
