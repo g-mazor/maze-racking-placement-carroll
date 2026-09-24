@@ -193,6 +193,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
     <button class="btn btn-blue public-hide" style="width:100%;box-sizing:border-box" onclick="closeSettingsPanel();showPickerStats()">📊 Picker Stats</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B9770E;color:#FFF" onclick="closeSettingsPanel();showStockAlerts()">🔔 Stock Alerts</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#1F618D;color:#FFF" onclick="closeSettingsPanel();showActivePickLists()">📋 Active Pick Lists</button>
+    <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#1E8449;color:#FFF" onclick="closeSettingsPanel();showReplenishPanel()">🚜 Replenish</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#B03A2E;color:#FFF" onclick="closeSettingsPanel();showActiveReplenishmentTasks()">🗑️ Delete Replenishment Task</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#16A085;color:#FFF" onclick="closeSettingsPanel();showCycleCount()">🔄 Cycle Count</button>
     <button class="btn public-hide" style="width:100%;box-sizing:border-box;background:#C0392B;color:#FFF" onclick="closeSettingsPanel();showUnplacedStock()">📦 On Hand, Not Placed</button>
@@ -249,6 +250,16 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 <div id="stockAlertsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #B9770E;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div id="stockAlertsBody"></div>
   <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('stockAlertsPanel').style.display='none'">Close</div>
+</div>
+<div id="replenishPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:640px;margin:0 auto;background:#FFF;border:2px solid #1E8449;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
+  <div style="font-size:13px;font-weight:700;color:#1E8449;margin-bottom:4px">🚜 Replenishment</div>
+  <div style="font-size:11px;color:#777;margin-bottom:9px">Pick bays that need refilling, and where to bring stock from. Same list the forklift drivers see.</div>
+  <div style="margin-bottom:9px">
+    <input id="replenishSkuInput" placeholder="Or search a SKU to replenish..." style="width:100%;box-sizing:border-box;padding:7px 9px;font-size:13px;border:1px solid #CCC;border-radius:5px" onkeydown="if(event.key==='Enter')replenishSearchSku()"/>
+    <div id="replenishSkuResult"></div>
+  </div>
+  <div id="replenishBody"></div>
+  <div style="text-align:center;margin-top:10px;font-size:10px;text-decoration:underline;cursor:pointer;color:#888" onclick="document.getElementById('replenishPanel').style.display='none'">Close</div>
 </div>
 <div id="activePickListsPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:520px;margin:0 auto;background:#FFF;border:2px solid #1F618D;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1F618D;margin-bottom:10px">📋 Active Pick Lists</div>
@@ -3794,6 +3805,128 @@ function showActiveReplenishmentTasks(){
   }).catch(function(){
     body.innerHTML='<div style="font-size:12px;color:#999">Could not load.</div>';
   });
+}
+
+
+// ---- Replenishment on the manager map --------------------------------
+// Same backend the forklift page uses, so both see one list and a move made
+// from either shows up on the other. Added 24 Sep 2026 so a manager can
+// refill a pick bay without borrowing the forklift tablet.
+function showReplenishPanel(){
+  document.getElementById('replenishPanel').style.display='block';
+  document.getElementById('replenishSkuResult').innerHTML='';
+  document.getElementById('replenishSkuInput').value='';
+  loadReplenishTasks();
+}
+
+function loadReplenishTasks(){
+  var box=document.getElementById('replenishBody');
+  box.innerHTML='<div style="font-size:12px;color:#777">Loading tasks...</div>';
+  jsonpFetch(apiUrl('replenishmenttasks=1')).then(function(data){
+    if(!data||data.accessDenied){
+      box.innerHTML='<div style="font-size:12px;color:#A32D2D">Access code not recognised. Tap the lock link to fix it.</div>';
+      return;
+    }
+    window.lastReplenishTasks=data.tasks||[];
+    if(!window.lastReplenishTasks.length){
+      box.innerHTML='<div style="font-size:12px;color:#777">No pick bays need replenishing right now.</div>';
+      return;
+    }
+    var h='<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+window.lastReplenishTasks.length+' pick bay'+(window.lastReplenishTasks.length!==1?'s':'')+' to refill</div>';
+    window.lastReplenishTasks.forEach(function(t,ti){
+      h+='<div style="border:1px solid #CFE3D6;background:#F4FBF6;border-radius:6px;padding:8px 10px;margin-bottom:7px">'
+        +'<div style="font-size:13px;font-weight:700">'+escapeHtmlMap_(t.sku)+'</div>'
+        +'<div style="font-size:11px;color:#555;margin-bottom:5px">'+escapeHtmlMap_(t.desc||'')
+        +' &nbsp;|&nbsp; pick bay <strong>'+escapeHtmlMap_(t.pickBayCode||'')+'</strong>'
+        +(t.pickBayQty!=null?' (qty '+t.pickBayQty+')':'')+'</div>';
+      if(!t.reserves||!t.reserves.length){
+        h+='<div style="font-size:11px;color:#A32D2D">No reserve stock anywhere to refill from.</div>';
+      } else {
+        t.reserves.forEach(function(r,ri){
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0">'
+            +'<span>'+escapeHtmlMap_(r.bayCode)+' &nbsp;<span style="color:#777">qty '+r.qty+'</span></span>'
+            +'<button class="btn" style="font-size:11px;padding:3px 9px;background:#1E8449;color:#FFF" '
+            +'onclick="confirmReplenishFromMap('+ti+','+ri+')">Move this</button></div>';
+        });
+      }
+      h+='</div>';
+    });
+    box.innerHTML=h;
+  }).catch(function(){
+    box.innerHTML='<div style="font-size:12px;color:#A32D2D">Could not reach the server.</div>';
+  });
+}
+
+function confirmReplenishFromMap(ti,ri){
+  var t=window.lastReplenishTasks[ti], r=t.reserves[ri];
+  if(!confirm('Move '+r.qty+' units of '+t.sku+' from '+r.bayCode+' to pick bay '+t.pickBayCode+'?'))return;
+  jsonpFetch(apiUrl('beacon=1&type=replenish_move&sku='+encodeURIComponent(t.sku)
+    +'&fromLoc='+encodeURIComponent(r.loc)+'&toLoc='+encodeURIComponent(t.pickBayLoc)))
+    .then(function(res){
+      if(res&&res.ok){
+        si2(r.bayCode+' emptied, '+t.pickBayCode+' refilled with '+res.qtyMoved+'.');
+        pollSync(false);
+      } else {
+        alert('Could not complete: '+((res&&res.error)?res.error:'unknown error'));
+      }
+      loadReplenishTasks();
+    }).catch(function(){alert('Could not reach the server.');});
+}
+
+function replenishSearchSku(){
+  var sku=(document.getElementById('replenishSkuInput').value||'').trim();
+  var box=document.getElementById('replenishSkuResult');
+  if(!sku){box.innerHTML='';return;}
+  box.innerHTML='<div style="font-size:12px;color:#777;padding:5px 0">Looking up '+escapeHtmlMap_(sku)+'...</div>';
+  jsonpFetch(apiUrl('replenishmentskusearch=1&sku='+encodeURIComponent(sku))).then(function(d){
+    if(!d||!d.found){
+      box.innerHTML='<div style="font-size:12px;color:#A32D2D;padding:5px 0">'
+        +((d&&d.error)?escapeHtmlMap_(d.error):'Not found.')+'</div>';
+      return;
+    }
+    window.lastReplenishSearch=d;
+    var h='<div style="border:1px solid #CFE3D6;background:#F4FBF6;border-radius:6px;padding:8px 10px;margin-top:6px">'
+      +'<div style="font-size:13px;font-weight:700">'+escapeHtmlMap_(d.sku)+'</div>'
+      +'<div style="font-size:11px;color:#555;margin-bottom:5px">'+escapeHtmlMap_(d.desc||'')
+      +' &nbsp;|&nbsp; pick bay <strong>'+escapeHtmlMap_(d.pickBayCode||'')+'</strong>'
+      +(d.pickBayQty!=null?' (qty '+d.pickBayQty+')':'')+'</div>';
+    if(!d.reserves||!d.reserves.length){
+      h+='<div style="font-size:11px;color:#A32D2D">No reserve stock to refill from.</div>';
+    } else {
+      d.reserves.forEach(function(r,ri){
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0">'
+          +'<span>'+escapeHtmlMap_(r.bayCode)+' &nbsp;<span style="color:#777">qty '+r.qty+'</span></span>'
+          +'<button class="btn" style="font-size:11px;padding:3px 9px;background:#1E8449;color:#FFF" '
+          +'onclick="confirmReplenishSearchFromMap('+ri+')">Move this</button></div>';
+      });
+    }
+    box.innerHTML=h+'</div>';
+  }).catch(function(){
+    box.innerHTML='<div style="font-size:12px;color:#A32D2D">Could not reach the server.</div>';
+  });
+}
+
+function confirmReplenishSearchFromMap(ri){
+  var d=window.lastReplenishSearch, r=d.reserves[ri];
+  if(!confirm('Move '+r.qty+' units of '+d.sku+' from '+r.bayCode+' to pick bay '+d.pickBayCode+'?'))return;
+  jsonpFetch(apiUrl('beacon=1&type=replenish_move&sku='+encodeURIComponent(d.sku)
+    +'&fromLoc='+encodeURIComponent(r.loc)+'&toLoc='+encodeURIComponent(d.pickBayLoc)))
+    .then(function(res){
+      if(res&&res.ok){
+        si2(r.bayCode+' emptied, '+d.pickBayCode+' refilled with '+res.qtyMoved+'.');
+        pollSync(false);
+      } else {
+        alert('Could not complete: '+((res&&res.error)?res.error:'unknown error'));
+      }
+      document.getElementById('replenishSkuInput').value='';
+      document.getElementById('replenishSkuResult').innerHTML='';
+      loadReplenishTasks();
+    }).catch(function(){alert('Could not reach the server.');});
+}
+
+function escapeHtmlMap_(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function showActivePickLists(){
