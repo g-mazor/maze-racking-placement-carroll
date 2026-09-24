@@ -3753,7 +3753,10 @@ function setBaySlotCount(row,bay,level){
       if(LOC[loc]){alert('This level has items placed in it -- clear it first before changing its slot count, to avoid orphaning existing placements.');return;}
     }
     var current=getSidesForBay(row,bay,level);
-    var ans=prompt('How many pallet slots should '+row+'-B'+bay+'-L'+level+' have? (currently '+current+', other levels in this bay are unaffected)',String(current));
+    var isCon=row.indexOf('CON')===0;
+    var label=isCon?(row+' - space '+bay):(row+'-B'+bay+'-L'+level);
+    var ans=prompt('How many pallet slots should '+label+' have? (currently '+current
+      +(isCon?'':', other levels in this bay are unaffected')+')',String(current));
     if(ans===null)return;
     var n=parseInt(ans.trim(),10);
     if(isNaN(n)||n<1||n>4){alert('Enter a whole number between 1 and 4.');return;}
