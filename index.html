@@ -1981,6 +1981,12 @@ function buildStats(){
   var gridRows=document.getElementById('sgRows');
   var hRows='';
   var rStats={X:{fc:'#1F3864',bg:'#C7D8E4',l:'Row X - Lower Area'},A:{fc:'#1F3864',bg:'#DEEAF1',l:'Row A - Compost'},AA:{fc:'#1F3864',bg:'#C9DCE8',l:'Row AA - double-deep behind A'},AAA:{fc:'#1F3864',bg:'#B8CEDD',l:'Row AAA - Lower Area'},B:{fc:'#1F4E79',bg:'#D6E4F7',l:'Row B - Keter Group'},C:{fc:'#2E4057',bg:'#E8F0F8',l:'Row C - Keter Group'},D:{fc:'#374A5C',bg:'#EEF3F8',l:'Row D - Keter Group'},E:{fc:'#7F3F00',bg:'#FCE9D8',l:'Row E - Sheds + Canopia'},F:{fc:'#375623',bg:'#E2EFDA',l:'Row F - Empty'},G:{fc:'#2E6B1E',bg:'#DDEBDA',l:'Row G - Canopia + Greenhouses'},H:{fc:'#6E2C00',bg:'#FAE5D3',l:'Row H - Storage Boxes'}};
+  // Containers are 36 separate rows on the map, but one line in the stats --
+  // 36 extra cards would swamp the panel. They are rolled up here so the
+  // capacity and the fullness percentage include the 720 new spaces.
+  for(var cn=1;cn<=CONTAINER_COUNT;cn++){
+    rStats['CON'+cn]={fc:'#7A4E0A',bg:'#FDF8F0',l:'Container '+cn,hideCard:true};
+  }
   Object.keys(rStats).forEach(function(r){
     var sp=RS[r];var cap=0;
     for(var bay=1;bay<=sp.b;bay++){
@@ -2039,7 +2045,8 @@ function buildStats(){
   h+='<div class="st" id="allWhStockValueStat"><div class="l">All Warehouses Stock Value</div><div class="v" id="allWhStockValueDisplay">'+(window.lastAllWhStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="allWhStockValueMeta">'+(window.lastAllWhStockValueMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="stockValueStat"><div class="l">Carroll Stock Value</div><div class="v" id="stockValueDisplay">'+(window.lastStockValueHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="stockValueMeta">'+(window.lastStockValueMetaHtml||'')+'</div></div>';
   h+='<div class="st" id="salesStatsStat"><div class="l">Sales This FY \ud83d\udcc8</div><div class="v" id="salesStatsDisplay">'+(window.lastSalesStatsHtml||'Loading...')+'</div><div style="font-size:10px;opacity:.7;margin-top:1px" id="salesStatsMeta">'+(window.lastSalesStatsMetaHtml||'')+'</div></div>';
-  ['X','A','AA','AAA','B','C','D','E','F','G','H'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);hRows+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
+  (function(){var cc=0,co=0,csk=0;for(var q=1;q<=CONTAINER_COUNT;q++){var rr2=rStats['CON'+q];if(!rr2)continue;cc+=rr2.cap;co+=rr2.occ;csk+=(rr2.skus||0);}rStats['CONTAINERS']={fc:'#7A4E0A',bg:'#FDF8F0',l:'Storage Containers',cap:cc,occ:co,skus:csk};})();
+  ['X','A','AA','AAA','B','C','D','E','F','G','H','CONTAINERS'].forEach(function(r){var s=rStats[r];var e=s.cap-(s.occ||0);hRows+='<div class="sr" style="background:'+s.bg+';border-color:'+s.fc+'"><div class="l">'+s.l+'</div><div class="v" style="color:'+s.fc+'">'+e+' empty'+(e===0?' - FULL':'')+'</div><div class="s">'+(s.skus||0)+' SKUs | '+s.cap+' total</div></div>';});
   grid.innerHTML=h;
   if(gridRows)gridRows.innerHTML=hRows;
 }
