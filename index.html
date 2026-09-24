@@ -2278,7 +2278,7 @@ function renderContainerHeader(){
   h.textContent=(window.containersOpen?'\u25BC ':'\u25B6 ')
     +'STORAGE CONTAINERS \u2014 '+CONTAINER_COUNT+' containers, '
     +(CONTAINER_COUNT*20)+' pallet spaces, '+used+' in use'
-    +(window.containersOpen?'':'  (tap to open)');
+    +(window.containersOpen?'  \u2014 striped bar = doors, space 1 nearest the doors':'  (tap to open)');
 }
 
 function toggleContainers(){
@@ -2330,6 +2330,14 @@ function buildOneContainer(num){
   t.textContent=num;
   box.appendChild(t);
 
+
+  // Doors marked at the top: space 1 is the first one you meet walking in,
+  // so the whole section reads the same way as the physical yard.
+  var doors=document.createElement('div');
+  doors.style.cssText='background:repeating-linear-gradient(45deg,#B7791F,#B7791F 3px,#F5D9A0 3px,#F5D9A0 6px);'
+    +'height:5px;border-radius:2px;margin-bottom:2px';
+  doors.title='Doors - space 1 is nearest here';
+  box.appendChild(doors);
 
   for(var pos=1;pos<=10;pos++){
     var r=document.createElement('div');
