@@ -2342,7 +2342,12 @@ function buildOneContainer(num){
   for(var pos=1;pos<=10;pos++){
     var r=document.createElement('div');
     r.style.cssText='display:flex;gap:1px;margin-bottom:1px;align-items:center';
-    ['L','R'].forEach(function(side){
+    // Honour the per-space slot count, so "Change slots at this level" works
+    // in containers exactly as it does in the racking. Hardcoding L and R
+    // here meant the setting was saved but never drawn.
+    var slots=getSidesForBay(row,pos,1);
+    for(var sl=0;sl<slots;sl++){
+      var side=(slots===2)?(sl===0?'L':'R'):String(sl+1);
       var loc=row+'-'+(pos<10?'0'+pos:pos)+'-1-'+side;
       var c=mkCell(loc);
       c.style.flex='1';
@@ -2350,7 +2355,7 @@ function buildOneContainer(num){
       c.style.height='21px';        // same as .be / .bc in the racking
       c.style.minHeight='21px';
       r.appendChild(c);
-    });
+    }
     box.appendChild(r);
   }
   // doors end, so nobody has to remember which way round it is
