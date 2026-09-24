@@ -2291,17 +2291,28 @@ function buildContainerRows(){
   var body=document.getElementById('containerBody');
   if(!body)return;
   body.innerHTML='';
-  for(var n=1;n<=CONTAINER_COUNT;n++){
-    var row='CON'+n;
-    var box=document.createElement('div');
-    box.className='fb';
-    box.style.cssText='margin-bottom:6px;background:#FDF8F0;border-color:#B7791F';
-    var t=document.createElement('div');
-    t.className='ft';
-    t.textContent='Container '+n+' \u2014 20 spaces (R1-R10 right, L1-L10 left)';
-    box.appendChild(t);
-    buildRow(row,box);
-    body.appendChild(box);
+  // Four containers per line. Each is only 10 bays, so run alone they stretch
+  // the full page width and the bays come out four times the size of a
+  // racking bay. Four across is 40 bays -- the same as Row AAA -- so a
+  // container space looks the same size as a pallet space everywhere else.
+  var PER_LINE=4;
+  for(var n=1;n<=CONTAINER_COUNT;n+=PER_LINE){
+    var line=document.createElement('div');
+    line.style.cssText='display:flex;gap:8px;align-items:flex-start;margin-bottom:6px';
+    for(var k=0;k<PER_LINE&&(n+k)<=CONTAINER_COUNT;k++){
+      var num=n+k;
+      var box=document.createElement('div');
+      box.className='fb';
+      box.style.cssText='flex:1;min-width:0;background:#FDF8F0;border-color:#B7791F';
+      var t=document.createElement('div');
+      t.className='ft';
+      t.style.fontSize='11px';
+      t.textContent='Container '+num+'  (R1-R10 / L1-L10)';
+      box.appendChild(t);
+      buildRow('CON'+num,box);
+      line.appendChild(box);
+    }
+    body.appendChild(line);
   }
 }
 function bMain(){
