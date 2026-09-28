@@ -2000,8 +2000,13 @@ function buildStats(){
   });
   function rowOf(loc){return loc.split('-')[0];}
   var totalCap=0,totalOcc=0;
-  Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;});
-  Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;totalOcc++;});
+  // Storage containers are on the map but not on site yet, so they are kept
+  // OUT of the headline capacity figure -- including 720 empty container
+  // spaces made the warehouse look far emptier than it is. The Storage
+  // Containers row tile below still reports them in full.
+  function isContainerRow(r){return /^CON\d+$/.test(r);}
+  Object.keys(rStats).forEach(function(r){if(!isContainerRow(r))totalCap+=rStats[r].cap;});
+  Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;if(!isContainerRow(r))totalOcc++;});
   // Each mixed pallet's SLOC key (e.g. "MIXED@G-03-1-1") is ONE placeholder
   // identity, but can hold several real SKUs bundled together -- counting
   // it as "1 SKU" badly undercounts rows with several mixed pallets.
