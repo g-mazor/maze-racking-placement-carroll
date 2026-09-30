@@ -253,7 +253,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </div>
 <div id="replenishPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:640px;margin:0 auto;background:#FFF;border:2px solid #1E8449;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1E8449;margin-bottom:4px">🚜 Replenishment</div>
-  <div style="font-size:11px;color:#777;margin-bottom:9px">Pick bays that need refilling, and where to bring stock from. Same list the forklift drivers see. <span style="opacity:.55">(v3)</span></div>
+  <div style="font-size:11px;color:#777;margin-bottom:9px">Pick bays that need refilling, and where to bring stock from. Same list the forklift drivers see. <span style="opacity:.55">(v4)</span></div>
   <div style="margin-bottom:9px">
     <input id="replenishSkuInput" placeholder="Or search a SKU to replenish..." style="width:100%;box-sizing:border-box;padding:7px 9px;font-size:13px;border:1px solid #CCC;border-radius:5px" onkeydown="if(event.key==='Enter')replenishSearchSku()"/>
     <div id="replenishSkuResult"></div>
@@ -3988,8 +3988,12 @@ function replenishAgeText_(d){
   var days=Math.floor(hrs/24);
   return days+' day'+(days!==1?'s':'')+' ago';
 }
-function replenishFlaggedLine_(raw){
-  var d=parseFlaggedAt_(raw);
+function replenishFlaggedLine_(raw,ms){
+  // Epoch milliseconds first. The FlaggedAt text gets converted by Sheets into
+  // a datetime anchored to the spreadsheet's timezone, so when that setting
+  // disagrees with the script's it comes back hours out. Epoch ms cannot be
+  // reinterpreted by any timezone setting.
+  var d=(ms&&Number(ms)>0)?new Date(Number(ms)):parseFlaggedAt_(raw);
   if(!d){
     // Always render something. Returning '' when the timestamp is missing made
     // an old cached page and a missing value look identical, which cost an
@@ -4054,7 +4058,7 @@ function loadReplenishTasks(){
         +'<div style="font-size:11px;color:#555;margin-bottom:5px">'+escapeHtmlMap_(t.desc||'')
         +' &nbsp;|&nbsp; pick bay <strong>'+escapeHtmlMap_(t.pickBayCode||'')+'</strong>'
         +(t.pickBayQty!=null?' (qty '+t.pickBayQty+')':'')+'</div>'
-        +replenishFlaggedLine_(t.flaggedAt);
+        +replenishFlaggedLine_(t.flaggedAt,t.flaggedAtMs);
       if(!t.reserves||!t.reserves.length){
         h+='<div style="font-size:11px;color:#A32D2D">No reserve stock anywhere to refill from.</div>';
       } else {
