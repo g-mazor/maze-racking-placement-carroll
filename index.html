@@ -4684,7 +4684,33 @@ function getSkuLocations(sku){
 
 function showR(sku){
   var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
-  if(!v){var el=document.getElementById('rc');el.className='nf';el.innerHTML='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+key+'</strong> - not found.';el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  if(!v){
+    // A SKU can be placed on the map and still be absent from the catalog --
+    // most often after a code is corrected in Unleashed (e.g. MC-PICKUGL ->
+    // MC-PIKUGL), which leaves the old code holding real bays. Without this
+    // the card just said "not found" and there was no way to clear those bays
+    // from anywhere in the app. If it IS placed, offer to delete it.
+    var orphanLocs=SLOC[key]||[];
+    var orphanMixed=(typeof getMixedPalletLocationsFor==='function')?getMixedPalletLocationsFor(key):[];
+    var el=document.getElementById('rc');el.className='nf';
+    var oh='<span class="rcc" onclick="cRC()">x</span><strong style="color:#A32D2D">'+escapeHtmlMap_(key)+'</strong> - not in the SKU list.';
+    if(orphanLocs.length){
+      oh+='<div style="margin-top:6px;font-size:12px;color:#333">It is still placed at <strong>'
+        + orphanLocs.map(fl).filter(function(c,i,a){return a.indexOf(c)===i;}).join(' + ')
+        + '</strong>.</div>'
+        +'<div style="margin-top:4px;font-size:11px;color:#777">Usually means the code was changed in Unleashed and the old one is still holding these bays.</div>'
+        +'<div style="margin-top:8px">'
+        +'<button class="btn" style="font-size:12px;padding:4px 10px;background:#2C5AA0;color:#FFF;margin-right:6px" onclick="hlSKU(\''+escapeHtmlMap_(key).replace(/'/g,"\\'")+'\')">Show on map</button>'
+        +'<button class="btn" style="font-size:12px;padding:4px 10px;background:#A32D2D;color:#FFF" onclick="delFromCard(\''+escapeHtmlMap_(key).replace(/'/g,"\\'")+'\')">Delete from map</button>'
+        +'</div>';
+    } else if(orphanMixed.length){
+      oh+='<div style="margin-top:6px;font-size:12px;color:#333">It is inside a mixed pallet at <strong>'
+        + orphanMixed.map(fl).join(' + ')
+        + '</strong> -- open that pallet to remove it.</div>';
+    }
+    el.innerHTML=oh;
+    el.style.display='block';ttSticky=false;tt.style.display='none';el.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
   if(key==='MIXED'){showMixedEntryCard();return;}
   var directLocs=SLOC[key]||[];
   var mixedLocs=getMixedPalletLocationsFor(key);
