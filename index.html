@@ -253,7 +253,7 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </div>
 <div id="replenishPanel" style="display:none;position:fixed;top:40px;right:14px;left:14px;max-width:640px;margin:0 auto;background:#FFF;border:2px solid #1E8449;border-radius:8px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3100;max-height:80vh;overflow-y:auto">
   <div style="font-size:13px;font-weight:700;color:#1E8449;margin-bottom:4px">🚜 Replenishment</div>
-  <div style="font-size:11px;color:#777;margin-bottom:9px">Pick bays that need refilling, and where to bring stock from. Same list the forklift drivers see. <span style="opacity:.55">(v2)</span></div>
+  <div style="font-size:11px;color:#777;margin-bottom:9px">Pick bays that need refilling, and where to bring stock from. Same list the forklift drivers see. <span style="opacity:.55">(v3)</span></div>
   <div style="margin-bottom:9px">
     <input id="replenishSkuInput" placeholder="Or search a SKU to replenish..." style="width:100%;box-sizing:border-box;padding:7px 9px;font-size:13px;border:1px solid #CCC;border-radius:5px" onkeydown="if(event.key==='Enter')replenishSearchSku()"/>
     <div id="replenishSkuResult"></div>
@@ -4005,8 +4005,32 @@ function replenishFlaggedLine_(raw){
   var hrsOld=(Date.now()-d.getTime())/3600000;
   var col=hrsOld>=24?'#A32D2D':(hrsOld>=4?'#B7791F':'#557');
   var weight=hrsOld>=24?'700':'400';
+  // A timestamp ahead of this device's clock means the two are not on the same
+  // timezone -- say so plainly instead of printing a nonsense age.
+  var ageBit=(hrsOld<-0.05)
+    ? '<span style="color:#A32D2D">clock mismatch: this is ahead of your device by '
+      + Math.round(Math.abs(hrsOld)*10)/10 + ' h</span>'
+    : replenishAgeText_(d);
   return '<div style="font-size:11px;color:'+col+';font-weight:'+weight+';margin-bottom:5px">'
-    +'⏱ Flagged '+when+' · '+replenishAgeText_(d)+'</div>';
+    +'⏱ Flagged '+when+' · '+ageBit
+    +'<span style="color:#999;font-weight:400"> &nbsp;(stored: '+escapeHtmlMap_(String(raw))+')</span>'
+    +'</div>';
+}
+
+// Prints this device's own clock next to the task list, so a disagreement
+// between the sheet's timestamps and the warehouse's actual time is visible
+// at a glance rather than something to argue about.
+function replenishNowLine_(){
+  var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var n=new Date();
+  var hr=n.getHours(),ap=hr<12?'am':'pm',h12=hr%12;if(h12===0)h12=12;
+  var mm=n.getMinutes();if(mm<10)mm='0'+mm;
+  var tz='';
+  try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){tz='';}
+  return '<div style="font-size:11px;color:#777;margin-bottom:6px">This device says it is now '
+    +DAYS[n.getDay()]+' '+n.getDate()+' '+MON[n.getMonth()]+', '+h12+':'+mm+ap
+    +(tz?' ('+escapeHtmlMap_(tz)+')':'')+'</div>';
 }
 
 function loadReplenishTasks(){
@@ -4022,7 +4046,8 @@ function loadReplenishTasks(){
       box.innerHTML='<div style="font-size:12px;color:#777">No pick bays need replenishing right now.</div>';
       return;
     }
-    var h='<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+window.lastReplenishTasks.length+' pick bay'+(window.lastReplenishTasks.length!==1?'s':'')+' to refill</div>';
+    var h='<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+window.lastReplenishTasks.length+' pick bay'+(window.lastReplenishTasks.length!==1?'s':'')+' to refill</div>'
+      +replenishNowLine_();
     window.lastReplenishTasks.forEach(function(t,ti){
       h+='<div style="border:1px solid #CFE3D6;background:#F4FBF6;border-radius:6px;padding:8px 10px;margin-bottom:7px">'
         +'<div style="font-size:13px;font-weight:700">'+escapeHtmlMap_(t.sku)+'</div>'
