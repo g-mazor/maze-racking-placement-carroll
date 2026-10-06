@@ -5943,7 +5943,28 @@ function fetchAllWarehousesStockValue(){
   fetchAllWarehousesStockValue();
   if(ACCESS_CODE)checkPendingReplenishmentAssignments();
   if(ACCESS_CODE)checkRecentlyCompletedReplenishments();
-  setInterval(function(){if(document.hidden)return;pollSync(false);},SYNC_POLL_MS);document.addEventListener('visibilitychange',function(){if(!document.hidden)pollSync(false);});
+  // Stop polling when nobody is actually using the page. 'hidden' only covers
+  // a tab switched away or minimised -- a map left open on a monitor or on a
+  // phone with the screen on counted as visible and kept pulling the whole
+  // change log all day for no one. Idle now stops it; the first touch, click,
+  // key or scroll resumes it and syncs straight away, so coming back to the
+  // map still shows current data.
+  var IDLE_STOP_MS=5*60*1000;
+  var lastInteraction=Date.now();
+  var wasIdle=false;
+  function noteInteraction(){
+    lastInteraction=Date.now();
+    if(wasIdle){wasIdle=false;pollSync(false);}
+  }
+  ['mousedown','keydown','touchstart','wheel','scroll'].forEach(function(ev){
+    document.addEventListener(ev,noteInteraction,{passive:true});
+  });
+  setInterval(function(){
+    if(document.hidden)return;
+    if(Date.now()-lastInteraction>IDLE_STOP_MS){wasIdle=true;return;}
+    pollSync(false);
+  },SYNC_POLL_MS);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){noteInteraction();pollSync(false);}});
   setInterval(checkForPickListUpdate,5000);
 })();
 
