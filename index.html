@@ -350,7 +350,12 @@ var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
 var LS='maze_wh_v2';
-var lastSyncJSON=null;var SYNC_POLL_MS=45000;
+// 2 minutes, raised from 45s on 6 Oct 2026. Every poll pulls the WHOLE change
+// log (7,700+ rows and growing), which was taking the server 15-100+ seconds
+// while the browser gave up at 15. Several tabs polling at once queued behind
+// each other and all timed out. This is relief, not the fix -- the fix is to
+// send only rows newer than the client already has.
+var lastSyncJSON=null;var SYNC_POLL_MS=120000;
 
 function fl(loc){
   var p=loc.split('-');
