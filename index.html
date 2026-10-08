@@ -2071,6 +2071,15 @@ function cellColorFor(sku){
   return gc(v?v[5]:'');
 }
 
+// Drag was switched off everywhere because on tablets the browser's touch
+// detection was unreliable and a tap would register as a drag, making pallets
+// move by accident. Rather than guess at touch support, this asks for a real
+// mouse: a device that can hover with a fine pointer. Phones and tablets fail
+// that test and keep tap-to-move; a desktop with a mouse gets drag back.
+var CAN_DRAG_PALLETS=(function(){
+  try{return window.matchMedia('(hover: hover) and (pointer: fine)').matches;}catch(e){return false;}
+})();
+
 function mkCell(loc){
   if(BLOCKED_LOCATIONS[loc]){
     var bcell=document.createElement('div');bcell.id='c_'+loc;
@@ -2085,13 +2094,22 @@ function mkCell(loc){
     cell.className='bc occ';cell.style.background=cellColorFor(sku);
     if(locs.length>1){var dot=document.createElement('div');dot.className='mdot';cell.appendChild(dot);}
     cell.setAttribute('data-loc',loc);cell.setAttribute('data-sku',sku);
-    // draggable removed entirely -- it caused unreliable taps on some tablets/phones
-    // where touch-capability detection doesn't catch every device; tap-to-move (Move button) covers this instead.
+    // Mouse only -- see CAN_DRAG_PALLETS above. Tablets keep tap-to-move.
+    if(CAN_DRAG_PALLETS){cell.draggable=true;cell.style.cursor='grab';}
     cell.addEventListener('click',function(e){onOcc(loc,sku,e);});
     cell.addEventListener('dragstart',function(ev){
-      dragSku=sku;dragFrom=(SLOC[sku]||[loc]).slice();
+      // Only in normal mode: dragging while a Move/Delete/Count mode is armed
+      // would fire two different actions from one gesture.
+      if(mode!=='normal'||currentPicker){ev.preventDefault();return;}
+      // Drag the pallet under the cursor, NOT every pallet of this SKU.
+      // SLOC[sku] is every location the SKU occupies, so using it directly
+      // moved all of a SKU's pallets when only one was dragged.
+      var allLocs=SLOC[sku]||[loc];
+      var pallets=groupLocationsByPallet(allLocs);
+      dragFrom=(pallets.filter(function(p){return p.indexOf(loc)>=0;})[0]||[loc]).slice();
+      dragSku=sku;
       cell.classList.add('dragging');
-      try{ev.dataTransfer.setData('text/plain',sku);}catch(e2){}
+      try{ev.dataTransfer.setData('text/plain',sku);ev.dataTransfer.effectAllowed='move';}catch(e2){}
     });
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
   } else {
