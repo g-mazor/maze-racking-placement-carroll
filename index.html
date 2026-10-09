@@ -2005,13 +2005,12 @@ function buildStats(){
   });
   function rowOf(loc){return loc.split('-')[0];}
   var totalCap=0,totalOcc=0;
-  // Storage containers are on the map but not on site yet, so they are kept
-  // OUT of the headline capacity figure -- including 720 empty container
-  // spaces made the warehouse look far emptier than it is. The Storage
-  // Containers row tile below still reports them in full.
-  function isContainerRow(r){return /^CON\d+$/.test(r);}
-  Object.keys(rStats).forEach(function(r){if(!isContainerRow(r))totalCap+=rStats[r].cap;});
-  Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;if(!isContainerRow(r))totalOcc++;});
+  // Containers count toward the headline capacity again (10 Oct 2026). They
+  // were excluded on 30 Sep while still off site, when 720 empty spaces made
+  // the warehouse read far emptier than it was; they are now part of the
+  // storage estate, so the % covers every pallet space on the map.
+  Object.keys(rStats).forEach(function(r){totalCap+=rStats[r].cap;});
+  Object.keys(LOC).forEach(function(loc){var r=rowOf(loc);if(rStats[r])rStats[r].occ++;totalOcc++;});
   // Each mixed pallet's SLOC key (e.g. "MIXED@G-03-1-1") is ONE placeholder
   // identity, but can hold several real SKUs bundled together -- counting
   // it as "1 SKU" badly undercounts rows with several mixed pallets.
