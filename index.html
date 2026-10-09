@@ -530,6 +530,61 @@ function fetchUnleashedStock(sku){
 // real stock-on-hand, used only to trigger a replenish email when that
 // exact location gets picked to zero. Locations are deduped by their
 // readable bay code, so a multi-space pallet shows as one line.
+// Pick bays, cached locally. Fetched once on load so the hover tooltip and
+// the move confirmation can show a SKU's pick bay without a server round trip
+// each time. Refreshed whenever a pick bay is set or cleared.
+var PICKFACES={};
+function refreshPickFaces(cb){
+  jsonpFetch(apiUrl('pickfaces=1')).then(function(data){
+    if(data&&data.map)PICKFACES=data.map;
+    if(cb)cb();
+  }).catch(function(){ if(cb)cb(); });
+}
+
+// One line for the hover tooltip: where this SKU's pick bay is, whether the
+// bay under the cursor IS it, or a warning that none is set. Forgetting to
+// set one after a move is the thing this is here to catch.
+function pickFaceTipLine_(sku,loc){
+  var pf=PICKFACES[sku];
+  if(!pf)return '<div style="font-size:11px;color:#FFC107">⚠️ No pick bay set for this SKU</div>';
+  var pfCode=fl(pf);
+  if(pfCode===fl(loc))return '<div style="font-size:11px;color:#8CD98C">⭐ This IS the pick bay</div>';
+  return '<div style="font-size:11px;color:#7EC8FF">📌 Pick bay: <strong>'+pfCode+'</strong></div>';
+}
+
+// Run after a pallet is moved. Three cases, and only two of them interrupt:
+//   - the pallet that moved WAS the pick bay  -> offer to follow it
+//   - the SKU has no pick bay at all          -> offer to set this one
+//   - the pick bay is a different pallet      -> just say where it is
+// Anything that changes the pick bay is written through applyC, so it goes
+// into the change log like any other edit.
+function afterMoveCheckPickFace(sku,fromLocs,toLocs){
+  if(!sku||!toLocs||!toLocs.length)return;
+  var newLoc=toLocs[0];
+  var pf=PICKFACES[sku];
+  var movedThePickFace=pf&&(fromLocs||[]).some(function(l){return fl(l)===fl(pf);});
+  if(movedThePickFace){
+    if(confirm('The pick bay for '+sku+' was '+fl(pf)+'.\n\nYou have just moved that pallet to '+fl(newLoc)
+               +'.\n\nOK  = move the pick bay to '+fl(newLoc)
+               +'\nCancel = leave the pick bay at '+fl(pf))){
+      applyC({type:'setpickface',sku:sku,loc:newLoc,qty:1},true);
+      PICKFACES[sku]=newLoc;
+      si2('Pick bay for '+sku+' moved to '+fl(newLoc));
+    }
+    return;
+  }
+  if(!pf){
+    if(confirm(sku+' has NO pick bay set.\n\nOK  = make '+fl(newLoc)+' the pick bay'
+               +'\nCancel = leave it without one')){
+      applyC({type:'setpickface',sku:sku,loc:newLoc,qty:1},true);
+      PICKFACES[sku]=newLoc;
+      si2('Pick bay for '+sku+' set to '+fl(newLoc));
+    }
+    return;
+  }
+  si2('Moved. Pick bay for '+sku+' stays at '+fl(pf));
+}
+
 function fetchPickFaceInfo(sku,locs){
   jsonpFetch(apiUrl('pickfaces=1')).then(function(data){
     if(currentDetailSku!==sku)return;
@@ -619,6 +674,7 @@ function clearPickFaceHome(sku){
 function togglePickFace(sku,loc,makeCurrent){
   requirePin(function(){
     applyC({type:'setpickface',sku:sku,loc:loc,qty:makeCurrent?1:0},true);
+    if(makeCurrent)PICKFACES[sku]=loc; else delete PICKFACES[sku];
     si2(makeCurrent?'Marked as pick face.':'Pick face unset.');
     showR(sku);
   });
@@ -2125,7 +2181,7 @@ function mkCell(loc){
       if(spaces>1){tl=findSeq(loc,spaces);if(!tl){alert('Need '+spaces+' consecutive empty spaces here.');return;}}
       else{tl=[loc];}
       requirePin(function(){
-        applyC({type:'move',sku:sku2,fl:fromLocs,tl:tl},true);rebuildMap();hlSKU(sku2);si2('Moved to '+fl(loc));
+        applyC({type:'move',sku:sku2,fl:fromLocs,tl:tl},true);rebuildMap();hlSKU(sku2);afterMoveCheckPickFace(sku2,fromLocs,tl);
       });
     });
   }
@@ -2493,6 +2549,7 @@ function showTT(e,loc,sku,v){
   tt.style.pointerEvents='auto';
   tt.innerHTML=fl(loc)+(palletCount>1?' ('+palletCount+' pallets)':'')+(h?' -- height '+h:' -- height not set yet')+(q!=null?' -- count: '+q:'')+'<br>'+
     sku+'<br>'+v[4]+'<br>'+v[5]+' | '+v[6]+'<br>'+v[7].toFixed(1)+'/day &nbsp; '+Math.round(mp)+'/month'+
+    pickFaceTipLine_(sku,loc)+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="quickCount(\''+loc+'\',\''+sku+'\')" style="color:#F5D76E">\ud83d\udd22 Change count</a>'+
     '<a href="javascript:void(0)" onclick="quickMove(\''+sku+'\',\''+loc+'\')" style="color:#5DADE2">\ud83d\udd04 Move to new location</a>'+
@@ -2640,7 +2697,7 @@ function onOcc(loc,sku,e){
     var tl3;
     if(spaces3>1){tl3=findSeq(moveTargetLoc,spaces3);if(!tl3){alert('Need '+spaces3+' consecutive empty spaces starting at '+fl(moveTargetLoc)+'. Try a different target.');setNorm();return;}}
     else{tl3=[moveTargetLoc];}
-    applyC({type:'move',sku:sku,fl:fromLocs,tl:tl3},true);rebuildMap();hlSKU(sku);si2('Moved '+sku+' to '+fl(moveTargetLoc));
+    applyC({type:'move',sku:sku,fl:fromLocs,tl:tl3},true);rebuildMap();hlSKU(sku);afterMoveCheckPickFace(sku,fromLocs,tl3);
     setNorm();
     return;
   }
@@ -2690,6 +2747,7 @@ function showOccInfo(loc,sku,e){
     '<div style="opacity:.7;font-size:11px">'+v[5]+' | ABC '+v[6]+' | '+v[8]+' pallet'+(v[8]>1?'s':'')+'</div>'+
     '<div style="opacity:.7;font-size:11px">'+v[7].toFixed(1)+' picks/day | '+Math.round(mp)+' picks/month</div>'+
     (qty!=null?'<div style="opacity:.7;font-size:11px">Counted: '+qty+'</div>':'')+
+    pickFaceTipLine_(sku,loc)+
     '<a href="'+photoUrl+'" target="_blank" rel="noopener" style="color:#7EC8FF">\ud83d\udcf7 View photo</a>'+
     '<a href="javascript:void(0)" onclick="speakSkuInfo(\''+sku+'\')" style="color:#C39BD3">\ud83d\udd0a Read aloud</a>'+
     '<a href="javascript:void(0)" onclick="showR(\''+sku+'\')" style="color:#8CD98C">\ud83d\udccb View full details</a>'+
@@ -2741,7 +2799,7 @@ function onEmp(loc,e){
     if(spaces2>1){tl2=findSeq(loc,spaces2);if(!tl2){alert('Need '+spaces2+' consecutive empty spaces here. Try another spot.');return;}}
     else{tl2=[loc];}
     var sku=moveSku;
-    applyC({type:'move',sku:sku,fl:fromLocs,tl:tl2},true);rebuildMap();hlSKU(sku);si2('Moved to '+fl(loc));
+    applyC({type:'move',sku:sku,fl:fromLocs,tl:tl2},true);rebuildMap();hlSKU(sku);afterMoveCheckPickFace(sku,fromLocs,tl2);
     setNorm();
   } else if(e){
     showEmptyInfo(loc,e);
@@ -5958,6 +6016,7 @@ function fetchAllWarehousesStockValue(){
   fetchSalesStats();
   fetchOrdersToPickSummary();
   fetchAllWarehousesStockValue();
+  refreshPickFaces();
   if(ACCESS_CODE)checkPendingReplenishmentAssignments();
   if(ACCESS_CODE)checkRecentlyCompletedReplenishments();
   // Stop polling when nobody is actually using the page. 'hidden' only covers
