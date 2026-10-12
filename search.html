@@ -364,7 +364,11 @@ function renderResults(query) {
     var pickFaceHtml = pickFaceLoc
       ? '<div class="pickface-row">\u2b50 Pick Bay: <strong>' + pickFaceCode + '</strong>' +
         ' &nbsp;<button type="button" class="confirm-count-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '">\ud83d\udd22 Confirm count</button>' +
-        ' &nbsp;<button type="button" class="empty-pickface-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '" style="background:#C0392B;color:#FFF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700">\ud83d\udea8 Just took the last one</button></div>'
+        ' &nbsp;<button type="button" class="empty-pickface-btn" data-sku="' + sku + '" data-loc="' + pickFaceLoc + '" style="background:#C0392B;color:#FFF;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700">\ud83d\udea8 Just took the last one</button>'
+        // Pick face already at zero: show the source bay straight away rather
+        // than making the picker tap anything to find it. Added 13 Oct 2026.
+        + ((QTY[pickFaceLoc] != null && QTY[pickFaceLoc] <= 0) ? replenishFromHtml_(sku, pickFaceLoc) : '')
+        + '</div>'
       : '';
     return '<div class="card"><div class="sku">' + sku + '</div><div class="desc">' + (v ? v[4] : '') + '</div>' + locsHtml + pickFaceHtml +
       '<div class="live-stock" data-sku="' + sku + '">' +
@@ -408,9 +412,14 @@ document.getElementById('results').addEventListener('click', function(e) {
   var sku = ebtn.getAttribute('data-sku');
   var loc = ebtn.getAttribute('data-loc');
   if (!confirm('Mark ' + sku + ' at ' + fl(loc) + ' as EMPTY right now? This notifies the manager immediately that it needs replenishing.')) return;
+  // Work out the source bays BEFORE sending the count of 0, so the figures
+  // shown are the reserve as it stands rather than after this pick face is
+  // zeroed. Added 13 Oct 2026 -- the picker needs the source bay in hand to
+  // pass to the forklift driver.
+  var whereFrom = replenishFromText_(sku, loc);
   postRemoteChange({type: 'count', sku: sku, loc: loc, qty: 0, user: currentPicker, ts: Date.now()}).then(function() {
     QTY[loc] = 0;
-    alert('Marked empty -- the manager has been notified.');
+    alert('Marked empty -- the manager has been notified.\n\n' + whereFrom);
     var si = document.getElementById('si');
     if (si && si.value.trim().length >= 2) renderResults(si.value);
   });
@@ -847,13 +856,85 @@ function guidedPickStockCount(loc, sku) {
 }
 
 
-// How much of this SKU sits somewhere OTHER than the location being picked.
-// Used to tell a picker who came up short whether a refill is possible.
+// How much of this SKU sits somewhere OTHER than the location being picked,
+// and exactly where, so the picker can tell a forklift driver where to go.
+//
+// Uses getSkuLocations rather than SLOC directly: a slow mover often lives
+// only on a mixed pallet, and those rows are stored under a 'MIXED@...' key,
+// so reading SLOC[sku] alone reported "no reserve anywhere" for stock that was
+// sitting right there. Corrected 13 Oct 2026.
+//
+// Ordered the way a forklift driver would want it: lowest level first, then
+// lowest bay, so the easiest pallet to reach is named first.
 function reserveStockFor_(sku, excludeLoc) {
-  var locs = (SLOC[sku] || []).filter(function(l) { return l !== excludeLoc; });
+  var seen = {};
+  var rows = [];
+  getSkuLocations(sku).forEach(function(l) {
+    if (l === excludeLoc || seen[l]) return;
+    seen[l] = true;
+    var qty = null, mixed = false;
+    if (isMixedSku(LOC[l])) {
+      mixed = true;
+      (MIXED_CONTENTS[l] || []).forEach(function(e) {
+        if (typeof e === 'object' && e.sku === sku && e.qty != null) qty = e.qty;
+      });
+    } else {
+      qty = QTY[l] != null ? QTY[l] : null;
+    }
+    rows.push({ loc: l, qty: qty, mixed: mixed });
+  });
+  rows.sort(function(a, b) {
+    var ap = a.loc.split('-'), bp = b.loc.split('-');
+    var al = parseInt(ap[2], 10) || 99, bl = parseInt(bp[2], 10) || 99;
+    if (al !== bl) return al - bl;
+    return (parseInt(ap[1], 10) || 999) - (parseInt(bp[1], 10) || 999);
+  });
   var total = 0;
-  locs.forEach(function(l) { total += (QTY[l] != null ? QTY[l] : 0); });
-  return { total: total, locs: locs };
+  rows.forEach(function(r) { total += (r.qty != null ? r.qty : 0); });
+  return { total: total, rows: rows, locs: rows.map(function(r) { return r.loc; }) };
+}
+
+// The "go and get it from here" panel. Shown whenever a pick face is emptied
+// or flagged, so the picker has the source bay in front of them to pass to the
+// forklift driver instead of having to go and look it up.
+function replenishFromHtml_(sku, pickLoc) {
+  var res = reserveStockFor_(sku, pickLoc);
+  if (!res.rows.length) {
+    return '<div style="margin-top:8px;padding:8px 10px;background:#FDEDEC;border-left:4px solid #A32D2D;'
+      + 'font-size:13px;color:#7B241C"><strong>Nothing in reserve.</strong><br>'
+      + sku + ' is not anywhere else on the map. Tell the supervisor — this one needs buying, not moving.</div>';
+  }
+  var list = res.rows.map(function(r, i) {
+    return '<div style="padding:4px 0;' + (i ? 'border-top:1px solid #CFE6D4' : '') + '">'
+      + '<span style="font-size:17px;font-weight:800;color:#145A32">' + fl(r.loc) + '</span>'
+      + (r.qty != null ? ' <span style="font-size:13px;color:#145A32">&mdash; ' + r.qty + ' units</span>' : '')
+      + (r.mixed ? ' <span style="font-size:11px;color:#7A5C00;background:#FFF2CC;padding:1px 5px;border-radius:3px">mixed pallet</span>' : '')
+      + (i === 0 ? ' <span style="font-size:11px;font-weight:700;color:#1E8449">← easiest</span>' : '')
+      + '</div>';
+  }).join('');
+  return '<div style="margin-top:8px;padding:9px 11px;background:#EAF6EC;border-left:4px solid #1E8449">'
+    + '<div style="font-size:12px;font-weight:800;letter-spacing:.5px;color:#145A32;margin-bottom:4px">'
+    + 'REPLENISH FROM &mdash; tell the forklift driver</div>' + list
+    + '<div style="font-size:11px;color:#145A32;margin-top:5px">' + res.total
+    + ' units in reserve across ' + res.rows.length + ' location'
+    + (res.rows.length === 1 ? '' : 's') + '. Lowest level listed first.</div></div>';
+}
+
+// Same thing as plain text, for the places that use a popup rather than a panel.
+function replenishFromText_(sku, pickLoc) {
+  var res = reserveStockFor_(sku, pickLoc);
+  if (!res.rows.length) {
+    return 'NOTHING IN RESERVE.\n' + sku + ' is not anywhere else on the map.\n'
+      + 'Tell the supervisor -- this one needs buying, not moving.';
+  }
+  return 'REPLENISH FROM (tell the forklift driver):\n\n'
+    + res.rows.map(function(r, i) {
+        return (i + 1) + '. ' + fl(r.loc)
+          + (r.qty != null ? '  --  ' + r.qty + ' units' : '')
+          + (r.mixed ? '  (mixed pallet)' : '')
+          + (i === 0 ? '   <- easiest' : '');
+      }).join('\n')
+    + '\n\n' + res.total + ' units in reserve. Lowest level first.';
 }
 
 // Flags the pick face as empty. Sends a plain 'count' of 0 -- the same event
@@ -865,7 +946,8 @@ function requestReplenish_(sku, loc) {
     .then(function() {
       QTY[loc] = 0;
       var msg = document.getElementById('guidedMsg');
-      if (msg) msg.innerHTML = '<span style="color:#1E8449">Pick face flagged as empty. It is now on the forklift replenishment list.</span>';
+      if (msg) msg.innerHTML = '<span style="color:#1E8449">Pick face flagged as empty. It is now on the forklift replenishment list.</span>'
+        + replenishFromHtml_(sku, loc);
     })
     .catch(function() {
       alert('Could not flag it just now -- check your connection and try again.');
@@ -904,16 +986,11 @@ function confirmGuidedPick() {
     var shortBy = remainingNeeded - entered;
     var reserveNote = '';
     if (shortBy > 0) {
-      var res = reserveStockFor_(item.sku, item.loc);
-      if (res.total > 0) {
-        reserveNote = '<div style="margin-top:6px;padding:6px 8px;background:#EAF6EC;border-left:3px solid #1E8449;font-size:12px;color:#145A32">'
-          + '<strong>' + res.total + ' more in reserve</strong> at ' + res.locs.map(fl).join(', ')
-          + '<br><button class="btn" style="margin-top:5px;font-size:11px;padding:4px 8px"'
+      reserveNote = replenishFromHtml_(item.sku, item.loc);
+      if (reserveStockFor_(item.sku, item.loc).rows.length) {
+        reserveNote += '<button class="btn" style="margin-top:6px;font-size:12px;padding:5px 9px"'
           + ' onclick="requestReplenish_(\'' + item.sku + '\',\'' + item.loc + '\')">'
-          + 'Pick face empty - ask forklift to refill</button></div>';
-      } else {
-        reserveNote = '<div style="margin-top:6px;padding:6px 8px;background:#FDEDEC;border-left:3px solid #A32D2D;font-size:12px;color:#7B241C">'
-          + 'No reserve stock found for this SKU anywhere else on the map.</div>';
+          + 'Pick face empty - ask forklift to refill</button>';
       }
     }
     msg.innerHTML = '<span style="color:#A32D2D">\u26a0\ufe0f Expected ' + remainingNeeded + ', you entered ' + entered + '. Tap Confirm pick again if that\'s correct, or fix the number.</span>' + reserveNote;
@@ -928,12 +1005,32 @@ function confirmGuidedPick() {
   item.mistake = mismatch;
   var allDone = pl.items.every(function(it) { return it.picked; });
   postRemoteChange({type: 'picklist_save', id: pl.id, contents: {items: pl.items, assignedTo: pl.assignedTo, status: allDone ? 'complete' : 'open'}, ts: Date.now()});
-  if (mismatch) {
-    msg.innerHTML = '<span style="color:#A32D2D;font-weight:700">\u26a0\ufe0f Recorded with a mismatch -- moving on.</span>';
-  } else {
-    msg.innerHTML = '<span style="color:#1E8449;font-weight:700">\u2705 Correct! Moving on...</span>';
-  }
+  var headline = mismatch
+    ? '<span style="color:#A32D2D;font-weight:700">\u26a0\ufe0f Recorded with a mismatch.</span>'
+    : '<span style="color:#1E8449;font-weight:700">\u2705 Correct!</span>';
   guidedPickState = null;
+
+  // The pick that empties the bay. Hold the screen rather than skipping on
+  // after 0.7s, and name the bay the refill comes from -- the picker is
+  // standing there and can tell the forklift driver before moving on.
+  // Added 13 Oct 2026.
+  if (remaining === 0) {
+    msg.innerHTML = headline
+      + '<div style="margin-top:8px;padding:9px 11px;background:#FFF2CC;border-left:4px solid #D35400">'
+      + '<div style="font-size:14px;font-weight:800;color:#7A3E00">You just took the last of '
+      + item.sku + ' from ' + fl(item.loc) + '.</div>'
+      + '<div style="font-size:12px;color:#7A3E00;margin-top:2px">That pick face is now empty.</div></div>'
+      + replenishFromHtml_(item.sku, item.loc)
+      + '<div style="margin-top:9px">'
+      + '<button class="btn" style="font-size:13px;padding:7px 11px"'
+      + ' onclick="requestReplenish_(\'' + item.sku + '\',\'' + item.loc + '\')">'
+      + 'Put it on the forklift list</button> '
+      + '<button class="btn" style="font-size:13px;padding:7px 11px;background:#5D6D7E"'
+      + ' onclick="renderPicklistTab()">Next item</button></div>';
+    return;
+  }
+
+  msg.innerHTML = headline + ' <span style="color:#5D6D7E">Moving on...</span>';
   setTimeout(renderPicklistTab, 700);
 }
 
