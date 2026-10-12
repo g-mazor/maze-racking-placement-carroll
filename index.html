@@ -129,6 +129,9 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 .bc.merge-r.bay-end{margin-right:4px!important;border-top-right-radius:3px;border-bottom-right-radius:3px}
 .be:hover{opacity:.65;background:#C8E6FF}
 .be.dt{background:#A8D8FF!important;opacity:1!important;outline:2px dashed #2980B9}
+/* Occupied slot being hovered as a swap target -- orange so it reads as a
+   swap with whatever is already there, not a move into an empty bay. */
+.bc.dt{outline:2px dashed #D35400!important;outline-offset:-2px;box-shadow:inset 0 0 0 2px rgba(211,84,0,.25)}
 .bc.dragging{opacity:.4}
 .bc.dragging{opacity:.25!important}
 .mdot{position:absolute;top:1px;right:1px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85);pointer-events:none}
@@ -2167,6 +2170,49 @@ function mkCell(loc){
       try{ev.dataTransfer.setData('text/plain',sku);ev.dataTransfer.effectAllowed='move';}catch(e2){}
     });
     cell.addEventListener('dragend',function(){cell.classList.remove('dragging');});
+    // Dropping onto an occupied slot swaps the two pallets. Until 12 Oct 2026
+    // occupied cells had no dragover/drop listener at all, so the browser
+    // refused the drop and nothing happened -- drag only ever worked onto an
+    // empty slot.
+    cell.addEventListener('dragover',function(ev){
+      if(dragSku&&dragSku!==sku){ev.preventDefault();cell.classList.add('dt');}
+    });
+    cell.addEventListener('dragleave',function(){cell.classList.remove('dt');});
+    cell.addEventListener('drop',function(ev){
+      ev.preventDefault();cell.classList.remove('dt');
+      if(!dragSku)return;
+      var movingSku=dragSku,fromLocs=dragFrom;dragSku=null;dragFrom=null;
+      if(!fromLocs||!fromLocs.length)return;
+      if(fromLocs.indexOf(loc)>=0)return;
+      var targetSku=LOC[loc];
+      if(!targetSku||targetSku===movingSku)return;
+      var targetPallet=(groupLocationsByPallet(SLOC[targetSku]||[loc])
+        .filter(function(p){return p.indexOf(loc)>=0;})[0])||[loc];
+      if(targetPallet.length!==fromLocs.length){
+        alert('Cannot swap these two.\n\n'+movingSku+' takes '+fromLocs.length+' pallet space(s)\n'
+          +targetSku+' takes '+targetPallet.length+'\n\nMove one of them to an empty bay first.');
+        return;
+      }
+      // Neither pallet can move first without overwriting the other, so the
+      // dragged one parks in an empty bay for the middle step. Three ordinary
+      // moves, which is what the server already understands.
+      var park=findParkingSpace(fromLocs.length,fromLocs.concat(targetPallet));
+      if(!park){
+        alert('No empty bay free to swap through. Move one of the pallets out manually first.');
+        return;
+      }
+      if(!confirm('Swap these two pallets?\n\n'
+        +movingSku+'\n   '+fl(fromLocs[0])+'  →  '+fl(targetPallet[0])+'\n\n'
+        +targetSku+'\n   '+fl(targetPallet[0])+'  →  '+fl(fromLocs[0])))return;
+      requirePin(function(){
+        applyC({type:'move',sku:movingSku,fl:fromLocs,tl:park},true);
+        applyC({type:'move',sku:targetSku,fl:targetPallet,tl:fromLocs},true);
+        applyC({type:'move',sku:movingSku,fl:park,tl:targetPallet},true);
+        rebuildMap();hlSKU(movingSku);
+        afterMoveCheckPickFace(movingSku,fromLocs,targetPallet);
+        afterMoveCheckPickFace(targetSku,targetPallet,fromLocs);
+      });
+    });
   } else {
     cell.className='be';cell.setAttribute('data-loc',loc);
     cell.addEventListener('click',function(e){onEmp(loc,e);});
@@ -2589,8 +2635,10 @@ document.addEventListener('click',function(e){
 tt.addEventListener('mouseenter',function(){clearTimeout(ttHideTimer);});
 tt.addEventListener('mouseleave',function(){hideTT();});
 
-function stDrag(e,loc,sku){dragSku=sku;dragFrom=loc;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',sku);var c=document.getElementById('c_'+loc);if(c)setTimeout(function(){c.classList.add('dragging');},0);hideTT();}
-function enDrag(){if(dragFrom){var c=document.getElementById('c_'+dragFrom);if(c)c.classList.remove('dragging');}dragSku=null;dragFrom=null;document.querySelectorAll('.dt').forEach(function(c){c.classList.remove('dt');});}
+// stDrag/enDrag were removed on 12 Oct 2026. They were unreachable and set
+// dragFrom to a location string where every other path sets an array of
+// locations, so wiring them back up would have made the drop handler read
+// "A-18-1-R".length as 8 pallet spaces.
 
 function onDrop(e,toLoc){
   e.preventDefault();var c=document.getElementById('c_'+toLoc);if(c)c.classList.remove('dt');
@@ -2617,6 +2665,24 @@ function findSeq(startLoc,n){
   var cands=all.slice(si3,si3+n);if(cands.length<n)return null;
   for(var i=0;i<cands.length;i++){if(LOC[cands[i]]||BLOCKED_LOCATIONS[cands[i]])return null;}
   return cands;
+}
+
+// Any run of n free, unblocked spaces anywhere in the warehouse. Used as the
+// holding bay in the middle of a pallet swap, so neither pallet overwrites the
+// other. 'avoid' keeps it away from the two slots taking part in the swap.
+function findParkingSpace(n,avoid){
+  avoid=avoid||[];
+  var cells=document.querySelectorAll('.be[data-loc]');
+  for(var i=0;i<cells.length;i++){
+    var start=cells[i].getAttribute('data-loc');
+    if(avoid.indexOf(start)>=0)continue;
+    var run=findSeq(start,n);
+    if(!run)continue;
+    var clash=false;
+    for(var j=0;j<run.length;j++){if(avoid.indexOf(run[j])>=0){clash=true;break;}}
+    if(!clash)return run;
+  }
+  return null;
 }
 
 // Like findSeq, but a cell already occupied by the SKU being resized counts as free --
