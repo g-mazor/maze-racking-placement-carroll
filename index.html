@@ -2918,7 +2918,7 @@ function renderPlaceAtLocResults(loc,query){
   var resultsEl=document.getElementById('placeAtLocSearchResults');
   var q=query.trim().toUpperCase();
   if(q.length<2){resultsEl.innerHTML='';return;}
-  var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+  var sm=SKUS.filter(function(s){return s.toUpperCase().includes(q);}).slice(0,8);
   var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
   var all=sm.concat(dm).slice(0,10);
   if(!all.length){resultsEl.innerHTML='<div style="color:#777;font-size:12px;padding:6px 0">No matches.</div>';return;}
@@ -3145,7 +3145,7 @@ function enterAddMode(){
   inp.addEventListener('input',function(){
     var q=inp.value.trim().toUpperCase();var list=document.getElementById('addList');
     if(q.length<2){list.innerHTML='';return;}
-    var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+    var sm=SKUS.filter(function(s){return s.toUpperCase().includes(q);}).slice(0,8);
     var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
     var all=sm.concat(dm).slice(0,10);
     if(!all.length){list.innerHTML='<div style="padding:8px;font-size:12px;color:#888">No matches</div>';return;}
@@ -5077,7 +5077,7 @@ function renderAddToMixedResults(loc,query){
   var q=query.trim().toUpperCase();
   if(q.length<2){resultsEl.innerHTML='';return;}
   var existing=(MIXED_CONTENTS[loc]||[]).map(mixedEntrySku);
-  var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+  var sm=SKUS.filter(function(s){return s.toUpperCase().includes(q);}).slice(0,8);
   var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
   var all=sm.concat(dm).slice(0,10);
   if(!all.length){resultsEl.innerHTML='<div style="color:#777;font-size:12px;padding:6px 0">No matches.</div>';return;}
@@ -5663,7 +5663,7 @@ function confirmGuidedPick(){
 var si=document.getElementById('si'),al=document.getElementById('acl');
 si.addEventListener('input',function(){
   var q=si.value.trim().toUpperCase();if(q.length<2){al.style.display='none';return;}
-  var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+  var sm=SKUS.filter(function(s){return s.toUpperCase().includes(q);}).slice(0,8);
   var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
   var all=sm.concat(dm).slice(0,10);if(!all.length){al.style.display='none';return;}
   al.innerHTML=all.map(function(s){
@@ -5734,7 +5734,7 @@ function enterReceiveMode(){
   inp.addEventListener('input',function(){
     var q=inp.value.trim().toUpperCase();var list=document.getElementById('rcvList');
     if(q.length<2){list.innerHTML='';return;}
-    var sm=SKUS.filter(function(s){return s.includes(q);}).slice(0,8);
+    var sm=SKUS.filter(function(s){return s.toUpperCase().includes(q);}).slice(0,8);
     var dm=SKUS.filter(function(s){var v=DATA.d[s];return v&&v[4].toUpperCase().includes(q)&&sm.indexOf(s)<0;}).slice(0,4);
     var all=sm.concat(dm).slice(0,10);
     if(!all.length){list.innerHTML='<div style="padding:8px;font-size:12px;color:#888">No matches</div>';return;}
