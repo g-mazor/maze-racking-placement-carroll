@@ -1340,6 +1340,7 @@ function fmtLog(c){
   if(c.type==='login')return c.user+' LOGGED IN (picker session started)';
   if(c.type==='logout')return c.user+' LOGGED OUT (picker session ended)';
   if(c.type==='receiveresolve')return who+'PLACED goods-in item -- removed from received list';
+  if(c.type==='set_confill')return who+'CONTAINER '+String(c.sku).replace('CON','')+' marked '+(c.qty==null?'fill cleared':c.qty+'% full');
   return '';
 }
 
@@ -2392,6 +2393,45 @@ function bFG(){
 // Space 1 is nearest the doors, so a forklift driver meets them in order.
 var CONTAINER_COUNT=24;
 
+// Manual fill level per container (0-100%), stored in the shared change log
+// like lead times -- the latest set_confill record for that container wins.
+function getConFill(num){
+  var key='CON'+num,val=null;
+  CHANGES.forEach(function(c){
+    if(c.type==='set_confill'&&String(c.sku)===key){
+      // The sheet can hand qty back as a string, or '' for a cleared value.
+      var n=(c.qty==null||c.qty==='')?NaN:parseInt(c.qty,10);
+      val=isNaN(n)?null:Math.max(0,Math.min(100,n));
+    }
+  });
+  return val;
+}
+function conFillColour(pct){
+  if(pct==null)return {fg:'#999',bg:'#FFFFFF',bd:'#DDD'};
+  if(pct>=90)return {fg:'#7B1F1A',bg:'#F5B7B1',bd:'#C0392B'};   // full
+  if(pct>=50)return {fg:'#7A4E0A',bg:'#F9D88C',bd:'#B7791F'};   // part used
+  if(pct>0)  return {fg:'#1E5631',bg:'#ABEBC6',bd:'#27AE60'};   // mostly empty
+  return {fg:'#555',bg:'#FFFFFF',bd:'#27AE60'};                  // empty
+}
+function setConFill(num){
+  requirePin(function(){
+    var current=getConFill(num);
+    var ans=prompt('How full is Container '+num+'? Enter 0-100 (%).\nLeave blank to clear.',
+      current==null?'':String(current));
+    if(ans===null)return;
+    ans=ans.trim().replace('%','');
+    var n=null;
+    if(ans!==''){
+      n=parseInt(ans,10);
+      if(isNaN(n)||n<0||n>100){alert('Enter a whole number from 0 to 100.');return;}
+    }
+    applyC({type:'set_confill',sku:'CON'+num,qty:n,ts:Date.now()},true);
+    if(window.containersOpen)buildContainerRows();
+    renderContainerHeader();
+    si2('Container '+num+(n==null?' fill cleared':' set to '+n+'% full'));
+  });
+}
+
 function renderContainerHeader(){
   var h=document.getElementById('containerToggle');
   if(!h)return;
@@ -2404,10 +2444,16 @@ function renderContainerHeader(){
       }
     }
   }
+  var full=0,part=0,unset=0;
+  for(var q=1;q<=CONTAINER_COUNT;q++){
+    var p=getConFill(q);
+    if(p==null)unset++;else if(p>=90)full++;else if(p>0)part++;
+  }
   h.textContent=(window.containersOpen?'\u25BC ':'\u25B6 ')
     +'STORAGE CONTAINERS \u2014 '+CONTAINER_COUNT+' containers, '
     +(CONTAINER_COUNT*20)+' pallet spaces, '+used+' in use'
-    +(window.containersOpen?'  \u2014 striped bar = doors, space 1 nearest the doors':'  (tap to open)');
+    +' \u2014 '+full+' full, '+part+' part-full'+(unset?', '+unset+' not set':'')
+    +(window.containersOpen?'  \u2014 tap the % under a container number to change it':'  (tap to open)');
 }
 
 function toggleContainers(){
@@ -2458,6 +2504,20 @@ function buildOneContainer(num){
   t.style.cssText='font-size:8px;font-weight:700;color:#7A4E0A;text-align:center;margin-bottom:2px;white-space:nowrap;overflow:hidden';
   t.textContent=num;
   box.appendChild(t);
+
+  // How full the container is, set by hand (pallet counts don't tell the
+  // story -- one shed can take more than a pallet space). Tap to change.
+  var pct=getConFill(num);
+  var fillBadge=document.createElement('div');
+  var fc=conFillColour(pct);
+  fillBadge.style.cssText='cursor:pointer;font-size:8px;font-weight:700;text-align:center;'
+    +'border-radius:2px;margin-bottom:2px;padding:1px 0;white-space:nowrap;overflow:hidden;'
+    +'border:1px solid '+fc.bd+';color:'+fc.fg+';'
+    +'background:linear-gradient(to right,'+fc.bg+' '+(pct==null?0:pct)+'%,#FFFFFF '+(pct==null?0:pct)+'%)';
+  fillBadge.textContent=(pct==null?'--':pct+'%');
+  fillBadge.title='Container '+num+(pct==null?' -- fill not set':' -- '+pct+'% full')+'. Tap to change.';
+  fillBadge.onclick=function(e){e.stopPropagation();setConFill(num);};
+  box.appendChild(fillBadge);
 
 
   // Doors marked at the top: space 1 is the first one you meet walking in,
