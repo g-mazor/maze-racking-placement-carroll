@@ -897,6 +897,41 @@ function reserveStockFor_(sku, excludeLoc) {
 // The "go and get it from here" panel. Shown whenever a pick face is emptied
 // or flagged, so the picker has the source bay in front of them to pass to the
 // forklift driver instead of having to go and look it up.
+// Escapes a value for use inside a single-quoted JS string in a double-quoted
+// HTML attribute. SKU codes contain brackets, dots and the odd space.
+function attrJs_(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+// Lets the picker refill the pick face themselves and confirm it, instead of
+// only flagging it and waiting for a forklift driver. Added 18 Oct 2026 at
+// Gil's request. Sends exactly the same replenish_move the forklift page
+// sends, so the stock move, the log entries and any open replenishment task
+// resolve identically -- the only difference is the name on the log row,
+// which is the picker's rather than "Forklift".
+function pickerConfirmReplenish_(sku, fromLoc, toLoc) {
+  if (!confirm('Move the pallet of ' + sku + ' from ' + fl(fromLoc)
+      + ' into pick face ' + fl(toLoc) + '?\n\nOnly confirm once you have physically moved it.')) return;
+  jsonpFetchStock('beacon=1&type=replenish_move'
+    + '&sku=' + encodeURIComponent(sku)
+    + '&fromLoc=' + encodeURIComponent(fromLoc)
+    + '&toLoc=' + encodeURIComponent(toLoc)
+    + '&user=' + encodeURIComponent(currentPicker || ''))
+    .then(function(result) {
+      if (result && result.ok) {
+        alert('Done. ' + fl(fromLoc) + ' is now empty and ' + fl(toLoc)
+          + ' is refilled with ' + result.qtyMoved + ' units.');
+        loadData();
+      } else {
+        alert('Could not complete: ' + (result && result.error ? result.error : 'unknown error'));
+      }
+    })
+    .catch(function() {
+      alert('Could not reach the server -- check your connection and try again.');
+    });
+}
+
 function replenishFromHtml_(sku, pickLoc) {
   var res = reserveStockFor_(sku, pickLoc);
   if (!res.rows.length) {
@@ -910,11 +945,17 @@ function replenishFromHtml_(sku, pickLoc) {
       + (r.qty != null ? ' <span style="font-size:13px;color:#145A32">&mdash; ' + r.qty + ' units</span>' : '')
       + (r.mixed ? ' <span style="font-size:11px;color:#7A5C00;background:#FFF2CC;padding:1px 5px;border-radius:3px">mixed pallet</span>' : '')
       + (i === 0 ? ' <span style="font-size:11px;font-weight:700;color:#1E8449">← easiest</span>' : '')
+      + (r.mixed
+          ? '<div style="font-size:11px;color:#7A5C00;margin-top:3px">Mixed pallet &mdash; ask the forklift driver to split it.</div>'
+          : '<div style="margin-top:5px"><button style="background:#1E8449;color:#fff;font-size:13px;padding:8px 12px;'
+            + 'border:0;border-radius:6px;font-weight:700" '
+            + 'onclick="pickerConfirmReplenish_(\'' + attrJs_(sku) + '\',\'' + attrJs_(r.loc) + '\',\'' + attrJs_(pickLoc) + '\')">'
+            + 'I moved it &mdash; refill from ' + fl(r.loc) + '</button></div>')
       + '</div>';
   }).join('');
   return '<div style="margin-top:8px;padding:9px 11px;background:#EAF6EC;border-left:4px solid #1E8449">'
     + '<div style="font-size:12px;font-weight:800;letter-spacing:.5px;color:#145A32;margin-bottom:4px">'
-    + 'REPLENISH FROM &mdash; tell the forklift driver</div>' + list
+    + 'REPLENISH FROM &mdash; move it yourself, or tell the forklift driver</div>' + list
     + '<div style="font-size:11px;color:#145A32;margin-top:5px">' + res.total
     + ' units in reserve across ' + res.rows.length + ' location'
     + (res.rows.length === 1 ? '' : 's') + '. Lowest level listed first.</div></div>';
