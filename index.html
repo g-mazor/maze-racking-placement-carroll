@@ -2406,12 +2406,49 @@ function getConFill(num){
   });
   return val;
 }
+// One colour per 10% step, running dark red (full) through orange, yellow
+// and green to blue (nearly empty), so a glance tells you the level.
+var CON_FILL_STEPS={
+  100:{bg:'#7B0000',fg:'#FFFFFF'},
+   90:{bg:'#D32F2F',fg:'#FFFFFF'},
+   80:{bg:'#F4511E',fg:'#FFFFFF'},
+   70:{bg:'#FB8C00',fg:'#1A1A1A'},
+   60:{bg:'#FDD835',fg:'#1A1A1A'},
+   50:{bg:'#C0CA33',fg:'#1A1A1A'},
+   40:{bg:'#7CB342',fg:'#1A1A1A'},
+   30:{bg:'#2E7D32',fg:'#FFFFFF'},
+   20:{bg:'#00897B',fg:'#FFFFFF'},
+   10:{bg:'#1E88E5',fg:'#FFFFFF'},
+    0:{bg:'#FFFFFF',fg:'#555555'}
+};
+// 1-9% still shows as 10% (not empty); otherwise nearest 10%.
+function conFillStep(pct){
+  if(pct==null)return null;
+  if(pct<=0)return 0;
+  return Math.max(10,Math.min(100,Math.round(pct/10)*10));
+}
 function conFillColour(pct){
-  if(pct==null)return {fg:'#999',bg:'#FFFFFF',bd:'#DDD'};
-  if(pct>=90)return {fg:'#7B1F1A',bg:'#F5B7B1',bd:'#C0392B'};   // full
-  if(pct>=50)return {fg:'#7A4E0A',bg:'#F9D88C',bd:'#B7791F'};   // part used
-  if(pct>0)  return {fg:'#1E5631',bg:'#ABEBC6',bd:'#27AE60'};   // mostly empty
-  return {fg:'#555',bg:'#FFFFFF',bd:'#27AE60'};                  // empty
+  var st=conFillStep(pct);
+  if(st==null)return {fg:'#999',bg:'#FFFFFF',bd:'#DDD'};
+  var c=CON_FILL_STEPS[st];
+  return {fg:c.fg,bg:c.bg,bd:(st===0?'#999':c.bg)};
+}
+function buildConFillKey(){
+  var k=document.createElement('div');
+  k.style.cssText='display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:10px;margin:2px 0 6px';
+  var lbl=document.createElement('span');
+  lbl.style.cssText='font-weight:700;color:#7A4E0A;margin-right:2px';
+  lbl.textContent='Fill:';
+  k.appendChild(lbl);
+  [100,90,80,70,60,50,40,30,20,10,0].forEach(function(st){
+    var c=CON_FILL_STEPS[st];
+    var s=document.createElement('span');
+    s.style.cssText='background:'+c.bg+';color:'+c.fg+';font-weight:700;border-radius:3px;padding:1px 4px;'
+      +'border:1px solid '+(st===0?'#999':c.bg);
+    s.textContent=st+'%';
+    k.appendChild(s);
+  });
+  return k;
 }
 function setConFill(num){
   requirePin(function(){
@@ -2473,6 +2510,7 @@ function buildContainerRows(){
   var body=document.getElementById('containerBody');
   if(!body)return;
   body.innerHTML='';
+  body.appendChild(buildConFillKey());
   // Containers are drawn UPRIGHT, the way they physically sit: two columns
   // (left row and right row) running the ten pallet spaces down the page,
   // space 1 nearest the doors. Several sit side by side across the map so a
@@ -2512,8 +2550,10 @@ function buildOneContainer(num){
   var fc=conFillColour(pct);
   fillBadge.style.cssText='cursor:pointer;font-size:8px;font-weight:700;text-align:center;'
     +'border-radius:2px;margin-bottom:2px;padding:1px 0;white-space:nowrap;overflow:hidden;'
-    +'border:1px solid '+fc.bd+';color:'+fc.fg+';'
-    +'background:linear-gradient(to right,'+fc.bg+' '+(pct==null?0:pct)+'%,#FFFFFF '+(pct==null?0:pct)+'%)';
+    +'border:1px solid '+fc.bd+';color:'+fc.fg+';background:'+fc.bg;
+  // Outline the whole container in its fill colour too, so it reads from a
+  // distance without zooming in on the badge.
+  if(pct!=null&&conFillStep(pct)>0)box.style.border='2px solid '+fc.bg;
   fillBadge.textContent=(pct==null?'--':pct+'%');
   fillBadge.title='Container '+num+(pct==null?' -- fill not set':' -- '+pct+'% full')+'. Tap to change.';
   fillBadge.onclick=function(e){e.stopPropagation();setConFill(num);};
