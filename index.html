@@ -3165,6 +3165,20 @@ function estimateWalkSeconds(locA,locB){
 function hlSKU(sku){
   clrHL();if(!sku)return;
   var locs=sortLocationsByWalkPath(getSkuLocations(sku));hi=locs;
+  // Container cells only exist in the DOM once the storage-container section
+  // has been opened, and they are hidden while it is collapsed. A SKU sitting
+  // in a container was therefore looked up, found missing, and silently
+  // skipped -- the search marked nothing. Open and build the section first
+  // whenever any of the SKU's locations is a container.
+  if(locs.some(function(l){return /^CON\d+-/.test(l);})){
+    var cbody=document.getElementById('containerBody');
+    if(cbody){
+      if(!cbody.hasChildNodes())buildContainerRows();
+      cbody.style.display='block';
+      window.containersOpen=true;
+      if(typeof renderContainerHeader==='function')renderContainerHeader();
+    }
+  }
   locs.forEach(function(loc,i){
     var cell=document.getElementById('c_'+loc);if(!cell)return;
     cell.classList.remove('occ','be');cell.style.background='#E24B4A';
