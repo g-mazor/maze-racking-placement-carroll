@@ -338,7 +338,13 @@ function renderResults(query) {
     el.innerHTML = '<div class="status">Start typing a SKU code or description...</div>';
     return;
   }
-  var skuMatches = SKUS.filter(function(s) { return s.includes(q); }).slice(0, 8);
+  // s.toUpperCase(), not s. q is already uppercased, so comparing it against
+  // the raw catalogue key meant the 283 codes that are not all-uppercase
+  // (MWT-300NoTap, MWT-190lid, the PA-KCBGulliver spare-parts range, every
+  // "...x2" kit code) never matched by code here at all -- they could only be
+  // found by description. Found 28 Oct 2026 alongside the placement fault on
+  // the manager map.
+  var skuMatches = SKUS.filter(function(s) { return s.toUpperCase().includes(q); }).slice(0, 8);
   var descMatches = SKUS.filter(function(s) {
     var v = DATA.d[s];
     return v && v[4].toUpperCase().includes(q) && skuMatches.indexOf(s) < 0;

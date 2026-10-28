@@ -352,6 +352,33 @@ var LOC={},SLOC={},QTY={},MIXED_CONTENTS={},PALLET_GROUP={},CHANGES=[],LOG=[],mo
 var RECEIVED=[],pendingReceiveId=null,pendingReceiveQty=null;
 function genId(){return 'r'+Date.now()+Math.random().toString(36).slice(2,8);}
 var SKUS=Object.keys(DATA.d).sort();
+// Case-insensitive SKU resolution. 283 of the 2,214 catalogue codes are not
+// all-uppercase -- MWT-300NoTap, MWT-210NoTap, MWT-190lid, Misc-FRI, the whole
+// PA-KCBGulliver / PA-KCBGroove spare-parts range, and every "...x2" kit code.
+// Every typed-SKU path used to uppercase the input and then index DATA.d
+// directly, so those 283 came back "not in the SKU list" even though search
+// found them and offered them. Reported 28 Oct 2026: MWT-300NoTap showed in
+// search but could not be placed.
+//
+// The catalogue keys deliberately keep Unleashed's own spelling -- stock
+// lookups and any future write-back match on the exact code -- so the fix
+// relaxes the LOOKUP, never the key. resolveSku_ takes whatever was typed and
+// hands back the catalogue's spelling of it.
+var SKU_BY_UPPER={};
+function rebuildSkuCaseIndex_(){
+  SKU_BY_UPPER={};
+  Object.keys(DATA.d).forEach(function(k){SKU_BY_UPPER[String(k).toUpperCase()]=k;});
+}
+rebuildSkuCaseIndex_();
+// Returns the catalogue's spelling of a typed code, or '' if it is genuinely
+// not in the catalogue.
+function resolveSku_(raw){
+  if(raw==null)return '';
+  var t=String(raw).trim();
+  if(!t)return '';
+  if(DATA.d[t])return t;
+  return SKU_BY_UPPER[t.toUpperCase()]||'';
+}
 var LS='maze_wh_v2';
 // 2 minutes, raised from 45s on 6 Oct 2026. Every poll pulls the WHOLE change
 // log (7,700+ rows and growing), which was taking the server 15-100+ seconds
@@ -3611,11 +3638,16 @@ function parsePickListLine(line){
   // "SKU x6", "SKU X6", and "SKU, 6". Requires a space/comma before the
   // quantity so real SKU codes ending in digits (e.g. "MC-PB7-15") are never
   // mistaken for a line with no quantity.
+  // Codes are resolved to the catalogue's own spelling so a pasted list
+  // containing a mixed-case code (MWT-300NoTap) resolves to a location instead
+  // of being reported unresolvable. An unknown code stays as typed, uppercased,
+  // so the "could not resolve" report still shows what was pasted.
   var m=trimmed.match(/^(.*?)[\s,]+[xX]?(\d+)$/);
   if(m&&m[1].trim()){
-    return {sku:m[1].trim().toUpperCase(),qty:parseInt(m[2],10)};
+    var withQty=m[1].trim();
+    return {sku:resolveSku_(withQty)||withQty.toUpperCase(),qty:parseInt(m[2],10)};
   }
-  return {sku:trimmed.toUpperCase(),qty:1};
+  return {sku:resolveSku_(trimmed)||trimmed.toUpperCase(),qty:1};
 }
 
 // Resolves each line to a real, pickable (non-oversize) location, then orders
@@ -4976,7 +5008,11 @@ function getSkuLocations(sku){
 }
 
 function showR(sku){
-  var key=String(sku).trim().toUpperCase();var v=DATA.d[key];
+  // resolveSku_ first, so a mixed-case catalogue code (MWT-300NoTap) is found
+  // however it was typed. Falls back to the uppercased input when the code is
+  // genuinely unknown, which keeps the orphan handling below working for codes
+  // that were renamed in Unleashed and still hold bays.
+  var key=resolveSku_(sku)||String(sku).trim().toUpperCase();var v=DATA.d[key];
   if(!v){
     // A SKU can be placed on the map and still be absent from the catalog --
     // most often after a code is corrected in Unleashed (e.g. MC-PICKUGL ->
@@ -5468,7 +5504,7 @@ function handleScanForPickInPanel(rawCode,resultId){
 function handleSkuLookupForPick(rawSku,resultId){
   var result=document.getElementById(resultId);
   if(!rawSku)return;
-  var sku=rawSku.trim().toUpperCase();
+  var sku=resolveSku_(rawSku)||rawSku.trim().toUpperCase();
   var v=DATA.d[sku];
   if(!v){
     result.innerHTML='<div style="color:#A32D2D;font-size:12px">SKU not found: '+sku+'</div>';
