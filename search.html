@@ -170,7 +170,12 @@ function jsonpFetchStock(params) {
   });
 }
 
+// Both of these compare against keys written by the change log, which carry
+// the catalogue's exact spelling. Matching case-insensitively here means a
+// code that reached us uppercased (an older picklist, a typed search) still
+// finds the stock that is really on the map. See SKU_BY_UPPER below.
 function getMixedPalletLocationsFor(sku) {
+  var want = String(sku == null ? '' : sku).trim().toUpperCase();
   var locs = [];
   Object.keys(SLOC).forEach(function(k) {
     if (isMixedSku(k)) locs = locs.concat(SLOC[k]);
@@ -178,13 +183,24 @@ function getMixedPalletLocationsFor(sku) {
   return locs.filter(function(loc) {
     return (MIXED_CONTENTS[loc] || []).some(function(e) {
       var s = typeof e === 'string' ? e : e.sku;
-      return s === sku;
+      return String(s == null ? '' : s).trim().toUpperCase() === want;
     });
   });
 }
 
 function getSkuLocations(sku) {
-  return (SLOC[sku] || []).concat(getMixedPalletLocationsFor(sku));
+  var direct = SLOC[sku];
+  if (!direct) {
+    // Fall back to a case-insensitive match on the SLOC keys themselves, since
+    // SLOC is built from the log rather than from the catalogue and can hold a
+    // code the catalogue no longer lists.
+    var want = String(sku == null ? '' : sku).trim().toUpperCase();
+    var hit = Object.keys(SLOC).filter(function(k) {
+      return !isMixedSku(k) && String(k).trim().toUpperCase() === want;
+    });
+    if (hit.length) direct = SLOC[hit[0]];
+  }
+  return (direct || []).concat(getMixedPalletLocationsFor(sku));
 }
 
 // Replays the log to compute current locations, quantities, and picklists --
@@ -330,6 +346,26 @@ function loadPickFaces() {
 }
 
 var SKUS = Object.keys(DATA.d);
+
+// Case-insensitive SKU resolution, the picker-page twin of the one on the
+// manager map. 283 of the 2,214 catalogue codes are not all-uppercase, and
+// SLOC, MIXED_CONTENTS and DATA.d are all keyed on the catalogue's exact
+// spelling. A picklist built before 28 Oct 2026 stored its codes uppercased,
+// so for those SKUs reserveStockFor_ looked up a key that does not exist and
+// the replenish panel reported "Nothing in reserve" for stock that was sitting
+// on the map. Reported 30 Oct 2026: pickers told there is no location to
+// replenish from.
+var SKU_BY_UPPER = {};
+Object.keys(DATA.d).forEach(function(k) { SKU_BY_UPPER[String(k).toUpperCase()] = k; });
+// Returns the catalogue's spelling of a code, or the trimmed input unchanged
+// when it is not in the catalogue, so callers can keep showing what was typed.
+function resolveSku_(raw) {
+  if (raw == null) return '';
+  var t = String(raw).trim();
+  if (!t) return '';
+  if (DATA.d[t]) return t;
+  return SKU_BY_UPPER[t.toUpperCase()] || t;
+}
 
 function renderResults(query) {
   var el = document.getElementById('results');
@@ -919,6 +955,10 @@ function attrJs_(s) {
 function pickerConfirmReplenish_(sku, fromLoc, toLoc) {
   if (!confirm('Move the pallet of ' + sku + ' from ' + fl(fromLoc)
       + ' into pick face ' + fl(toLoc) + '?\n\nOnly confirm once you have physically moved it.')) return;
+  // The backend matches the SKU against the stock sheet with an exact string
+  // compare, so send the catalogue's spelling rather than whatever case the
+  // code arrived in.
+  sku = resolveSku_(sku);
   jsonpFetchStock('beacon=1&type=replenish_move'
     + '&sku=' + encodeURIComponent(sku)
     + '&fromLoc=' + encodeURIComponent(fromLoc)
@@ -929,6 +969,13 @@ function pickerConfirmReplenish_(sku, fromLoc, toLoc) {
         alert('Done. ' + fl(fromLoc) + ' is now empty and ' + fl(toLoc)
           + ' is refilled with ' + result.qtyMoved + ' units.');
         loadData();
+      } else if (result && result.accessDenied) {
+        // Named explicitly because this is exactly how this button failed
+        // silently from 18 to 30 Oct 2026: replenish_move was missing from the
+        // backend's picker write whitelist, so every confirm came back as a
+        // bare accessDenied and the picker was told "unknown error".
+        alert('The server would not accept this move from the picker login.\n\n'
+          + 'Tell Gil: replenish_move needs to be in PICKER_ALLOWED_WRITE_TYPES.');
       } else {
         alert('Could not complete: ' + (result && result.error ? result.error : 'unknown error'));
       }
