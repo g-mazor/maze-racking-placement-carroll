@@ -83,9 +83,31 @@ var PICKFACE = {}; // sku -> raw loc of its manually-designated pick face, if an
 var PICKERS = {'1982':'Tom', '8074':'Waj'};
 var currentPicker = sessionStorage.getItem('mazePickerName') || null;
 
+// Which side of the bay the pallet is on, in words a picker can act on.
+// Two-wide bays are stored L and R; three-wide bays are stored 1, 2, 3
+// numbered left to right -- the same order the manager map draws them.
+//
+// Added 05 Nov 2026. The picker page showed only row, bay and level, so when
+// a bay held two or three different SKUs there was nothing on screen to say
+// which pallet was which, and the picker had to guess. The manager map shows
+// the position; this puts the same thing in words.
+function sideWord(side) {
+  if (side === 'L') return 'LEFT';
+  if (side === 'R') return 'RIGHT';
+  if (side === '1') return 'LEFT';
+  if (side === '2') return 'MIDDLE';
+  if (side === '3') return 'RIGHT';
+  return '';
+}
 function fl(loc) {
   var p = loc.split('-');
-  return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
+  var word = sideWord(p[3]);
+  // Containers read the way the team talks about them: container, then how
+  // far in from the doors, then which side.
+  if (p[0].indexOf('CON') === 0) {
+    return p[0] + ' · space ' + parseInt(p[1], 10) + (word ? ' · ' + word : '');
+  }
+  return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2] + (word ? ' · ' + word : '');
 }
 
 // Same working-days logic as the backend's countWorkingDaysSince_ (Code.gs)

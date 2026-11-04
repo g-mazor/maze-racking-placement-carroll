@@ -146,9 +146,24 @@ var ROW_SPEC_JS = {
   E:{bays:38,levels:3,sides:2}, F:{bays:4,levels:4,sides:3}, G:{bays:13,levels:4,sides:3}, H:{bays:12,levels:3,sides:2}
 };
 
+// Same as the picker page: say which side of the bay the pallet is on.
+// Two-wide bays are stored L and R; three-wide bays are stored 1, 2, 3
+// numbered left to right, the order the manager map draws them.
+function sideWord(side) {
+  if (side === 'L') return 'LEFT';
+  if (side === 'R') return 'RIGHT';
+  if (side === '1') return 'LEFT';
+  if (side === '2') return 'MIDDLE';
+  if (side === '3') return 'RIGHT';
+  return '';
+}
 function fl(loc) {
   var p = loc.split('-');
-  return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2];
+  var word = sideWord(p[3]);
+  if (p[0].indexOf('CON') === 0) {
+    return p[0] + ' · space ' + parseInt(p[1], 10) + (word ? ' · ' + word : '');
+  }
+  return p[0] + '-B' + parseInt(p[1], 10) + '-L' + p[2] + (word ? ' · ' + word : '');
 }
 
 // The actual writes ('add', 'receive', 'receiveresolve') return a tiny

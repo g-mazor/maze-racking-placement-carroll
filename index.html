@@ -409,7 +409,12 @@ function fl(loc){
   // keeps the row-bay-level-side shape every other location uses, so pick
   // lists, replenishment and reconciliation need no special handling.
   if(p[0].indexOf('CON')===0){
-    return p[0]+' - '+(p[3]||'')+parseInt(p[1],10);
+    // Three-wide bays are stored as slots 1/2/3, so the raw side has to be
+    // turned into a letter or the label is ambiguous: CON7-04-1-1 was reading
+    // as "CON7 - 14", which looks like space 14. L, M, R left to right.
+    var s=p[3]||'';
+    if(s==='1')s='L'; else if(s==='2')s='M'; else if(s==='3')s='R';
+    return p[0]+' - '+s+parseInt(p[1],10);
   }
   return p[0]+'-B'+parseInt(p[1],10)+'-L'+p[2];
 }
