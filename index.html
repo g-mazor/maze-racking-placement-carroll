@@ -1316,8 +1316,15 @@ function applyC(c,rec){
     var movedGroupId=null;
     for(var mgi=0;mgi<c.fl.length;mgi++){if(PALLET_GROUP[c.fl[mgi]]){movedGroupId=PALLET_GROUP[c.fl[mgi]];break;}}
     if(!movedGroupId)movedGroupId=genId();
+    // Take the count with the pallet. Before 05 Nov 2026 the old location's
+    // QTY was deleted and nothing was written at the new one, so a moved
+    // pallet showed no count until the next sync -- and the backend was
+    // blanking it there too (see the move branch in Code.gs).
+    var movedQty=null;
+    for(var mqi=0;mqi<c.fl.length;mqi++){if(QTY[c.fl[mqi]]!=null){movedQty=QTY[c.fl[mqi]];break;}}
     c.fl.forEach(function(l){delete LOC[l];delete QTY[l];delete MIXED_CONTENTS[l];delete PALLET_GROUP[l];});
     c.tl.forEach(function(l){LOC[l]=c.sku;PALLET_GROUP[l]=movedGroupId;});
+    if(movedQty!=null&&c.tl.length===1)QTY[c.tl[0]]=movedQty;
     var remainingAfterMove=(SLOC[c.sku]||[]).filter(function(l){return c.fl.indexOf(l)<0;});
     SLOC[c.sku]=remainingAfterMove.concat(c.tl);
     if(movedMixed&&c.tl.length===1)MIXED_CONTENTS[c.tl[0]]=movedMixed;
@@ -1676,6 +1683,80 @@ function requirePin(cb){
   } else {
     alert('Incorrect code.');
   }
+}
+
+// ------------------------------------------------------------
+// CONTAINER RENUMBER
+//
+// The containers were numbered in the order they arrived, eight at a time, so
+// the numbers run all over the yard instead of along it. This renames a
+// container -- every pallet in it keeps its stock, its count and its pick
+// history, and only the location text changes. Nothing physically moves.
+//
+// Added 05 Nov 2026. Preview first, apply second: it prints every pallet it
+// will touch and refuses outright if the destination is not completely empty,
+// because a half-finished renumber is far worse than none.
+// ------------------------------------------------------------
+function containerLocs_(n){
+  var pre='CON'+n+'-';
+  return Object.keys(LOC).filter(function(l){return l.indexOf(pre)===0;}).sort();
+}
+
+// What would change, as text. Run this on its own as often as you like -- it
+// reads and prints, it never writes.
+function previewContainerRenumber(from,to){
+  if(from==null||to==null){alert('previewContainerRenumber(from,to) -- e.g. previewContainerRenumber(1,32)');return null;}
+  if(String(from)===String(to)){alert('Those are the same container.');return null;}
+  var src=containerLocs_(from), dst=containerLocs_(to);
+  var lines=['CONTAINER '+from+'  →  CONTAINER '+to,'',
+             'Pallets in container '+from+': '+src.length,
+             'Pallets already in container '+to+': '+dst.length,''];
+  if(!src.length){lines.push('Container '+from+' is empty. Nothing to do.');alert(lines.join('\n'));return null;}
+  if(dst.length){
+    lines.push('STOPPED. Container '+to+' is not empty.');
+    lines.push('Move its '+dst.length+' pallet(s) out first, or renumber into an empty container.');
+    alert(lines.join('\n'));
+    return null;
+  }
+  var moves=src.map(function(l){
+    return {from:l,to:'CON'+to+'-'+l.split('-').slice(1).join('-'),sku:LOC[l],qty:(QTY[l]==null?'':QTY[l])};
+  });
+  var byS={};
+  moves.forEach(function(m){byS[m.sku]=(byS[m.sku]||0)+1;});
+  lines.push('What moves:');
+  Object.keys(byS).forEach(function(s){
+    var v=DATA.d[s];
+    lines.push('  '+s+(v?'  '+v[4]:'')+'  —  '+byS[s]+' pallet(s)');
+  });
+  lines.push('');
+  moves.slice(0,6).forEach(function(m){lines.push('  '+fl(m.from)+'  →  '+fl(m.to)+'   qty '+(m.qty===''?'(none)':m.qty));});
+  if(moves.length>6)lines.push('  ... and '+(moves.length-6)+' more');
+  lines.push('');
+  var noQty=moves.filter(function(m){return m.qty==='';}).length;
+  if(noQty)lines.push('NOTE: '+noQty+' of these pallets have no count recorded. They will still have none afterwards.');
+  alert(lines.join('\n'));
+  Logger_&&Logger_(lines.join('\n'));
+  return moves;
+}
+
+function Logger_(s){try{console.log(s);}catch(e){}}
+
+// Does it. Admin code, then a confirm naming the exact numbers.
+function renumberContainer(from,to){
+  var moves=previewContainerRenumber(from,to);
+  if(!moves||!moves.length)return;
+  if(!confirm('Renumber container '+from+' to container '+to+'?\n\n'
+      +moves.length+' pallet(s) will be relabelled. No stock physically moves.\n\n'
+      +'The container itself and its QR stickers must be relabelled to match, or pickers will be sent to the wrong one.'))return;
+  requireAdminPin(function(){
+    moves.forEach(function(m){
+      applyC({type:'move',sku:m.sku,fl:[m.from],tl:[m.to]},true);
+    });
+    rebuildMap();
+    si2('Container '+from+' renumbered to '+to+' — '+moves.length+' pallet(s)');
+    alert('Done. '+moves.length+' pallet(s) now read CON'+to+'.\n\n'
+      +'Check the map, then relabel the container and its stickers.');
+  });
 }
 
 // Restricted actions (clearing data for everyone) always re-prompt for this one
