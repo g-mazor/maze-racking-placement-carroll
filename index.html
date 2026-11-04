@@ -1724,18 +1724,31 @@ function previewContainerRenumber(from,to){
   if(String(from)===String(to)){alert('Those are the same container.');return null;}
   var src=containerLocs_(from), dst=containerLocs_(to);
   var lines=['CONTAINER '+from+'  →  CONTAINER '+to,'',
-             'Pallets in container '+from+': '+src.length,
+             'Pallets still in container '+from+': '+src.length,
              'Pallets already in container '+to+': '+dst.length,''];
   if(!src.length){lines.push('Container '+from+' is empty. Nothing to do.');alert(lines.join('\n'));return null;}
-  if(dst.length){
-    lines.push('STOPPED. Container '+to+' is not empty.');
-    lines.push('Move its '+dst.length+' pallet(s) out first, or renumber into an empty container.');
-    alert(lines.join('\n'));
-    return null;
-  }
   var moves=src.map(function(l){
     return {from:l,to:'CON'+to+'-'+l.split('-').slice(1).join('-'),sku:LOC[l],qty:(QTY[l]==null?'':QTY[l])};
   });
+  // Block on the individual spaces we need, not on "is the container empty".
+  // Relaxed 05 Nov 2026: the first run of CON1 -> CON32 only got part way, and
+  // the old whole-container check then refused to let it finish. What actually
+  // matters is whether each destination space is free.
+  var blocked=moves.filter(function(m){return LOC[m.to];});
+  if(blocked.length){
+    lines.push('STOPPED. '+blocked.length+' of the spaces needed in container '+to+' already hold something:');
+    blocked.slice(0,6).forEach(function(m){lines.push('   '+fl(m.to)+'  holds  '+LOC[m.to]);});
+    if(blocked.length>6)lines.push('   ... and '+(blocked.length-6)+' more');
+    lines.push('');
+    lines.push('Clear those spaces first, or renumber into an empty container.');
+    alert(lines.join('\n'));
+    return null;
+  }
+  if(dst.length){
+    lines.push('Container '+to+' already holds '+dst.length+' pallet(s), but none in the spaces needed.');
+    lines.push('This looks like finishing a run that stopped part way.');
+    lines.push('');
+  }
   var byS={};
   moves.forEach(function(m){byS[m.sku]=(byS[m.sku]||0)+1;});
   lines.push('What moves:');
@@ -1782,13 +1795,41 @@ function renumberContainer(from,to){
       +moves.length+' pallet(s) will be relabelled. No stock physically moves.\n\n'
       +'The container itself and its QR stickers must be relabelled to match, or pickers will be sent to the wrong one.'))return;
   requireAdminPin(function(){
-    moves.forEach(function(m){
-      applyC({type:'move',sku:m.sku,fl:[m.from],tl:[m.to]},true);
-    });
-    rebuildMap();
-    si2('Container '+from+' renumbered to '+to+' — '+moves.length+' pallet(s)');
-    alert('Done. '+moves.length+' pallet(s) now read CON'+to+'.\n\n'
-      +'Check the map, then relabel the container and its stickers.');
+    // ONE AT A TIME, waiting for each to be acknowledged before sending the
+    // next. The first version fired all 18 at once and checked nothing.
+    // Browsers run only about six requests to one host at a time, and every
+    // write now takes the script lock for a few seconds, so the tail of the
+    // burst either passed the 8-second beacon timeout or was refused as busy.
+    // applyC had already changed local state, so the screen showed all 18
+    // moved -- and a refresh pulled the server's truth, with half the pallets
+    // back where they started. Reported 05 Nov 2026 on CON1 -> CON32.
+    var i=0,done=0,failed=null;
+    function step(){
+      if(failed||i>=moves.length){finish();return;}
+      var m=moves[i++];
+      applyC({type:'move',sku:m.sku,fl:[m.from],tl:[m.to]},true).then(function(ok){
+        if(!ok){failed=m;finish();return;}
+        done++;
+        si2('Renumbering — '+done+' of '+moves.length+' saved');
+        step();
+      });
+    }
+    function finish(){
+      rebuildMap();
+      if(failed){
+        alert('STOPPED after '+done+' of '+moves.length+' pallet(s).\n\n'
+          +fl(failed.from)+' could not be saved to the shared sheet.\n\n'
+          +'The '+done+' already saved are safe. Reload the page, then run the\n'
+          +'same renumber again to finish the rest — it will pick up where it\n'
+          +'stopped.');
+      } else {
+        si2('Container '+from+' renumbered to '+to+' — '+moves.length+' pallet(s)');
+        alert('Done. All '+moves.length+' pallet(s) now read CON'+to+'.\n\n'
+          +'Reload the page to confirm it matches the shared sheet, then\n'
+          +'relabel the container and its stickers.');
+      }
+    }
+    step();
   });
 }
 
