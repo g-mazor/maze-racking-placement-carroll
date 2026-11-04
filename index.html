@@ -1795,41 +1795,40 @@ function renumberContainer(from,to){
       +moves.length+' pallet(s) will be relabelled. No stock physically moves.\n\n'
       +'The container itself and its QR stickers must be relabelled to match, or pickers will be sent to the wrong one.'))return;
   requireAdminPin(function(){
-    // ONE AT A TIME, waiting for each to be acknowledged before sending the
-    // next. The first version fired all 18 at once and checked nothing.
-    // Browsers run only about six requests to one host at a time, and every
-    // write now takes the script lock for a few seconds, so the tail of the
-    // burst either passed the 8-second beacon timeout or was refused as busy.
-    // applyC had already changed local state, so the screen showed all 18
-    // moved -- and a refresh pulled the server's truth, with half the pallets
-    // back where they started. Reported 05 Nov 2026 on CON1 -> CON32.
-    var i=0,done=0,failed=null;
-    function step(){
-      if(failed||i>=moves.length){finish();return;}
-      var m=moves[i++];
-      applyC({type:'move',sku:m.sku,fl:[m.from],tl:[m.to]},true).then(function(ok){
-        if(!ok){failed=m;finish();return;}
-        done++;
-        si2('Renumbering — '+done+' of '+moves.length+' saved');
-        step();
+    // ONE request. The server renames every pallet in a single execution,
+    // holding the script lock once.
+    //
+    // This used to be one write per pallet. Twenty-one of those is six
+    // concurrent browser requests, each queueing for the lock, against an
+    // 8-second beacon that gives up and reports nothing -- so a run finished
+    // half done while the map showed it complete (CON1 to CON32, 05 Nov 2026),
+    // and the next attempt failed on its very first pallet because the script
+    // was simply busy. jsonpFetch waits up to 60 seconds and brings back a
+    // real answer, so we find out what actually happened.
+    si2('Renumbering container '+from+' — this takes a few seconds...');
+    jsonpFetch(apiUrl('beacon=1&type=renumber_container'
+      +'&fromCon='+encodeURIComponent(from)
+      +'&toCon='+encodeURIComponent(to)
+      +'&user='+encodeURIComponent(currentUser||'')))
+      .then(function(res){
+        if(res&&res.ok){
+          alert('Done. '+res.pallets+' pallet(s) now read CON'+res.to+'.'
+            +(res.units?'\n'+res.units+' units kept with them.':'')
+            +'\n\nThe page will reload so you see the shared sheet, not this device.'
+            +'\n\nThen relabel the container and its stickers.');
+          location.reload();
+        } else if(res&&res.busy){
+          alert('The warehouse sheet was busy and NOTHING was changed.\n\nWait a few seconds and try again.');
+        } else {
+          alert('Not done. Nothing was changed.\n\n'+((res&&res.error)||'No answer from the sheet.'));
+        }
+      })
+      .catch(function(){
+        // A timeout here does NOT mean it failed -- the server may still have
+        // finished after we stopped waiting. Say so rather than guess.
+        alert('No answer within 60 seconds.\n\nThe renumber MAY still have gone through.'
+          +'\n\nReload the page and look at containers '+from+' and '+to+' before trying again.');
       });
-    }
-    function finish(){
-      rebuildMap();
-      if(failed){
-        alert('STOPPED after '+done+' of '+moves.length+' pallet(s).\n\n'
-          +fl(failed.from)+' could not be saved to the shared sheet.\n\n'
-          +'The '+done+' already saved are safe. Reload the page, then run the\n'
-          +'same renumber again to finish the rest — it will pick up where it\n'
-          +'stopped.');
-      } else {
-        si2('Container '+from+' renumbered to '+to+' — '+moves.length+' pallet(s)');
-        alert('Done. All '+moves.length+' pallet(s) now read CON'+to+'.\n\n'
-          +'Reload the page to confirm it matches the shared sheet, then\n'
-          +'relabel the container and its stickers.');
-      }
-    }
-    step();
   });
 }
 
