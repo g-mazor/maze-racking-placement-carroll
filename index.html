@@ -229,6 +229,20 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
 </div>
 <div id="mgrPanel" style="display:none;position:fixed;bottom:14px;right:14px;background:#FFF;border:2px solid #E74C3C;border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:3000;min-width:180px;max-height:85vh;overflow-y:auto">
   <div style="font-size:11px;font-weight:700;color:#A32D2D;margin-bottom:8px">Manager actions</div>
+  <!-- Renumber a container. Two boxes rather than prompt() on purpose: Chrome
+       suppresses repeated dialogs, and a suppressed prompt returns null, which
+       makes the action look dead. -->
+  <div style="border:1px solid #B7791F;background:#FFFBF2;border-radius:6px;padding:8px;margin-bottom:8px">
+    <div style="font-size:11px;font-weight:700;color:#7A4E0A;margin-bottom:6px">Renumber a container</div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+      <input id="renumFrom" type="number" min="1" placeholder="from" style="width:50%;padding:4px;font-size:12px;box-sizing:border-box"/>
+      <span style="font-size:13px;color:#7A4E0A">&rarr;</span>
+      <input id="renumTo" type="number" min="1" placeholder="to" style="width:50%;padding:4px;font-size:12px;box-sizing:border-box"/>
+    </div>
+    <button class="btn" style="display:block;width:100%;margin-bottom:4px;box-sizing:border-box;background:#B7791F;color:#FFF;font-size:10px" onclick="renumberFromPanel(false)">Preview &mdash; changes nothing</button>
+    <button class="btn" style="display:block;width:100%;box-sizing:border-box;background:#1E8449;color:#FFF;font-size:10px;font-weight:700" onclick="renumberFromPanel(true)">Renumber</button>
+    <div style="font-size:9px;color:#7A4E0A;margin-top:5px;line-height:1.3">Stock, counts and history stay with the pallets. Relabel the container and its QR stickers afterwards.</div>
+  </div>
   <button class="btn btn-blue" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box" onclick="showPickerStats()">📊 Picker Stats</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#607D8B;color:#FFF" onclick="toggleLog()">Log</button>
   <button class="btn" style="display:block;width:100%;margin-bottom:5px;box-sizing:border-box;background:#7F8C8D;color:#FFF;font-size:10px" onclick="backfillDescriptions()">Backfill descriptions</button>
@@ -1740,6 +1754,24 @@ function previewContainerRenumber(from,to){
 }
 
 function Logger_(s){try{console.log(s);}catch(e){}}
+
+// The two boxes in the manager panel. Reads them, checks they are sane, then
+// calls the same preview/renumber the console does -- one code path, so the
+// button cannot drift from what was tested.
+function renumberFromPanel(doIt){
+  var fEl=document.getElementById('renumFrom'), tEl=document.getElementById('renumTo');
+  var from=parseInt((fEl.value||'').trim(),10), to=parseInt((tEl.value||'').trim(),10);
+  if(isNaN(from)||isNaN(to)){alert('Put a container number in both boxes.');return;}
+  if(from<1||to<1||from>CONTAINER_COUNT||to>CONTAINER_COUNT){
+    alert('Container numbers run from 1 to '+CONTAINER_COUNT+'.');return;
+  }
+  if(doIt){
+    renumberContainer(from,to);
+    fEl.value='';tEl.value='';
+  } else {
+    previewContainerRenumber(from,to);
+  }
+}
 
 // Does it. Admin code, then a confirm naming the exact numbers.
 function renumberContainer(from,to){
