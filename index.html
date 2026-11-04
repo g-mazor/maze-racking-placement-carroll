@@ -2445,9 +2445,31 @@ function isBridgeEmptyLevel(row,bay,lv){
 // changing every other bay in the row.
 var CUSTOM_BAY_SLOTS={};
 function getBaySlotKey(row,bay,level){return row+'-'+bay+'-'+level;}
+// How many pallet slots a bay actually has. The stock itself is the most
+// reliable answer: a container bay loaded three across is stored as
+// CON5-04-1-1 / -2 / -3, where a two-across bay is ...-L / ...-R.
+//
+// Added 05 Nov 2026. The map drew every container bay as L and R, so the 145
+// pallets sitting in three-across bays across CON3, 5, 7, 11, 15, 22 and 23
+// had nowhere to be drawn and the containers looked empty while the data said
+// otherwise. Reading the slot labels back means the picture follows the
+// warehouse instead of the warehouse having to match the picture, and a bay
+// re-loaded the other way corrects itself with no setting to remember.
+function slotsFromStock_(row,bay,level){
+  var pre=row+'-'+(bay<10?'0'+bay:bay)+'-'+level+'-';
+  var max=0;
+  for(var l in LOC){
+    if(l.indexOf(pre)!==0)continue;
+    var side=l.substring(pre.length);
+    if(/^[0-9]+$/.test(side)){var n=parseInt(side,10);if(n>max)max=n;}
+  }
+  return max>2?max:0;   // 0 = nothing numeric here, use the normal rules
+}
 function getSidesForBay(row,bay,level){
   var key=getBaySlotKey(row,bay,level);
   if(CUSTOM_BAY_SLOTS[key]!=null)return CUSTOM_BAY_SLOTS[key];
+  var fromStock=slotsFromStock_(row,bay,level);
+  if(fromStock)return fromStock;
   if(isBridgeBay(row,bay))return 3;
   return RS[row].s;
 }
