@@ -525,8 +525,27 @@ function jsonpFetch(url){
     document.head.appendChild(script);
   });
 }
-async function fetchRemoteChanges(){
-  return await jsonpFetch(apiUrl(''));
+// The newest change this page has already applied. Everything after it is
+// all the server needs to send.
+var lastChangeTs=0;
+var pollsSinceFullSync=0;
+// A full reload every so often, so any drift between what this page believes
+// and what the sheet says cannot last more than a few minutes. Deltas are
+// applied on top of existing state, and that is only ever as good as the
+// state it started from.
+var FULL_SYNC_EVERY=20;
+
+function newestTs(list){
+  var m=0;
+  for(var i=0;i<list.length;i++){var t=Number(list[i]&&list[i].ts)||0;if(t>m)m=t;}
+  return m;
+}
+
+// Asking with 'since' returns only what is newer. Without it the server
+// sends the whole log exactly as it always did, so an old page that has not
+// been reloaded still works.
+async function fetchRemoteChanges(since){
+  return await jsonpFetch(apiUrl(since?('since='+encodeURIComponent(since)):''));
 }
 
 // Tracks which SKU's detail card is currently open, so a slow live-stock
@@ -1310,6 +1329,7 @@ async function buildIdx(){
     saved.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during load:',c,e);}});
     saved.forEach(function(c){if(c.type==='set_bayslots'&&c.sku&&c.qty!=null)CUSTOM_BAY_SLOTS[c.sku]=c.qty;});
     CHANGES=saved.slice();
+    lastChangeTs=newestTs(CHANGES);   // from here on, polls ask for the delta
     lastSyncJSON=JSON.stringify(CHANGES);
     try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
     si2('Loaded '+saved.length+' shared change'+(saved.length>1?'s':''));
@@ -6274,15 +6294,44 @@ async function pollSync(manual){
     return;
   }
   try{
-    var saved=await fetchRemoteChanges();
+    // Ask for just the new changes when we know where we are. A manual sync,
+    // and every FULL_SYNC_EVERY-th poll, still pulls everything and rebuilds
+    // from nothing -- that is the self-heal if this page has drifted.
+    var wantDelta=(lastChangeTs>0 && !manual && pollsSinceFullSync<FULL_SYNC_EVERY);
+    var saved=await fetchRemoteChanges(wantDelta?lastChangeTs:0);
     if(saved&&saved.accessDenied){
       updateAccessCodeIndicator('invalid');
       if(manual)si2('Access code is no longer valid -- tap the lock link to fix it');
       return;
     }
     updateAccessCodeIndicator('valid');
+    if(!Array.isArray(saved))return;
+
+    if(wantDelta){
+      pollsSinceFullSync++;
+      if(!saved.length){
+        if(manual)si2('Already up to date ('+CHANGES.length+' change'+(CHANGES.length!==1?'s':'')+' on record)');
+        return;
+      }
+      // Apply only what arrived, on top of what is already here. No reset,
+      // no replaying 12,000 entries to find out that one pallet moved.
+      saved.forEach(function(c){
+        try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during sync:',c,e);}
+        if(c.type==='set_bayslots'&&c.sku&&c.qty!=null)CUSTOM_BAY_SLOTS[c.sku]=c.qty;
+        CHANGES.push(c);
+      });
+      lastChangeTs=Math.max(lastChangeTs,newestTs(saved));
+      lastSyncJSON=JSON.stringify(CHANGES);
+      try{localStorage.setItem(LS,lastSyncJSON);}catch(e){}
+      rebuildMap();updLog();renderReceivedList();
+      si2('Updated -- '+saved.length+' change'+(saved.length!==1?'s':'')+' from someone else');
+      return;
+    }
+
+    pollsSinceFullSync=0;
     var json=JSON.stringify(saved);
     if(json===lastSyncJSON){
+      lastChangeTs=Math.max(lastChangeTs,newestTs(saved));
       if(manual)si2('Already up to date ('+CHANGES.length+' change'+(CHANGES.length!==1?'s':'')+' on record)');
       return;
     }
@@ -6290,6 +6339,7 @@ async function pollSync(manual){
     CHANGES=saved.slice();
     LOC={};SLOC={};RECEIVED=[];
     CHANGES.forEach(function(c){try{applyC(c,false);}catch(e){console.error('Skipped a bad change record during sync:',c,e);}});
+    lastChangeTs=newestTs(CHANGES);
     try{localStorage.setItem(LS,json);}catch(e){}
     rebuildMap();updLog();renderReceivedList();si2('Updated -- someone else made a change');
   }catch(e){
