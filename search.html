@@ -42,7 +42,10 @@
   .login-box select{width:100%;padding:10px;font-size:15px;border-radius:8px;border:1.5px solid #CCC;margin-bottom:10px}
   .login-btn{background:#1F3864;color:#FFF;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<!-- Served from our own site, so scanning does not depend on reaching a CDN
+     from the warehouse. The CDN is kept only as a backup if the local copy
+     is ever missing. -->
+<script src="html5-qrcode.min.js" onerror="var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';document.head.appendChild(s);"></script>
 </head>
 <body>
 <div class="hdr"><span>📦 Maze Carroll WMS</span><span id="pickerNameTag" class="picker-name"></span></div>
@@ -567,15 +570,21 @@ function pickerLogout() {
   renderPicklistTab();
 }
 
-// Parses a typed location code in either "A-B12-L1" or raw "A-12-1" form,
-// returning {row, bay} for comparison -- level is intentionally ignored,
-// matching the main app's arrival check (which only confirms row+bay).
+// Row + bay from anything a picker might type or scan, for the arrival check,
+// which confirms row+bay only and ignores the level. Delegates to
+// parseFullLocCode so container codes are read correctly: the old regex read
+// "CON7-09-1-1" as row CON, bay 7, which made every space in a container look
+// like the same place and let an arrival be confirmed at the wrong one.
 function parseLocInput(raw) {
   if (!raw) return null;
-  var s = raw.trim().toUpperCase().replace(/\s+/g, '');
-  var m = s.match(/^([A-Z]+)-?B?(\d+)/);
+  var p = parseFullLocCode(raw);
+  if (p) return {row: p.row, bay: p.bay, level: p.level, side: p.side};
+  // Also accept the readable form fl() prints, e.g. "CON7 · space 4 · MIDDLE"
+  // or "E-B3-L1 · LEFT".
+  var s = String(raw).trim().toUpperCase().replace(/\s+/g, '');
+  var m = s.match(/^(CON\d+)\D+(\d+)/) || s.match(/^([A-Z]+)\D*(\d+)/);
   if (!m) return null;
-  return {row: m[1], bay: parseInt(m[2], 10)};
+  return {row: m[1], bay: parseInt(m[2], 10), level: null, side: null};
 }
 
 var guidedPickState = null; // {listId, index, phase:'arrive'|'pick', confirmingMismatch}
@@ -735,16 +744,39 @@ function renderPicklistTab() {
 // picker had typed it and tapped Confirm. Falls back gracefully (leaves the
 // manual text input available) if the camera can't be accessed.
 var arriveScanner = null;
-// Parses a full location code including level (e.g. "AA-B1-L1" or raw
-// "AA-01-1"), returning {row, bay, level} -- unlike parseLocInput used for
-// arrival confirmation, this keeps the level since a general scan needs to
-// look up one exact shelf, not just confirm a bay match.
+// Reads a scanned or typed location code, keeping the level (and side) since
+// a general scan looks up one exact shelf rather than just confirming a bay.
+//
+// Container codes were being read wrongly and had been since the containers
+// went in: CON7-04-1-1 came out as row "CON", bay 7, level 4, because the old
+// pattern took the letters and the digits of "CON7" as separate things. The
+// lookup then searched CON-07-4-, matched nothing, and the picker was told
+// the bay was empty. CON7-B4-L1 failed outright. Containers are now matched
+// first, as their own shape. Fixed 07 Nov 2026 after Gil found scanning did
+// not work.
+//
+// Handles both forms a sticker might carry: the raw location A-13-2-L and the
+// printed form A-B13-L2, with or without the side on the end. A QR that holds
+// a URL with the location on the end works too.
 function parseFullLocCode(raw) {
   if (!raw) return null;
-  var s = raw.trim().toUpperCase().replace(/\s+/g, '');
-  var m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)/);
-  if (!m) return null;
-  return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10)};
+  var s = String(raw).trim().toUpperCase().replace(/\s+/g, '');
+  // A sticker may encode a link rather than the bare code.
+  if (s.indexOf('HTTP') === 0 || s.indexOf('/') >= 0 || s.indexOf('=') >= 0) {
+    var tail = s.split('#').pop().split('?').pop().split('=').pop().split('/').pop();
+    if (tail) s = tail;
+  }
+  // Containers: the row name itself ends in digits, so it has to be taken
+  // whole before anything else is read.
+  var m = s.match(/^(CON\d+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
+  if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: m[4] || null};
+  // Racking, exact: A-13-2-L or A-B13-L2, side optional.
+  m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
+  if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: m[4] || null};
+  // Last resort: anything that starts like a location, trailing junk ignored.
+  m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)/);
+  if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: null};
+  return null;
 }
 
 // Finds every raw location (any side) matching a given row+bay+level, and
@@ -785,27 +817,71 @@ function lookupLocation(row, bay, level) {
   return deduped;
 }
 
+// Why a scan can't start, in words a picker can act on. Returns null when
+// everything needed is present. Without this, a missing library threw before
+// any .catch() could run and the picker just saw an empty box.
+function scanBlockedReason() {
+  if (typeof Html5Qrcode === 'undefined') {
+    return 'The scanner did not load. Check you have signal, then reload this page.';
+  }
+  if (!window.isSecureContext && location.protocol !== 'file:') {
+    return 'The camera needs a secure (https) address. Open this page with https:// and try again.';
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return 'This browser will not give access to the camera. Try Chrome or Safari.';
+  }
+  return null;
+}
+
+// Shown whenever the camera is unavailable, so a bad camera never stops a
+// picker: they can read the sticker and type it instead.
+function scanFallbackHtml(inputId, buttonLabel, onSubmit) {
+  return '<div style="margin-top:8px">' +
+    '<input type="text" id="' + inputId + '" placeholder="Type the location, e.g. E-03-1-L" ' +
+      'autocapitalize="characters" autocomplete="off" ' +
+      'style="width:100%;padding:10px;font-size:15px;border-radius:8px;border:1.5px solid #CCC;box-sizing:border-box"/>' +
+    '<button class="mark-btn" style="width:100%;padding:10px;margin-top:6px" ' +
+      'onclick="' + onSubmit + '(document.getElementById(\'' + inputId + '\').value)">' + buttonLabel + '</button>' +
+    '</div>';
+}
+
 var generalScanner = null;
 function startGeneralScan() {
   var box = document.getElementById('generalScanBox');
   box.style.display = 'block';
+  document.getElementById('generalScanResult').innerHTML = '';
+
+  function failTo(msg) {
+    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
+      msg + '</div>' +
+      scanFallbackHtml('generalManualLoc', 'Look up this location', 'showGeneralScanResult') +
+      '<button class="login-btn" style="width:100%;margin-top:6px;background:#A32D2D" onclick="stopGeneralScan()">Close</button>';
+  }
+
+  var blocked = scanBlockedReason();
+  if (blocked) { failTo(blocked); return; }
+
   box.innerHTML = '<div id="generalQrReaderRegion" style="width:100%;border-radius:8px;overflow:hidden"></div>' +
     '<button class="login-btn" style="width:100%;margin-top:8px;background:#A32D2D" onclick="stopGeneralScan()">Cancel scan</button>';
-  document.getElementById('generalScanResult').innerHTML = '';
-  generalScanner = new Html5Qrcode('generalQrReaderRegion');
   var config = { fps: 10, qrbox: { width: 220, height: 220 } };
-  generalScanner.start(
-    { facingMode: 'environment' },
-    config,
-    function(decodedText) {
-      stopGeneralScan();
-      showGeneralScanResult(decodedText);
-    },
-    function() { /* fires continuously while no code is in view -- not an error, ignore */ }
-  ).catch(function() {
-    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
-      'Could not access camera. Please allow camera access and try again.</div>';
-  });
+  try {
+    generalScanner = new Html5Qrcode('generalQrReaderRegion');
+    generalScanner.start(
+      { facingMode: 'environment' },
+      config,
+      function(decodedText) {
+        stopGeneralScan();
+        showGeneralScanResult(decodedText);
+      },
+      function() { /* fires continuously while no code is in view -- not an error, ignore */ }
+    ).catch(function() {
+      generalScanner = null;
+      failTo('Could not access the camera. Allow camera access for this site and try again.');
+    });
+  } catch (e) {
+    generalScanner = null;
+    failTo('Could not start the scanner. Reload the page and try again.');
+  }
 }
 function stopGeneralScan() {
   var box = document.getElementById('generalScanBox');
@@ -827,10 +903,20 @@ function showGeneralScanResult(decodedText) {
   var resultEl = document.getElementById('generalScanResult');
   var parsed = parseFullLocCode(decodedText);
   if (!parsed) {
-    resultEl.innerHTML = '<div class="not-placed">Could not read that code as a location.</div>';
+    // Show what was actually on the sticker. "Could not read that code" on
+    // its own tells nobody anything, and the sticker is the usual suspect.
+    resultEl.innerHTML = '<div class="not-placed">Could not read that code as a location.<br>' +
+      '<span style="font-size:12px;opacity:0.8">The code said: ' +
+      String(decodedText).replace(/[<>&]/g, '') + '</span></div>';
     return;
   }
-  var displayLoc = parsed.row + '-B' + parsed.bay + '-L' + parsed.level;
+  var displayLoc = (parsed.row.indexOf('CON') === 0)
+    ? (parsed.row + ' · space ' + parsed.bay)
+    : (parsed.row + '-B' + parsed.bay + '-L' + parsed.level);
+  if (parsed.side) {
+    var w = sideWord(parsed.side);
+    if (w) displayLoc += ' · ' + w;
+  }
   var items = lookupLocation(parsed.row, parsed.bay, parsed.level);
   if (!items.length) {
     resultEl.innerHTML = '<div class="card"><div class="sku">' + displayLoc + '</div><div class="not-placed">Empty -- nothing placed here</div></div>';
@@ -851,24 +937,40 @@ function showGeneralScanResult(decodedText) {
 function startArriveScan() {
   var box = document.getElementById('arriveScanBox');
   box.style.display = 'block';
+
+  function failTo(msg) {
+    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
+      msg + '</div>' +
+      scanFallbackHtml('arriveManualLoc', 'Confirm this location', 'confirmGuidedArrival') +
+      '<button class="login-btn" style="width:100%;margin-top:6px;background:#A32D2D" onclick="stopArriveScan()">Close</button>';
+  }
+
+  var blocked = scanBlockedReason();
+  if (blocked) { failTo(blocked); return; }
+
   box.innerHTML = '<div id="qrReaderRegion" style="width:100%;border-radius:8px;overflow:hidden"></div>' +
     '<button class="login-btn" style="width:100%;margin-top:8px;background:#A32D2D" onclick="stopArriveScan()">Cancel scan</button>';
-  arriveScanner = new Html5Qrcode('qrReaderRegion');
   var config = { fps: 10, qrbox: { width: 220, height: 220 } };
-  arriveScanner.start(
-    { facingMode: 'environment' },
-    config,
-    function(decodedText) {
-      var inp = document.getElementById('guidedArriveInput');
-      if (inp) inp.value = decodedText;
-      stopArriveScan();
-      confirmGuidedArrival(decodedText);
-    },
-    function() { /* fires continuously while no code is in view -- not an error, ignore */ }
-  ).catch(function(err) {
-    box.innerHTML = '<div style="color:#A32D2D;font-size:12px;text-align:center;padding:10px;background:#FDEDEC;border-radius:6px">' +
-      'Could not access camera. Please allow camera access, or type the code manually below.</div>';
-  });
+  try {
+    arriveScanner = new Html5Qrcode('qrReaderRegion');
+    arriveScanner.start(
+      { facingMode: 'environment' },
+      config,
+      function(decodedText) {
+        var inp = document.getElementById('guidedArriveInput');
+        if (inp) inp.value = decodedText;
+        stopArriveScan();
+        confirmGuidedArrival(decodedText);
+      },
+      function() { /* fires continuously while no code is in view -- not an error, ignore */ }
+    ).catch(function(err) {
+      arriveScanner = null;
+      failTo('Could not access the camera. Allow camera access for this site, or type the code below.');
+    });
+  } catch (e) {
+    arriveScanner = null;
+    failTo('Could not start the scanner. Reload the page and try again.');
+  }
 }
 function stopArriveScan() {
   var box = document.getElementById('arriveScanBox');
@@ -893,7 +995,9 @@ function confirmGuidedArrival(raw) {
   if (!pl) return;
   var item = pl.items[guidedPickState.index];
   var parsed = parseLocInput(raw);
-  var expected = parseLocInput(fl(item.loc));
+  // Parse the stored location itself, not its printed form -- nothing is lost
+  // on the way through fl().
+  var expected = parseLocInput(item.loc);
   var msg = document.getElementById('guidedMsg');
   if (!parsed || !expected || parsed.row !== expected.row || parsed.bay !== expected.bay) {
     msg.innerHTML = '<span style="color:#A32D2D">\u274c That doesn\'t match -- you need to be at ' + fl(item.loc) + '</span>';
