@@ -218,6 +218,15 @@ h1{font-size:15px;font-weight:600;color:#1F3864;margin-bottom:2px}
       <button class="btn" style="width:100%;box-sizing:border-box;background:#1E8449;color:#FFF;font-size:11px;font-weight:700" onclick="renumberFromPanel(true)">Renumber</button>
       <div style="font-size:10px;color:#7A4E0A;margin-top:5px;line-height:1.3">Stock, counts and history stay with the pallets. Relabel the container and its QR stickers afterwards.</div>
     </div>
+    <!-- A pallet whose side code does not match how its bay is drawn never
+         appears on the map, so it cannot be clicked, checked or deleted --
+         it just quietly inflates the stock. This finds those and offers a
+         way to remove them. -->
+    <div class="public-hide" style="border:1px solid #A32D2D;background:#FDF5F5;border-radius:6px;padding:9px;margin-top:8px">
+      <div style="font-size:12px;font-weight:700;color:#A32D2D;margin-bottom:6px">Pallets the map cannot show</div>
+      <button class="btn" style="width:100%;box-sizing:border-box;background:#A32D2D;color:#FFF;font-size:11px" onclick="findHiddenPallets()">Check for hidden pallets</button>
+      <div id="hiddenPalletList" style="font-size:11px;color:#A32D2D;margin-top:6px;line-height:1.4"></div>
+    </div>
     <div style="text-align:center;margin-top:6px;font-size:12px;text-decoration:underline;cursor:pointer;color:#888" onclick="toggleSettingsPanel()">Close</div>
   </div>
 </div>
@@ -1797,6 +1806,62 @@ function Logger_(s){try{console.log(s);}catch(e){}}
 // The two boxes in the manager panel. Reads them, checks they are sane, then
 // calls the same preview/renumber the console does -- one code path, so the
 // button cannot drift from what was tested.
+// Every placed pallet whose side code is not one the map draws for its bay.
+//
+// A bay is drawn either three-wide (positions 1, 2, 3) or two-wide (L and R).
+// A pallet coded the other way round for that bay is never drawn, so nobody
+// can see it, click it or delete it, while it still counts in the stock and
+// shows on the picker page. One slipped in during the container renumbering
+// on 4 Nov 2026 and only turned up because a picker scanned the container.
+function hiddenPallets_(){
+  var out=[];
+  for(var loc in LOC){
+    var p=loc.split('-');
+    if(p.length<4)continue;
+    var row=p[0],bay=parseInt(p[1],10),lvl=parseInt(p[2],10),side=p[3];
+    if(!RS[row])continue;
+    var drawn=getSidesForBay(row,bay,lvl)===3?['1','2','3']:['L','R'];
+    if(drawn.indexOf(side)<0)out.push({loc:loc,sku:LOC[loc],drawn:drawn.join('/')});
+  }
+  out.sort(function(a,b){return a.loc<b.loc?-1:1;});
+  return out;
+}
+
+function findHiddenPallets(){
+  var el=document.getElementById('hiddenPalletList');
+  var list=hiddenPallets_();
+  if(!list.length){el.innerHTML='<span style="color:#1E8449">Nothing hidden &mdash; every pallet is on the map.</span>';return;}
+  el.innerHTML='<div style="color:#A32D2D;font-weight:700;margin-bottom:4px">'+list.length+' pallet'+(list.length>1?'s':'')+' not drawn on the map</div>'
+    +'<div style="color:#666;margin-bottom:6px">Check the bay physically before removing anything. These still count in the stock and still show when a picker scans.</div>'
+    +list.map(function(h,i){
+    var d=DATA.d[h.sku];
+    // What else sits in the same bay: usually the answer to whether this one
+    // is a leftover from a re-code or a real pallet nobody can see.
+    var pre=h.loc.split('-').slice(0,3).join('-')+'-';
+    var sibs=[];
+    for(var l in LOC){ if(l.indexOf(pre)===0&&l!==h.loc) sibs.push(l.substring(pre.length)+'='+LOC[l]); }
+    sibs.sort();
+    return '<div style="border-top:1px solid #EED;padding-top:5px;margin-top:5px">'
+      +'<b>'+h.loc+'</b> &mdash; '+h.sku+'<br>'
+      +(d?d[4]:'')+'<br>'
+      +'<span style="color:#888">bay is drawn '+h.drawn+', so this one never appears</span><br>'
+      +'<span style="color:#888">rest of this bay: '+(sibs.length?sibs.join(', '):'nothing else')+'</span><br>'
+      +'<button class="btn" style="background:#A32D2D;color:#FFF;font-size:10px;padding:3px 7px;margin-top:3px" onclick="removeHiddenPallet('+i+')">Remove this pallet</button>'
+      +'</div>';
+  }).join('');
+}
+
+function removeHiddenPallet(i){
+  var list=hiddenPallets_();
+  var h=list[i];
+  if(!h){findHiddenPallets();return;}
+  if(!confirm('Remove '+h.sku+' from '+h.loc+'?\n\nOnly do this when the pallet is not physically there.'))return;
+  applyC({type:'delete',sku:h.sku,fl:[h.loc]},true);
+  rebuildMap();
+  si2('Removed '+h.sku+' from '+h.loc);
+  findHiddenPallets();
+}
+
 function renumberFromPanel(doIt){
   var fEl=document.getElementById('renumFrom'), tEl=document.getElementById('renumTo');
   var from=parseInt((fEl.value||'').trim(),10), to=parseInt((tEl.value||'').trim(),10);
