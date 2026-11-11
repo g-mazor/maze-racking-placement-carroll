@@ -768,7 +768,12 @@ function parseFullLocCode(raw) {
   }
   // Containers: the row name itself ends in digits, so it has to be taken
   // whole before anything else is read.
-  var m = s.match(/^(CON\d+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
+  // A container code on its own means the whole container, not one space:
+  // the door stickers carry just "CON7" so a picker scans once and sees
+  // everything inside.
+  m = s.match(/^(CON\d+)$/);
+  if (m) return {row: m[1], bay: null, level: null, side: null, whole: true};
+  m = s.match(/^(CON\d+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
   if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: m[4] || null};
   // Racking, exact: A-13-2-L or A-B13-L2, side optional.
   m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
@@ -899,6 +904,69 @@ function stopGeneralScan() {
     box.innerHTML = '';
   }
 }
+// Everything inside one container, from a single scan of its door sticker.
+//
+// Pickers want to know which SKUs are in there and roughly where, not a
+// list of 20 pallet positions, so pallets of the same SKU are collapsed to
+// one line and the sides they sit on are named.
+function showContainerSummary(con, resultEl) {
+  var prefix = con + '-';
+  var bySku = {};
+  var order = [];
+  var pallets = 0;
+  for (var loc in LOC) {
+    if (loc.indexOf(prefix) !== 0) continue;
+    var sku = LOC[loc];
+    var side = loc.split('-')[3] || '';
+    if (!bySku[sku]) { bySku[sku] = {sku: sku, pallets: 0, sides: {}}; order.push(sku); }
+    bySku[sku].pallets++;
+    if (side) bySku[sku].sides[side] = true;
+    pallets++;
+  }
+
+  if (!order.length) {
+    resultEl.innerHTML = '<div class="card"><div class="sku">' + con + '</div>' +
+      '<div class="not-placed">Empty -- nothing in this container</div></div>';
+    return;
+  }
+
+  // Busiest SKU first: with one or two SKUs per container that is the one
+  // the picker almost always wants.
+  order.sort(function(a, b) { return bySku[b].pallets - bySku[a].pallets; });
+
+  var head = order.length + (order.length === 1 ? ' SKU' : ' SKUs') + ' &middot; ' +
+             pallets + (pallets === 1 ? ' pallet' : ' pallets');
+
+  resultEl.innerHTML = '<div class="card">' +
+    '<div class="sku">' + con + '</div>' +
+    '<div style="font-size:13px;color:#555;margin-top:2px">' + head + '</div>' +
+    order.map(function(sku) {
+      var e = bySku[sku];
+      var v = DATA.d[sku];
+      var desc = v ? v[4] : '';
+      // Name the sides in a fixed order so the same container always reads
+      // the same way, whichever order the locations came back in.
+      var words = [];
+      ['L', '1', '2', '3', 'R'].forEach(function(s) {
+        if (e.sides[s]) { var w = sideWord(s); if (w && words.indexOf(w) < 0) words.push(w); }
+      });
+      for (var s2 in e.sides) {
+        if (['L', '1', '2', '3', 'R'].indexOf(s2) < 0) {
+          var w2 = sideWord(s2) || s2;
+          if (words.indexOf(w2) < 0) words.push(w2);
+        }
+      }
+      return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #EEE">' +
+        '<div style="font-weight:700;font-size:16px">' + sku + '</div>' +
+        '<div class="desc">' + desc + '</div>' +
+        '<div style="font-size:13px;color:#16A085;font-weight:600;margin-top:2px">' +
+          e.pallets + (e.pallets === 1 ? ' pallet' : ' pallets') +
+          (words.length ? ' &middot; ' + words.join(' + ') : '') +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+}
+
 function showGeneralScanResult(decodedText) {
   var resultEl = document.getElementById('generalScanResult');
   var parsed = parseFullLocCode(decodedText);
@@ -910,6 +978,7 @@ function showGeneralScanResult(decodedText) {
       String(decodedText).replace(/[<>&]/g, '') + '</span></div>';
     return;
   }
+  if (parsed.whole) { showContainerSummary(parsed.row, resultEl); return; }
   var displayLoc = (parsed.row.indexOf('CON') === 0)
     ? (parsed.row + ' · space ' + parsed.bay)
     : (parsed.row + '-B' + parsed.bay + '-L' + parsed.level);
