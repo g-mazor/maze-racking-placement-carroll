@@ -320,6 +320,69 @@ function postRemoteChange(change) {
 }
 
 
+// Keeping the picker page current.
+//
+// Until now this page read the change log once when it opened and never
+// again, so a tab left open all day kept showing whatever the warehouse
+// looked like that morning: stock deleted on the map still appeared here,
+// and a container scan reported pallets that were no longer there. That
+// matters more now the container door codes are scanned.
+//
+// It pulls only what is new, using the same `since` parameter the manager
+// map uses, so a quiet check costs a couple of bytes rather than 1.7 MB.
+var lastChangeTs = 0;
+var refreshInFlight = false;
+
+function noteNewestTs_(list) {
+  (list || []).forEach(function(c) {
+    var t = c && c.ts ? Number(c.ts) : 0;
+    if (t > lastChangeTs) lastChangeTs = t;
+  });
+}
+
+// done(true) when anything new arrived, so a caller can redraw.
+function refreshChanges(done) {
+  if (refreshInFlight || !lastChangeTs) { if (done) done(false); return; }
+  refreshInFlight = true;
+  var cbName = 'rf' + Date.now() + Math.floor(Math.random() * 100000);
+  var script = document.createElement('script');
+  var finished = false;
+  function finish(changed) {
+    if (finished) return;
+    finished = true;
+    refreshInFlight = false;
+    delete window[cbName];
+    if (script.parentNode) script.parentNode.removeChild(script);
+    clearTimeout(timer);
+    if (done) done(changed);
+  }
+  var timer = setTimeout(function() { finish(false); }, 15000);
+  window[cbName] = function(data) {
+    if (!data || !data.length) { finish(false); return; }
+    // Replay from scratch over the whole log: cheaper to be certain than to
+    // patch LOC in place and risk it drifting from the record.
+    CHANGES = CHANGES.concat(data);
+    noteNewestTs_(data);
+    replayLog(CHANGES);
+    finish(true);
+  };
+  script.onerror = function() { finish(false); };
+  script.src = SHEET_API + '?ac=' + encodeURIComponent(PICKER_ACCESS_CODE) +
+    '&since=' + lastChangeTs + '&callback=' + cbName + '&t=' + Date.now();
+  document.head.appendChild(script);
+}
+
+// Check when the picker comes back to the page, and every few minutes while
+// it is in front of them. A phone in a pocket costs nothing.
+function startFreshnessWatch() {
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) refreshChanges(null);
+  });
+  setInterval(function() {
+    if (!document.hidden) refreshChanges(null);
+  }, 180000);
+}
+
 function loadData() {
   document.getElementById('results').innerHTML = '<div class="loading">Loading warehouse data...</div>';
   var cbName = 'cb' + Date.now() + Math.floor(Math.random() * 100000);
@@ -342,10 +405,12 @@ function loadData() {
     cleanup();
     CHANGES = data;
     replayLog(data);
+    noteNewestTs_(data);
     document.getElementById('results').innerHTML = '<div class="status">Ready -- start typing to search</div>';
     document.getElementById('si').disabled = false;
     if (currentTab === 'picklist') renderPicklistTab();
     loadPickFaces();
+    startFreshnessWatch();
   };
   script.onerror = function() {
     if (done) return;
@@ -967,7 +1032,7 @@ function showContainerSummary(con, resultEl) {
     }).join('') + '</div>';
 }
 
-function showGeneralScanResult(decodedText) {
+function showGeneralScanResult(decodedText, skipRefresh) {
   var resultEl = document.getElementById('generalScanResult');
   var parsed = parseFullLocCode(decodedText);
   if (!parsed) {
@@ -978,7 +1043,20 @@ function showGeneralScanResult(decodedText) {
       String(decodedText).replace(/[<>&]/g, '') + '</span></div>';
     return;
   }
-  if (parsed.whole) { showContainerSummary(parsed.row, resultEl); return; }
+  // Draw from what we have so the picker sees an answer at once, then check
+  // for anything newer and redraw if the warehouse has moved on. A scan is
+  // the moment being wrong costs most.
+  if (parsed.whole) {
+    showContainerSummary(parsed.row, resultEl);
+    if (!skipRefresh) refreshChanges(function(changed) {
+      if (changed) showContainerSummary(parsed.row, resultEl);
+    });
+    return;
+  }
+  if (!skipRefresh) refreshChanges(function(changed) {
+    // skipRefresh on the redraw, so a refresh can never chain into another.
+    if (changed) showGeneralScanResult(decodedText, true);
+  });
   var displayLoc = (parsed.row.indexOf('CON') === 0)
     ? (parsed.row + ' · space ' + parsed.bay)
     : (parsed.row + '-B' + parsed.bay + '-L' + parsed.level);
