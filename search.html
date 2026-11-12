@@ -825,27 +825,76 @@ var arriveScanner = null;
 // a URL with the location on the end works too.
 function parseFullLocCode(raw) {
   if (!raw) return null;
-  var s = String(raw).trim().toUpperCase().replace(/\s+/g, '');
+  var s = String(raw).trim().toUpperCase();
   // A sticker may encode a link rather than the bare code.
   if (s.indexOf('HTTP') === 0 || s.indexOf('/') >= 0 || s.indexOf('=') >= 0) {
     var tail = s.split('#').pop().split('?').pop().split('=').pop().split('/').pop();
     if (tail) s = tail;
   }
+  // A space separates, it does not vanish: "E 38 1" is bay 38 level 1, not
+  // bay 381. Runs of separators collapse to one.
+  s = s.replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  var m;
   // Containers: the row name itself ends in digits, so it has to be taken
-  // whole before anything else is read.
-  // A container code on its own means the whole container, not one space:
-  // the door stickers carry just "CON7" so a picker scans once and sees
-  // everything inside.
-  m = s.match(/^(CON\d+)$/);
-  if (m) return {row: m[1], bay: null, level: null, side: null, whole: true};
+  // whole before anything else is read. A container code on its own means
+  // the whole container -- the door stickers carry just "CON7".
+  // Only a bare container number means the whole container. Matching the
+  // separators away would turn CON7-04-1-1 into container "CON70411".
+  m = s.match(/^CON-?(\d+)$/);
+  if (m) return {row: 'CON' + parseInt(m[1], 10), bay: null, level: null, side: null, whole: true};
   m = s.match(/^(CON\d+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
   if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: m[4] || null};
-  // Racking, exact: A-13-2-L or A-B13-L2, side optional.
-  m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)(?:-([A-Z0-9]+))?$/);
+
+  // Racking. The row is matched against the rows that actually exist rather
+  // than guessed from the letters, because without that "E38" splits into
+  // bay 3 level 8 and the picker is told an occupied bay is empty.
+  var row = longestKnownRow_(s);
+  if (row) {
+    var rest = s.substring(row.length).replace(/^-/, '');
+    m = rest.match(/^B?(\d+)(?:-?L?(\d+))?(?:-([A-Z0-9]+))?$/);
+    if (m) {
+      return {row: row,
+              bay: parseInt(m[1], 10),
+              level: m[2] ? parseInt(m[2], 10) : null,   // no level = the whole bay
+              side: m[3] || null};
+    }
+  }
+
+  // Nothing matched a known row. Only accept a shape that cannot be
+  // misread -- one with its own separators or explicit B and L markers.
+  m = s.match(/^([A-Z]+)-B?(\d+)-L?(\d+)(?:-([A-Z0-9]+))?$/);
   if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: m[4] || null};
-  // Last resort: anything that starts like a location, trailing junk ignored.
-  m = s.match(/^([A-Z]+)-?B?(\d+)-?L?(\d+)/);
+  m = s.match(/^([A-Z]+)B(\d+)L(\d+)$/);
   if (m) return {row: m[1], bay: parseInt(m[2], 10), level: parseInt(m[3], 10), side: null};
+  return null;
+}
+
+// The longest row name, from the rows actually holding stock, that this code
+// starts with. Longest first so AAA-22 is not read as row A.
+var KNOWN_ROWS_CACHE = null;
+var KNOWN_ROWS_AT = -1;
+function knownRows_() {
+  var n = 0;
+  for (var k in LOC) n++;
+  if (KNOWN_ROWS_CACHE && KNOWN_ROWS_AT === n) return KNOWN_ROWS_CACHE;
+  var seen = {};
+  for (var l in LOC) {
+    var i = l.indexOf('-');
+    if (i > 0) seen[l.substring(0, i)] = true;
+  }
+  var out = [];
+  for (var r in seen) out.push(r);
+  out.sort(function(a, b) { return b.length - a.length; });
+  KNOWN_ROWS_CACHE = out;
+  KNOWN_ROWS_AT = n;
+  return out;
+}
+
+function longestKnownRow_(s) {
+  var rows = knownRows_();
+  for (var i = 0; i < rows.length; i++) {
+    if (s.indexOf(rows[i]) === 0) return rows[i];
+  }
   return null;
 }
 
@@ -1032,6 +1081,42 @@ function showContainerSummary(con, resultEl) {
     }).join('') + '</div>';
 }
 
+// Every level of one bay. Reached when a code names a bay but no level.
+function showBaySummary(row, bay, resultEl) {
+  var pre = row + '-' + String(bay).padStart(2, '0') + '-';
+  var levels = {};
+  for (var loc in LOC) {
+    if (loc.indexOf(pre) !== 0) continue;
+    var lv = loc.substring(pre.length).split('-')[0];
+    if (!levels[lv]) levels[lv] = [];
+    levels[lv].push(loc);
+  }
+  var nums = [];
+  for (var k in levels) nums.push(parseInt(k, 10));
+  nums.sort(function(a, b) { return a - b; });
+
+  var head = row + '-B' + bay + ' &middot; whole bay';
+  if (!nums.length) {
+    resultEl.innerHTML = '<div class="card"><div class="sku">' + head + '</div>' +
+      '<div class="not-placed">Empty -- nothing placed in this bay</div></div>';
+    return;
+  }
+  resultEl.innerHTML = '<div class="card"><div class="sku">' + head + '</div>' +
+    nums.map(function(lv) {
+      var items = lookupLocation(row, bay, lv);
+      var body = items.length
+        ? items.map(function(it) {
+            var v = DATA.d[it.sku];
+            return '<div style="font-weight:700;font-size:15px;margin-top:3px">' + it.sku + '</div>' +
+                   '<div class="desc">' + (v ? v[4] : '') + '</div>' +
+                   (it.qty != null ? '<div style="font-size:13px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : '');
+          }).join('')
+        : '<div class="not-placed" style="font-size:13px">Empty</div>';
+      return '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #EEE">' +
+             '<div style="font-size:12px;color:#777;font-weight:700">LEVEL ' + lv + '</div>' + body + '</div>';
+    }).join('') + '</div>';
+}
+
 function showGeneralScanResult(decodedText, skipRefresh) {
   var resultEl = document.getElementById('generalScanResult');
   var parsed = parseFullLocCode(decodedText);
@@ -1057,6 +1142,9 @@ function showGeneralScanResult(decodedText, skipRefresh) {
     // skipRefresh on the redraw, so a refresh can never chain into another.
     if (changed) showGeneralScanResult(decodedText, true);
   });
+  // A bay with no level on it ("E38", "E-B38") means the whole bay. It used
+  // to be read as bay 3 level 8 and reported empty.
+  if (parsed.level == null) { showBaySummary(parsed.row, parsed.bay, resultEl); return; }
   var displayLoc = (parsed.row.indexOf('CON') === 0)
     ? (parsed.row + ' · space ' + parsed.bay)
     : (parsed.row + '-B' + parsed.bay + '-L' + parsed.level);
