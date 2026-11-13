@@ -430,8 +430,7 @@ function loadData() {
 function loadPickFaces() {
   jsonpFetchStock('pickfaces=1').then(function(data) {
     PICKFACE = (data && data.map) ? data.map : {};
-    var si = document.getElementById('si');
-    if (si && si.value.trim().length >= 2) renderResults(si.value);
+    refreshAfterAction_();
   }).catch(function() { /* non-critical -- just skip the pick-face info this round */ });
 }
 
@@ -480,7 +479,57 @@ function renderResults(query) {
     el.innerHTML = '<div class="status">No matches found.</div>';
     return;
   }
-  el.innerHTML = all.map(function(sku) {
+  el.innerHTML = all.map(skuCardHtml).join('');
+}
+
+// One SKU's full card: where it is, its pick bay, and the buttons that go
+// with it. Lifted out of renderResults so a scan result can show the same
+// card when a picker taps a product, rather than a second, thinner version
+// of it that would drift out of step.
+
+// Tapping a product in a scan result opens its full card -- everywhere else
+// it is held, its pick bay, and the same buttons the search gives, including
+// "Just took the last one". Gil asked for this on 13 Nov 2026: scanning a
+// bay told him what was there but not where the rest of it was.
+var SCAN_SKU_OPEN = null;    // SKU whose card is showing in the scan panel
+var SCAN_BACK_CODE = null;   // the code to go back to
+
+function showSkuFromScan(sku, backCode) {
+  var el = document.getElementById('generalScanResult');
+  if (!el) return;
+  SCAN_SKU_OPEN = sku;
+  if (backCode) SCAN_BACK_CODE = backCode;
+  el.innerHTML =
+    '<button type="button" class="mark-btn" style="width:100%;padding:9px;margin-bottom:8px;background:#EEE;color:#333" ' +
+      'onclick="closeSkuFromScan()">\u2190 Back to ' + (SCAN_BACK_CODE || 'the scan') + '</button>' +
+    skuCardHtml(sku);
+}
+
+function closeSkuFromScan() {
+  var code = SCAN_BACK_CODE;
+  SCAN_SKU_OPEN = null;
+  if (code) showGeneralScanResult(code, true);
+  else document.getElementById('generalScanResult').innerHTML = '';
+}
+
+// One product line in a scan result, tappable through to its full card.
+function scanSkuLine_(sku, backCode, inner) {
+  return '<div onclick="showSkuFromScan(\'' + attrJs_(sku) + '\',\'' + attrJs_(backCode) + '\')" ' +
+    'style="margin-top:8px;padding-top:8px;border-top:1px solid #EEE;cursor:pointer">' +
+    inner +
+    '<div style="font-size:11px;color:#2980B9;font-weight:700;margin-top:3px">' +
+    'Tap for all locations and options \u203a</div></div>';
+}
+
+// After an action that changes stock, redraw whatever the picker is looking
+// at -- the search list, the scan result, or a SKU card opened from a scan.
+function refreshAfterAction_(sku) {
+  if (SCAN_SKU_OPEN && (!sku || SCAN_SKU_OPEN === sku)) showSkuFromScan(SCAN_SKU_OPEN, null);
+  var si = document.getElementById('si');
+  if (si && si.value.trim().length >= 2) renderResults(si.value);
+}
+
+function skuCardHtml(sku) {
     var v = DATA.d[sku];
     var locs = getSkuLocations(sku);
     var displayLocs = locs.map(fl).filter(function(d, idx, arr) { return arr.indexOf(d) === idx; });
@@ -506,14 +555,14 @@ function renderResults(query) {
       '<div class="live-stock" data-sku="' + sku + '">' +
       '<button type="button" class="live-stock-btn" data-sku="' + sku + '">\ud83d\udce1 Check live stock</button>' +
       '</div></div>';
-  }).join('');
 }
+
 
 // Lets the picker confirm the counted quantity at the SKU's designated
 // pick face location directly from a search result -- sends the same
 // 'count' event type the main app uses, so the manager map and any
 // automated alerts (like the pick-face replenish email) stay in sync.
-document.getElementById('results').addEventListener('click', function(e) {
+document.addEventListener('click', function(e) {
   var cbtn = e.target.closest('.confirm-count-btn');
   if (!cbtn) return;
   var sku = cbtn.getAttribute('data-sku');
@@ -525,8 +574,7 @@ document.getElementById('results').addEventListener('click', function(e) {
   if (isNaN(qty) || qty < 0) { alert('Enter a whole number of 0 or more.'); return; }
   postRemoteChange({type: 'count', sku: sku, loc: loc, qty: qty, user: currentPicker, ts: Date.now()}).then(function() {
     QTY[loc] = qty;
-    var si = document.getElementById('si');
-    if (si && si.value.trim().length >= 2) renderResults(si.value);
+    refreshAfterAction_(sku);
   });
 });
 
@@ -538,7 +586,7 @@ document.getElementById('results').addEventListener('click', function(e) {
 // this SKU on the forklift page's Replenishment task list -- reuses that
 // whole existing system, no new backend needed. Confirmed needed 23 Aug
 // 2026.
-document.getElementById('results').addEventListener('click', function(e) {
+document.addEventListener('click', function(e) {
   var ebtn = e.target.closest('.empty-pickface-btn');
   if (!ebtn) return;
   var sku = ebtn.getAttribute('data-sku');
@@ -552,15 +600,14 @@ document.getElementById('results').addEventListener('click', function(e) {
   postRemoteChange({type: 'count', sku: sku, loc: loc, qty: 0, user: currentPicker, ts: Date.now()}).then(function() {
     QTY[loc] = 0;
     alert('Marked empty -- the manager has been notified.\n\n' + whereFrom);
-    var si = document.getElementById('si');
-    if (si && si.value.trim().length >= 2) renderResults(si.value);
+    refreshAfterAction_(sku);
   });
 });
 
 // On-demand live Unleashed stock lookup for a single search result card --
 // only fires when the picker taps the button, not automatically for every
 // result, since each lookup queries several warehouses in sequence.
-document.getElementById('results').addEventListener('click', function(e) {
+document.addEventListener('click', function(e) {
   var btn = e.target.closest('.live-stock-btn');
   if (!btn) return;
   var sku = btn.getAttribute('data-sku');
@@ -1070,19 +1117,18 @@ function showContainerSummary(con, resultEl) {
           if (words.indexOf(w2) < 0) words.push(w2);
         }
       }
-      return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #EEE">' +
+      return scanSkuLine_(sku, con,
         '<div style="font-weight:700;font-size:16px">' + sku + '</div>' +
         '<div class="desc">' + desc + '</div>' +
         '<div style="font-size:13px;color:#16A085;font-weight:600;margin-top:2px">' +
           e.pallets + (e.pallets === 1 ? ' pallet' : ' pallets') +
           (words.length ? ' &middot; ' + words.join(' + ') : '') +
-        '</div>' +
-      '</div>';
+        '</div>');
     }).join('') + '</div>';
 }
 
 // Every level of one bay. Reached when a code names a bay but no level.
-function showBaySummary(row, bay, resultEl) {
+function showBaySummary(row, bay, resultEl, backCode) {
   var pre = row + '-' + String(bay).padStart(2, '0') + '-';
   var levels = {};
   for (var loc in LOC) {
@@ -1107,9 +1153,10 @@ function showBaySummary(row, bay, resultEl) {
       var body = items.length
         ? items.map(function(it) {
             var v = DATA.d[it.sku];
-            return '<div style="font-weight:700;font-size:15px;margin-top:3px">' + it.sku + '</div>' +
-                   '<div class="desc">' + (v ? v[4] : '') + '</div>' +
-                   (it.qty != null ? '<div style="font-size:13px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : '');
+            return scanSkuLine_(it.sku, backCode,
+              '<div style="font-weight:700;font-size:15px">' + it.sku + '</div>' +
+              '<div class="desc">' + (v ? v[4] : '') + '</div>' +
+              (it.qty != null ? '<div style="font-size:13px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : ''));
           }).join('')
         : '<div class="not-placed" style="font-size:13px">Empty</div>';
       return '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #EEE">' +
@@ -1144,7 +1191,7 @@ function showGeneralScanResult(decodedText, skipRefresh) {
   });
   // A bay with no level on it ("E38", "E-B38") means the whole bay. It used
   // to be read as bay 3 level 8 and reported empty.
-  if (parsed.level == null) { showBaySummary(parsed.row, parsed.bay, resultEl); return; }
+  if (parsed.level == null) { showBaySummary(parsed.row, parsed.bay, resultEl, decodedText); return; }
   var displayLoc = (parsed.row.indexOf('CON') === 0)
     ? (parsed.row + ' · space ' + parsed.bay)
     : (parsed.row + '-B' + parsed.bay + '-L' + parsed.level);
@@ -1161,11 +1208,10 @@ function showGeneralScanResult(decodedText, skipRefresh) {
     items.map(function(it) {
       var v = DATA.d[it.sku];
       var desc = v ? v[4] : '';
-      return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #EEE">' +
+      return scanSkuLine_(it.sku, decodedText,
         '<div style="font-weight:700">' + it.sku + '</div>' +
         '<div class="desc">' + desc + '</div>' +
-        (it.qty != null ? '<div style="font-size:12px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : '') +
-        '</div>';
+        (it.qty != null ? '<div style="font-size:12px;color:#16A085;font-weight:600">Qty: ' + it.qty + '</div>' : ''));
     }).join('') + '</div>';
 }
 
