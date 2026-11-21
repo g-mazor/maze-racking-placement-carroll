@@ -472,11 +472,47 @@ function gc(g){return GRPC[g]||'#888';}
 
 var SHEET_API='https://script.google.com/macros/s/AKfycbwQaeYMqlrC6EUYStRFKnEY9eiCSCqSaoadHn2EhbClkXclUWWvaXs3VpbTY3jeGBko/exec';
 
-// Access control: the code is entered once per browser session (never
-// hardcoded in this source file) and included with every backend request.
-// The backend rejects anything without a matching code once one has been
-// activated server-side via Script Properties.
-var ACCESS_CODE=sessionStorage.getItem('mazeAccessCode')||'';
+// Access control: the code is entered once a day (never hardcoded in this
+// source file) and included with every backend request. The backend rejects
+// anything without a matching code once one has been activated server-side
+// via Script Properties.
+//
+// Held in localStorage rather than sessionStorage: sessionStorage is wiped
+// the moment the tab closes, and phone browsers (iOS especially) discard
+// backgrounded tabs on their own, which is why the code had to be retyped
+// every morning. It carries an expiry set to the next local midnight, so the
+// code is entered once at the start of the day and holds until midnight.
+// A tab left open across midnight keeps working until it is next reloaded,
+// so nobody is locked out mid-task.
+var AC_STORE='mazeAccessAuth';
+var AC_LEGACY='mazeAccessCode';
+function nextMidnightMs_(){
+  var d=new Date();
+  d.setHours(24,0,0,0);
+  return d.getTime();
+}
+function storeAccessCode_(code){
+  try{localStorage.setItem(AC_STORE,JSON.stringify({code:code,exp:nextMidnightMs_()}));}catch(e){}
+  try{sessionStorage.removeItem(AC_LEGACY);}catch(e){}
+}
+function readStoredAccessCode_(){
+  var raw=null;
+  try{raw=localStorage.getItem(AC_STORE);}catch(e){}
+  if(raw){
+    try{
+      var o=JSON.parse(raw);
+      if(o&&o.code&&o.exp&&Date.now()<o.exp)return o.code;
+    }catch(e){}
+    try{localStorage.removeItem(AC_STORE);}catch(e){}
+  }
+  // One-off carry-over from the old per-tab storage so switching to this
+  // does not sign anyone out of a session they are already in.
+  var legacy='';
+  try{legacy=sessionStorage.getItem(AC_LEGACY)||'';}catch(e){}
+  if(legacy){storeAccessCode_(legacy);return legacy;}
+  return '';
+}
+var ACCESS_CODE=readStoredAccessCode_();
 function apiUrl(params){
   var base=SHEET_API+'?';
   if(ACCESS_CODE)base+='ac='+encodeURIComponent(ACCESS_CODE)+'&';
@@ -499,7 +535,7 @@ function updateAccessCodeIndicator(status){
 }
 
 function promptAccessCode(){
-  var current=sessionStorage.getItem('mazeAccessCode')||'';
+  var current=ACCESS_CODE||'';
   var entered=prompt('Enter the access code for this warehouse map:',current);
   if(entered===null)return;
   var code=entered.trim();
@@ -509,8 +545,8 @@ function promptAccessCode(){
       alert('\u274c That code was not accepted. Please check it and try again.');
       return;
     }
-    sessionStorage.setItem('mazeAccessCode',code);
-    alert('\u2705 Code accepted. Reloading now...');
+    storeAccessCode_(code);
+    alert('\u2705 Code accepted -- it will stay active until midnight. Reloading now...');
     location.reload();
   }).catch(function(){
     alert('Could not reach the server to check the code -- check your connection and try again.');
